@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #372619;
+  background: #f9f4e0;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: #f9f4e0;
+}
+
+.baura-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(197, 154, 74, 0.55) transparent;
+}
+
+.baura-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.baura-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.baura-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(197, 154, 74, 0.55);
+  border-radius: 999px;
+}
+
+.baura-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(197, 154, 74, 0.8);
+}
+
+@keyframes bauraToastIn {
+  from {
+    opacity: 0;
+    transform: translate3d(18px, -8px, 0) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes bauraToastBar {
+  from {
+    width: 100%;
+  }
+
+  to {
+    width: 0%;
+  }
+}
+
+.animate-bauraToastIn {
+  animation: bauraToastIn 220ms ease-out both;
+}
+
+.animate-bauraToastBar {
+  animation: bauraToastBar 4200ms linear forwards;
+}

@@ -1,0 +1,343 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PackageUnit {
+  G
+  KG
+  ML
+  L
+  UNIT
+}
+
+enum BaseUnit {
+  G
+  ML
+  UNIT
+}
+
+enum StockMovementType {
+  PURCHASE
+  SALE
+  WASTE
+  ADJUSTMENT
+  RETURN
+}
+
+enum SaleType {
+  POS
+  MANUAL
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+  ONLINE
+  OTHER
+}
+
+enum SaleStatus {
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum BackupFrequency {
+  MANUAL
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum BackupTarget {
+  LOCAL
+  GOOGLE_DRIVE
+}
+
+enum BackupStatus {
+  SUCCESS
+  FAILED
+  RUNNING
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  firstName    String
+  lastName     String
+  email        String   @unique
+  passwordHash String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  roles           UserRole[]
+  purchaseCarters PurchaseCarter[] @relation("CarterCreatedBy")
+  salesOrders     SalesOrder[]     @relation("SaleCreatedBy")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  users UserRole[]
+}
+
+model UserRole {
+  userId String @db.Uuid
+  roleId String @db.Uuid
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model Ingredient {
+  id               String      @id @default(uuid()) @db.Uuid
+  name             String
+  brand            String?
+  packageQty       Decimal     @db.Decimal(12, 3)
+  packageUnit      PackageUnit
+  baseQty          Decimal     @db.Decimal(12, 3)
+  baseUnit         BaseUnit
+  lowStockAlertQty Decimal?    @db.Decimal(12, 3)
+  isActive         Boolean     @default(true)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  carterItems      PurchaseCarterItem[]
+  stockLots        IngredientStockLot[]
+  stockMovements   StockMovement[]
+  recipeItems      ProductRecipeItem[]
+  fifoConsumptions SaleItemFifoConsumption[]
+
+  @@index([name])
+  @@index([brand])
+}
+
+model PurchaseCarter {
+  id           String   @id @default(uuid()) @db.Uuid
+  carterNo     String   @unique
+  purchasedAt  DateTime
+  supplierName String?
+  notes        String?
+  createdById  String?  @db.Uuid
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  createdBy User?                @relation("CarterCreatedBy", fields: [createdById], references: [id])
+  items     PurchaseCarterItem[]
+}
+
+model PurchaseCarterItem {
+  id              String   @id @default(uuid()) @db.Uuid
+  carterId        String   @db.Uuid
+  ingredientId    String   @db.Uuid
+  loadedQty       Decimal  @db.Decimal(12, 3)
+  pricePerPackage Decimal  @db.Decimal(12, 2)
+  totalBaseQty    Decimal  @db.Decimal(12, 3)
+  totalPrice      Decimal  @db.Decimal(12, 2)
+  unitCostBase    Decimal  @db.Decimal(12, 6)
+  createdAt       DateTime @default(now())
+
+  carter     PurchaseCarter @relation(fields: [carterId], references: [id], onDelete: Cascade)
+  ingredient Ingredient     @relation(fields: [ingredientId], references: [id])
+
+  stockLots IngredientStockLot[]
+
+  @@index([carterId])
+  @@index([ingredientId])
+}
+
+model IngredientStockLot {
+  id               String    @id @default(uuid()) @db.Uuid
+  carterItemId     String    @db.Uuid
+  ingredientId     String    @db.Uuid
+  receivedBaseQty  Decimal   @db.Decimal(12, 3)
+  remainingBaseQty Decimal   @db.Decimal(12, 3)
+  baseUnit         BaseUnit
+  unitCostBase     Decimal   @db.Decimal(12, 6)
+  receivedAt       DateTime  @default(now())
+  expiryDate       DateTime?
+
+  carterItem PurchaseCarterItem @relation(fields: [carterItemId], references: [id], onDelete: Cascade)
+  ingredient Ingredient         @relation(fields: [ingredientId], references: [id])
+
+  stockMovements   StockMovement[]
+  fifoConsumptions SaleItemFifoConsumption[]
+
+  @@index([ingredientId, remainingBaseQty])
+  @@index([receivedAt])
+}
+
+model StockMovement {
+  id           String            @id @default(uuid()) @db.Uuid
+  ingredientId String            @db.Uuid
+  stockLotId   String?           @db.Uuid
+  movementType StockMovementType
+  refType      String?
+  refId        String?
+  qtyDelta     Decimal           @db.Decimal(12, 3)
+  unitCostBase Decimal?          @db.Decimal(12, 6)
+  costAmount   Decimal?          @db.Decimal(12, 2)
+  note         String?
+  occurredAt   DateTime          @default(now())
+
+  ingredient Ingredient          @relation(fields: [ingredientId], references: [id])
+  stockLot   IngredientStockLot? @relation(fields: [stockLotId], references: [id])
+
+  @@index([ingredientId])
+  @@index([movementType])
+  @@index([occurredAt])
+}
+
+model Product {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  variantName String?
+  sellPrice   Decimal  @db.Decimal(12, 2)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  recipeItems ProductRecipeItem[]
+  saleItems   SaleItem[]
+
+  @@index([name])
+}
+
+model ProductRecipeItem {
+  id              String   @id @default(uuid()) @db.Uuid
+  productId       String   @db.Uuid
+  ingredientId    String   @db.Uuid
+  requiredBaseQty Decimal  @db.Decimal(12, 3)
+  baseUnit        BaseUnit
+  createdAt       DateTime @default(now())
+
+  product    Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id])
+
+  @@unique([productId, ingredientId])
+  @@index([productId])
+  @@index([ingredientId])
+}
+
+model SalesChannel {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  salesOrders SalesOrder[]
+}
+
+model SalesOrder {
+  id             String        @id @default(uuid()) @db.Uuid
+  orderNo        String        @unique
+  salesChannelId String?       @db.Uuid
+  saleType       SaleType      @default(POS)
+  paymentMethod  PaymentMethod @default(CASH)
+  grossTotal     Decimal       @default(0) @db.Decimal(12, 2)
+  discountTotal  Decimal       @default(0) @db.Decimal(12, 2)
+  netTotal       Decimal       @default(0) @db.Decimal(12, 2)
+  cogsTotal      Decimal       @default(0) @db.Decimal(12, 2)
+  profitTotal    Decimal       @default(0) @db.Decimal(12, 2)
+  status         SaleStatus    @default(COMPLETED)
+  createdById    String?       @db.Uuid
+  soldAt         DateTime      @default(now())
+  createdAt      DateTime      @default(now())
+
+  salesChannel SalesChannel? @relation(fields: [salesChannelId], references: [id])
+  createdBy    User?         @relation("SaleCreatedBy", fields: [createdById], references: [id])
+  items        SaleItem[]
+
+  @@index([soldAt])
+  @@index([status])
+}
+
+model SaleItem {
+  id            String   @id @default(uuid()) @db.Uuid
+  salesOrderId  String   @db.Uuid
+  productId     String   @db.Uuid
+  qty           Decimal  @db.Decimal(12, 3)
+  unitSellPrice Decimal  @db.Decimal(12, 2)
+  lineTotal     Decimal  @db.Decimal(12, 2)
+  cogsTotal     Decimal  @default(0) @db.Decimal(12, 2)
+  profitTotal   Decimal  @default(0) @db.Decimal(12, 2)
+  createdAt     DateTime @default(now())
+
+  salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  product    Product    @relation(fields: [productId], references: [id])
+
+  fifoConsumptions SaleItemFifoConsumption[]
+
+  @@index([salesOrderId])
+  @@index([productId])
+}
+
+model SaleItemFifoConsumption {
+  id              String   @id @default(uuid()) @db.Uuid
+  saleItemId      String   @db.Uuid
+  stockLotId      String   @db.Uuid
+  ingredientId    String   @db.Uuid
+  consumedBaseQty Decimal  @db.Decimal(12, 3)
+  unitCostBase    Decimal  @db.Decimal(12, 6)
+  costAmount      Decimal  @db.Decimal(12, 2)
+  createdAt       DateTime @default(now())
+
+  saleItem   SaleItem           @relation(fields: [saleItemId], references: [id], onDelete: Cascade)
+  stockLot   IngredientStockLot @relation(fields: [stockLotId], references: [id])
+  ingredient Ingredient         @relation(fields: [ingredientId], references: [id])
+
+  @@index([saleItemId])
+  @@index([stockLotId])
+  @@index([ingredientId])
+}
+
+model BackupSetting {
+  id                    String          @id @default(uuid())
+  frequency             BackupFrequency @default(MANUAL)
+
+  localBackupEnabled    Boolean         @default(true)
+  localBackupPath       String          @default("./backups")
+
+  googleDriveEnabled    Boolean         @default(false)
+  googleAccountEmail    String?
+  googleDriveFolderId   String?
+
+  googleDriveRefreshToken String?
+  googleDriveAccessToken  String?
+  googleDriveTokenExpiry  DateTime?
+  googleDriveConnectedAt  DateTime?
+  googleOauthState        String?
+
+  lastBackupAt          DateTime?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+}
+
+model BackupHistory {
+  id                  String       @id @default(uuid())
+  target              BackupTarget
+  status              BackupStatus @default(RUNNING)
+
+  fileName            String?
+  filePath            String?
+  googleDriveFileId   String?
+  googleAccountEmail  String?
+
+  sizeBytes           Int?
+  startedAt           DateTime     @default(now())
+  completedAt         DateTime?
+  errorMessage        String?
+
+  createdAt           DateTime     @default(now())
+}

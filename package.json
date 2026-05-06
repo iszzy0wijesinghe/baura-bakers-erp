@@ -1,0 +1,17 @@
+{
+  "name": "baura-bakery-erp",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start:local": "concurrently -k -n API,WEB -c blue,green \"npm --prefix apps/api run dev\" \"npm --prefix apps/web run dev\"",
+    "api:dev": "npm --prefix apps/api run dev",
+    "web:dev": "npm --prefix apps/web run dev",
+    "db:dev": "npm --prefix apps/api run db:dev",
+    "db:migrate": "npm --prefix apps/api run db:migrate",
+    "db:studio": "npm --prefix apps/api run db:studio",
+    "backup:db": "pg_dump -U baura_user -h localhost -p 5432 baura_erp > backups/baura_backup.sql"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

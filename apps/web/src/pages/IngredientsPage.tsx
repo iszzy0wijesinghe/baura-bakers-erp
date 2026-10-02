@@ -1,78 +1,218 @@
-import { useEffect, useMemo, useState } from "react";
-import type { FormEvent } from "react";
-import { Boxes, Edit3, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
-import { AppLayout } from "../layouts/AppLayout";
-import { apiRequest } from "../lib/api";
-import { ConfirmDialog } from "../ui/ConfirmDialog";
-import { Modal } from "../ui/Modal";
-import { useToast } from "../ui/ToastProvider";
+import {
+  useEffect,
+  useMemo,
+  useState
+} from "react";
+import type {
+  FormEvent
+} from "react";
+import {
+  Boxes,
+  Edit3,
+  ImageIcon,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2
+} from "lucide-react";
+import {
+  ImageUploadField
+} from "../components/ImageUploadField";
+import {
+  AppLayout
+} from "../layouts/AppLayout";
+import {
+  apiRequest
+} from "../lib/api";
+import {
+  ConfirmDialog
+} from "../ui/ConfirmDialog";
+import {
+  Modal
+} from "../ui/Modal";
+import {
+  useToast
+} from "../ui/ToastProvider";
+
+type PackageUnit =
+  | "G"
+  | "KG"
+  | "ML"
+  | "L"
+  | "UNIT";
+
+type BaseUnit =
+  | "G"
+  | "ML"
+  | "UNIT";
 
 type Ingredient = {
   id: string;
   name: string;
-  brand: string | null;
+  brand:
+    | string
+    | null;
+  imageUrl:
+    | string
+    | null;
   packageQty: string;
-  packageUnit: "G" | "KG" | "ML" | "L" | "UNIT";
+  packageUnit:
+    PackageUnit;
   baseQty: string;
-  baseUnit: "G" | "ML" | "UNIT";
-  lowStockAlertQty: string | null;
+  baseUnit:
+    BaseUnit;
+  lowStockAlertQty:
+    | string
+    | null;
   isActive: boolean;
   displayName: string;
 };
 
-const initialForm = {
-  name: "",
-  brand: "",
-  packageQty: "",
-  packageUnit: "G",
-  baseQty: "",
-  baseUnit: "G",
-  lowStockAlertQty: "",
+type IngredientForm = {
+  name: string;
+  brand: string;
+  imageUrl: string;
+  packageQty: string;
+  packageUnit:
+    PackageUnit;
+  baseQty: string;
+  baseUnit:
+    BaseUnit;
+  lowStockAlertQty:
+    string;
 };
 
+const initialForm:
+  IngredientForm = {
+    name: "",
+    brand: "",
+    imageUrl: "",
+    packageQty: "",
+    packageUnit: "G",
+    baseQty: "",
+    baseUnit: "G",
+    lowStockAlertQty: ""
+  };
+
 export function IngredientsPage() {
-  const toast = useToast();
+  const toast =
+    useToast();
 
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [form, setForm] = useState(initialForm);
-  const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(
-    null,
-  );
-  const [deletingIngredient, setDeletingIngredient] =
-    useState<Ingredient | null>(null);
+  const [
+    ingredients,
+    setIngredients
+  ] =
+    useState<
+      Ingredient[]
+    >([]);
 
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<
-    "ALL" | "ACTIVE" | "INACTIVE"
-  >("ACTIVE");
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [error, setError] = useState("");
+  const [
+    form,
+    setForm
+  ] =
+    useState<IngredientForm>(
+      initialForm
+    );
 
-  const isEditing = Boolean(editingIngredient);
+  const [
+    editingIngredient,
+    setEditingIngredient
+  ] =
+    useState<
+      Ingredient | null
+    >(null);
 
-  async function loadIngredients(showToast = false) {
-    setIsLoading(true);
-    setError("");
+  const [
+    deletingIngredient,
+    setDeletingIngredient
+  ] =
+    useState<
+      Ingredient | null
+    >(null);
+
+  const [
+    isFormOpen,
+    setIsFormOpen
+  ] =
+    useState(false);
+
+  const [
+    search,
+    setSearch
+  ] =
+    useState("");
+
+  const [
+    statusFilter,
+    setStatusFilter
+  ] =
+    useState<
+      | "ALL"
+      | "ACTIVE"
+      | "INACTIVE"
+    >("ACTIVE");
+
+  const [
+    isLoading,
+    setIsLoading
+  ] =
+    useState(true);
+
+  const [
+    isSaving,
+    setIsSaving
+  ] =
+    useState(false);
+
+  const [
+    isDeleting,
+    setIsDeleting
+  ] =
+    useState(false);
+
+  const isEditing =
+    Boolean(
+      editingIngredient
+    );
+
+  async function loadIngredients(
+    showToast = false
+  ) {
+    setIsLoading(
+      true
+    );
 
     try {
-      const data = await apiRequest<{ ingredients: Ingredient[] }>(
-        "/ingredients",
-      );
-      setIngredients(data.ingredients);
+      const data =
+        await apiRequest<{
+          ingredients:
+            Ingredient[];
+        }>(
+          "/ingredients"
+        );
 
-      if (showToast) {
-        toast.success("Ingredients refreshed");
+      setIngredients(
+        data.ingredients
+      );
+
+      if (
+        showToast
+      ) {
+        toast.success(
+          "Ingredients refreshed"
+        );
       }
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to load ingredients";
-      setError(message);
-      toast.error("Failed to load ingredients", message);
+    } catch (error) {
+      toast.error(
+        "Failed to load ingredients",
+        error instanceof Error
+          ? error.message
+          : "Failed to load ingredients."
+      );
     } finally {
-      setIsLoading(false);
+      setIsLoading(
+        false
+      );
     }
   }
 
@@ -80,126 +220,315 @@ export function IngredientsPage() {
     loadIngredients();
   }, []);
 
-  const filteredIngredients = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+  const filteredIngredients =
+    useMemo(() => {
+      const keyword =
+        search
+          .trim()
+          .toLowerCase();
 
-    return ingredients.filter((ingredient) => {
-      const matchesSearch =
-        !keyword || ingredient.displayName.toLowerCase().includes(keyword);
+      return ingredients.filter(
+        (ingredient) => {
+          const matchesSearch =
+            !keyword ||
+            ingredient.displayName
+              .toLowerCase()
+              .includes(
+                keyword
+              ) ||
+            ingredient.name
+              .toLowerCase()
+              .includes(
+                keyword
+              ) ||
+            ingredient.brand
+              ?.toLowerCase()
+              .includes(
+                keyword
+              );
 
-      const matchesStatus =
-        statusFilter === "ALL" ||
-        (statusFilter === "ACTIVE" && ingredient.isActive) ||
-        (statusFilter === "INACTIVE" && !ingredient.isActive);
+          const matchesStatus =
+            statusFilter ===
+              "ALL" ||
+            (
+              statusFilter ===
+                "ACTIVE" &&
+              ingredient.isActive
+            ) ||
+            (
+              statusFilter ===
+                "INACTIVE" &&
+              !ingredient.isActive
+            );
 
-      return matchesSearch && matchesStatus;
-    });
-  }, [ingredients, search, statusFilter]);
+          return (
+            matchesSearch &&
+            matchesStatus
+          );
+        }
+      );
+    }, [
+      ingredients,
+      search,
+      statusFilter
+    ]);
 
   function openAddModal() {
-    setForm(initialForm);
-    setEditingIngredient(null);
-    setError("");
-    setIsFormOpen(true);
+    setEditingIngredient(
+      null
+    );
+
+    setForm({
+      ...initialForm
+    });
+
+    setIsFormOpen(
+      true
+    );
   }
 
-  function openEditModal(ingredient: Ingredient) {
-    setEditingIngredient(ingredient);
+  function openEditModal(
+    ingredient:
+      Ingredient
+  ) {
+    setEditingIngredient(
+      ingredient
+    );
+
     setForm({
-      name: ingredient.name,
-      brand: ingredient.brand || "",
-      packageQty: String(ingredient.packageQty),
-      packageUnit: ingredient.packageUnit,
-      baseQty: String(ingredient.baseQty),
-      baseUnit: ingredient.baseUnit,
-      lowStockAlertQty: ingredient.lowStockAlertQty
-        ? String(ingredient.lowStockAlertQty)
-        : "",
+      name:
+        ingredient.name,
+
+      brand:
+        ingredient.brand ||
+        "",
+
+      imageUrl:
+        ingredient.imageUrl ||
+        "",
+
+      packageQty:
+        String(
+          ingredient.packageQty
+        ),
+
+      packageUnit:
+        ingredient.packageUnit,
+
+      baseQty:
+        String(
+          ingredient.baseQty
+        ),
+
+      baseUnit:
+        ingredient.baseUnit,
+
+      lowStockAlertQty:
+        ingredient.lowStockAlertQty
+          ? String(
+              ingredient.lowStockAlertQty
+            )
+          : ""
     });
-    setError("");
-    setIsFormOpen(true);
+
+    setIsFormOpen(
+      true
+    );
   }
 
   function closeFormModal() {
-    if (isSaving) return;
+    if (
+      isSaving
+    ) {
+      return;
+    }
 
-    setIsFormOpen(false);
-    setForm(initialForm);
-    setEditingIngredient(null);
-    setError("");
+    setIsFormOpen(
+      false
+    );
+
+    setEditingIngredient(
+      null
+    );
+
+    setForm({
+      ...initialForm
+    });
   }
 
-  async function handleSubmit(event: FormEvent) {
+  async function handleSubmit(
+    event:
+      FormEvent
+  ) {
     event.preventDefault();
-    setError("");
-    setIsSaving(true);
+
+    const packageQty =
+      Number(
+        form.packageQty
+      );
+
+    const baseQty =
+      Number(
+        form.baseQty
+      );
+
+    const lowStockAlertQty =
+      form.lowStockAlertQty
+        ? Number(
+            form.lowStockAlertQty
+          )
+        : null;
+
+    if (
+      !form.name.trim()
+    ) {
+      toast.warning(
+        "Ingredient name required"
+      );
+
+      return;
+    }
+
+    if (
+      packageQty <= 0 ||
+      baseQty <= 0
+    ) {
+      toast.warning(
+        "Invalid quantity",
+        "Package and base quantities must be greater than zero."
+      );
+
+      return;
+    }
+
+    setIsSaving(
+      true
+    );
 
     try {
       const payload = {
-        name: form.name.trim(),
-        brand: form.brand.trim() || null,
-        packageQty: Number(form.packageQty),
-        packageUnit: form.packageUnit,
-        baseQty: Number(form.baseQty),
-        baseUnit: form.baseUnit,
-        lowStockAlertQty: form.lowStockAlertQty
-          ? Number(form.lowStockAlertQty)
-          : null,
+        name:
+          form.name.trim(),
+
+        brand:
+          form.brand.trim() ||
+          null,
+
+        imageUrl:
+          form.imageUrl.trim() ||
+          null,
+
+        packageQty,
+
+        packageUnit:
+          form.packageUnit,
+
+        baseQty,
+
+        baseUnit:
+          form.baseUnit,
+
+        lowStockAlertQty
       };
 
-      if (editingIngredient) {
-        await apiRequest(`/ingredients/${editingIngredient.id}`, {
-          method: "PUT",
-          body: JSON.stringify(payload),
-        });
+      if (
+        editingIngredient
+      ) {
+        await apiRequest(
+          `/ingredients/${editingIngredient.id}`,
+          {
+            method:
+              "PUT",
 
-        toast.success("Ingredient updated", `${payload.name} was updated.`);
+            body:
+              JSON.stringify(
+                payload
+              )
+          }
+        );
+
+        toast.success(
+          "Ingredient updated",
+          `${payload.name} was updated.`
+        );
       } else {
-        await apiRequest("/ingredients", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
+        await apiRequest(
+          "/ingredients",
+          {
+            method:
+              "POST",
 
-        toast.success("Ingredient added", `${payload.name} was added.`);
+            body:
+              JSON.stringify(
+                payload
+              )
+          }
+        );
+
+        toast.success(
+          "Ingredient added",
+          `${payload.name} was added.`
+        );
       }
 
       closeFormModal();
+
       await loadIngredients();
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to save ingredient";
-      setError(message);
-      toast.error("Save failed", message);
+    } catch (error) {
+      toast.error(
+        "Save failed",
+        error instanceof Error
+          ? error.message
+          : "Failed to save ingredient."
+      );
     } finally {
-      setIsSaving(false);
+      setIsSaving(
+        false
+      );
     }
   }
 
   async function handleDeactivate() {
-    if (!deletingIngredient) return;
+    if (
+      !deletingIngredient
+    ) {
+      return;
+    }
 
-    setError("");
-    setIsDeleting(true);
+    setIsDeleting(
+      true
+    );
 
     try {
-      await apiRequest(`/ingredients/${deletingIngredient.id}`, {
-        method: "DELETE",
-      });
+      await apiRequest(
+        `/ingredients/${deletingIngredient.id}`,
+        {
+          method:
+            "DELETE"
+        }
+      );
 
       toast.success(
         "Ingredient deactivated",
-        `${deletingIngredient.displayName} was deactivated.`,
+        `${deletingIngredient.displayName} was deactivated.`
       );
 
-      setDeletingIngredient(null);
+      setDeletingIngredient(
+        null
+      );
+
       await loadIngredients();
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to deactivate ingredient";
-      setError(message);
-      toast.error("Deactivate failed", message);
+    } catch (error) {
+      toast.error(
+        "Deactivate failed",
+        error instanceof Error
+          ? error.message
+          : "Failed to deactivate ingredient."
+      );
     } finally {
-      setIsDeleting(false);
+      setIsDeleting(
+        false
+      );
     }
   }
 
@@ -207,237 +536,479 @@ export function IngredientsPage() {
     <AppLayout
       activeItem="Ingredients"
       title="Ingredients Management"
-      subtitle="Create ingredients with brand, package size, base unit and low-stock alert."
+      subtitle="Manage ingredient details, package conversion, images and stock alert levels."
       actions={
         <>
           <button
-            onClick={() => loadIngredients(true)}
-            className="flex items-center gap-2 rounded-2xl border border-bauraBrown/10 bg-bauraSoft px-4 py-3 text-sm font-semibold shadow-sm"
+            type="button"
+            onClick={() =>
+              loadIngredients(
+                true
+              )
+            }
+            className="erp-button-secondary"
           >
-            <RefreshCw size={16} />
+            <RefreshCw
+              size={15}
+              className={
+                isLoading
+                  ? "animate-spin"
+                  : ""
+              }
+            />
+
             Refresh
           </button>
 
           <button
-            onClick={openAddModal}
-            className="flex items-center gap-2 rounded-2xl bg-bauraBrown px-5 py-3 text-sm font-bold text-bauraCream shadow-sm"
+            type="button"
+            onClick={
+              openAddModal
+            }
+            className="erp-button-primary"
           >
-            <Plus size={16} />
+            <Plus
+              size={15}
+            />
+
             Add Ingredient
           </button>
         </>
       }
     >
-      <section className="rounded-[2rem] border border-bauraBrown/10 bg-bauraSoft p-5 shadow-sm">
-        <div className="mb-5 flex flex-col gap-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h3 className="font-bold">Ingredient List</h3>
-              <p className="text-sm text-bauraBrown/60">
-                {filteredIngredients.length} shown · {ingredients.length} total
-              </p>
-            </div>
+      <section className="erp-panel overflow-hidden">
+        <div className="flex flex-col gap-4 border-b border-bauraBorder px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="erp-section-title">
+              Ingredient List
+            </h2>
 
-            <div className="flex items-center gap-3 rounded-2xl border border-bauraBrown/10 bg-white px-4 py-3">
-              <Search size={17} className="text-bauraBrown/45" />
-              <input
-                className="w-full bg-transparent text-sm outline-none md:w-72"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search ingredient..."
-              />
-            </div>
+            <p className="erp-section-subtitle">
+              {
+                filteredIngredients.length
+              }{" "}
+              shown ·{" "}
+              {
+                ingredients.length
+              }{" "}
+              total
+            </p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {(["ACTIVE", "ALL", "INACTIVE"] as const).map((status) => (
-              <button
-                key={status}
-                onClick={() => setStatusFilter(status)}
-                className={`rounded-full px-4 py-2 text-xs font-bold transition ${
-                  statusFilter === status
-                    ? "bg-bauraBrown text-bauraCream"
-                    : "bg-white text-bauraBrown/65 hover:bg-white/70"
-                }`}
-              >
-                {status}
-              </button>
-            ))}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="erp-search sm:w-72">
+              <Search
+                size={15}
+                className="text-bauraMuted"
+              />
+
+              <input
+                value={
+                  search
+                }
+                onChange={(
+                  event
+                ) =>
+                  setSearch(
+                    event.target.value
+                  )
+                }
+                placeholder="Search ingredients..."
+                className="w-full bg-transparent text-[11px] text-bauraInk outline-none placeholder:text-bauraMuted2"
+              />
+            </div>
+
+            <select
+              value={
+                statusFilter
+              }
+              onChange={(
+                event
+              ) =>
+                setStatusFilter(
+                  event.target.value as
+                    | "ALL"
+                    | "ACTIVE"
+                    | "INACTIVE"
+                )
+              }
+              className="erp-input sm:w-40"
+            >
+              <option value="ACTIVE">
+                Active
+              </option>
+
+              <option value="ALL">
+                All
+              </option>
+
+              <option value="INACTIVE">
+                Inactive
+              </option>
+            </select>
           </div>
         </div>
 
-        {error && (
-          <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
-        )}
-
-        <div className="baura-scrollbar max-h-[calc(100vh-285px)] overflow-auto pr-1">
+        <div className="baura-scrollbar max-h-[calc(100vh-270px)] overflow-y-auto p-4">
           {isLoading ? (
-            <div className="rounded-3xl bg-white/50 p-6 text-sm text-bauraBrown/60">
-              Loading ingredients...
-            </div>
-          ) : filteredIngredients.length === 0 ? (
-            <div className="rounded-3xl bg-white/50 p-6 text-sm text-bauraBrown/60">
-              No ingredients found.
-            </div>
+            <EmptyState
+              text="Loading ingredients..."
+            />
+          ) : filteredIngredients.length ===
+            0 ? (
+            <EmptyState
+              text="No ingredients found."
+            />
           ) : (
-            <div className="grid gap-3">
-              {filteredIngredients.map((ingredient) => (
-                <div
-                  key={ingredient.id}
-                  className="rounded-3xl border border-bauraBrown/10 bg-white/60 p-4"
-                >
-                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-bauraBrown text-bauraGold">
-                        <Boxes size={20} />
-                      </div>
-                      <div>
-                        <h4 className="font-bold">{ingredient.displayName}</h4>
-                        <p className="mt-1 text-sm text-bauraBrown/60">
-                          Base: {ingredient.baseQty} {ingredient.baseUnit}
-                          {ingredient.lowStockAlertQty &&
-                            ` · Low stock alert: ${ingredient.lowStockAlertQty} ${ingredient.baseUnit}`}
-                        </p>
+            <div className="grid gap-3 xl:grid-cols-2">
+              {filteredIngredients.map(
+                (
+                  ingredient
+                ) => (
+                  <article
+                    key={
+                      ingredient.id
+                    }
+                    className="rounded-[16px] border border-bauraBorder bg-white p-4 transition hover:shadow-bauraCard"
+                  >
+                    <div className="flex items-start gap-4">
+                      <IngredientImage
+                        ingredient={
+                          ingredient
+                        }
+                      />
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <h3 className="truncate text-[12px] font-semibold text-bauraInk">
+                              {
+                                ingredient.displayName
+                              }
+                            </h3>
+
+                            <p className="mt-1 text-[9px] text-bauraMuted">
+                              Base conversion:{" "}
+                              {
+                                ingredient.baseQty
+                              }{" "}
+                              {
+                                ingredient.baseUnit
+                              }
+                            </p>
+
+                            {ingredient.lowStockAlertQty && (
+                              <p className="mt-1 text-[9px] text-bauraMuted">
+                                Alert below{" "}
+                                {
+                                  ingredient.lowStockAlertQty
+                                }{" "}
+                                {
+                                  ingredient.baseUnit
+                                }
+                              </p>
+                            )}
+                          </div>
+
+                          <span
+                            className={`erp-badge ${
+                              ingredient.isActive
+                                ? "bg-bauraSuccessSoft text-bauraSuccess"
+                                : "bg-bauraDangerSoft text-bauraDanger"
+                            }`}
+                          >
+                            {ingredient.isActive
+                              ? "Active"
+                              : "Inactive"}
+                          </span>
+                        </div>
+
+                        {ingredient.isActive && (
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openEditModal(
+                                  ingredient
+                                )
+                              }
+                              className="erp-button-secondary h-8 px-3"
+                            >
+                              <Edit3
+                                size={12}
+                              />
+
+                              Edit
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDeletingIngredient(
+                                  ingredient
+                                )
+                              }
+                              className="erp-button-danger h-8 px-3"
+                            >
+                              <Trash2
+                                size={12}
+                              />
+
+                              Deactivate
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`w-fit rounded-full px-3 py-1 text-xs font-bold ${
-                          ingredient.isActive
-                            ? "bg-green-100 text-green-700"
-                            : "bg-red-100 text-red-700"
-                        }`}
-                      >
-                        {ingredient.isActive ? "Active" : "Inactive"}
-                      </span>
-
-                      {ingredient.isActive && (
-                        <>
-                          <button
-                            onClick={() => openEditModal(ingredient)}
-                            className="flex items-center gap-2 rounded-2xl border border-bauraBrown/10 bg-white px-3 py-2 text-xs font-bold text-bauraBrown"
-                          >
-                            <Edit3 size={14} />
-                            Edit
-                          </button>
-
-                          <button
-                            onClick={() => setDeletingIngredient(ingredient)}
-                            className="flex items-center gap-2 rounded-2xl border border-red-100 bg-red-50 px-3 py-2 text-xs font-bold text-red-700"
-                          >
-                            <Trash2 size={14} />
-                            Deactivate
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
+                  </article>
+                )
+              )}
             </div>
           )}
         </div>
       </section>
 
       <Modal
-        open={isFormOpen}
-        onClose={closeFormModal}
-        title={isEditing ? "Edit Ingredient" : "Add Ingredient"}
+        open={
+          isFormOpen
+        }
+        onClose={
+          closeFormModal
+        }
+        title={
+          isEditing
+            ? "Edit Ingredient"
+            : "Add Ingredient"
+        }
         subtitle={
           isEditing
-            ? "Update ingredient details used across Carter inventory and product recipes."
-            : "Create a reusable ingredient record for Carter inventory and recipes."
+            ? "Update ingredient information and its Cloudinary image."
+            : "Create a reusable ingredient for inventory, recipes and production."
         }
+        widthClassName="max-w-3xl"
       >
-        <form onSubmit={handleSubmit} className="grid gap-4">
-          <Input
-            label="Ingredient Name"
-            value={form.name}
-            onChange={(value) => setForm((prev) => ({ ...prev, name: value }))}
-            placeholder="Baking Powder"
-          />
-
-          <Input
-            label="Brand"
-            value={form.brand}
-            onChange={(value) => setForm((prev) => ({ ...prev, brand: value }))}
-            placeholder="Motha"
-          />
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <Input
-              label="Package Qty"
-              value={form.packageQty}
-              onChange={(value) =>
-                setForm((prev) => ({ ...prev, packageQty: value }))
+        <form
+          onSubmit={
+            handleSubmit
+          }
+          className="grid gap-5"
+        >
+          <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+            <ImageUploadField
+              label="Ingredient Image"
+              value={
+                form.imageUrl
               }
-              placeholder="250"
+              onChange={(
+                imageUrl
+              ) =>
+                setForm(
+                  (
+                    current
+                  ) => ({
+                    ...current,
+                    imageUrl
+                  })
+                )
+              }
+              folder="baura/ingredients"
+            />
+
+            <div className="grid content-start gap-4">
+              <Input
+                label="Ingredient Name"
+                value={
+                  form.name
+                }
+                onChange={(
+                  value
+                ) =>
+                  setForm(
+                    (
+                      current
+                    ) => ({
+                      ...current,
+                      name:
+                        value
+                    })
+                  )
+                }
+                placeholder="Baking Powder"
+              />
+
+              <Input
+                label="Brand"
+                value={
+                  form.brand
+                }
+                onChange={(
+                  value
+                ) =>
+                  setForm(
+                    (
+                      current
+                    ) => ({
+                      ...current,
+                      brand:
+                        value
+                    })
+                  )
+                }
+                placeholder="Motha"
+                required={
+                  false
+                }
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input
+              label="Package Quantity"
+              value={
+                form.packageQty
+              }
+              onChange={(
+                value
+              ) =>
+                setForm(
+                  (
+                    current
+                  ) => ({
+                    ...current,
+                    packageQty:
+                      value
+                  })
+                )
+              }
+              placeholder="1"
               type="number"
             />
 
             <Select
               label="Package Unit"
-              value={form.packageUnit}
-              onChange={(value) =>
-                setForm((prev) => ({ ...prev, packageUnit: value }))
+              value={
+                form.packageUnit
               }
-              options={["G", "KG", "ML", "L", "UNIT"]}
+              onChange={(
+                value
+              ) =>
+                setForm(
+                  (
+                    current
+                  ) => ({
+                    ...current,
+                    packageUnit:
+                      value as
+                        PackageUnit
+                  })
+                )
+              }
+              options={[
+                "G",
+                "KG",
+                "ML",
+                "L",
+                "UNIT"
+              ]}
             />
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Input
-              label="Base Qty"
-              value={form.baseQty}
-              onChange={(value) =>
-                setForm((prev) => ({ ...prev, baseQty: value }))
+              label="Base Quantity"
+              value={
+                form.baseQty
               }
-              placeholder="250"
+              onChange={(
+                value
+              ) =>
+                setForm(
+                  (
+                    current
+                  ) => ({
+                    ...current,
+                    baseQty:
+                      value
+                  })
+                )
+              }
+              placeholder="1000"
               type="number"
             />
 
             <Select
               label="Base Unit"
-              value={form.baseUnit}
-              onChange={(value) =>
-                setForm((prev) => ({ ...prev, baseUnit: value }))
+              value={
+                form.baseUnit
               }
-              options={["G", "ML", "UNIT"]}
+              onChange={(
+                value
+              ) =>
+                setForm(
+                  (
+                    current
+                  ) => ({
+                    ...current,
+                    baseUnit:
+                      value as
+                        BaseUnit
+                  })
+                )
+              }
+              options={[
+                "G",
+                "ML",
+                "UNIT"
+              ]}
             />
           </div>
 
           <Input
             label="Low Stock Alert Qty"
-            value={form.lowStockAlertQty}
-            onChange={(value) =>
-              setForm((prev) => ({ ...prev, lowStockAlertQty: value }))
+            value={
+              form.lowStockAlertQty
+            }
+            onChange={(
+              value
+            ) =>
+              setForm(
+                (
+                  current
+                ) => ({
+                  ...current,
+                  lowStockAlertQty:
+                    value
+                })
+              )
             }
             placeholder="100"
             type="number"
+            required={
+              false
+            }
           />
 
-          {error && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </div>
-          )}
-
-          <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+          <div className="flex flex-col-reverse gap-2 border-t border-bauraBorder pt-5 sm:flex-row sm:justify-end">
             <button
               type="button"
-              onClick={closeFormModal}
-              disabled={isSaving}
-              className="rounded-2xl border border-bauraBrown/10 bg-white px-5 py-3 text-sm font-bold text-bauraBrown disabled:opacity-60"
+              onClick={
+                closeFormModal
+              }
+              disabled={
+                isSaving
+              }
+              className="erp-button-secondary"
             >
               Cancel
             </button>
 
             <button
-              disabled={isSaving}
-              className="rounded-2xl bg-bauraBrown px-5 py-3 text-sm font-bold text-bauraCream disabled:opacity-60"
+              type="submit"
+              disabled={
+                isSaving
+              }
+              className="erp-button-primary"
             >
               {isSaving
                 ? "Saving..."
@@ -450,23 +1021,90 @@ export function IngredientsPage() {
       </Modal>
 
       <ConfirmDialog
-        open={Boolean(deletingIngredient)}
+        open={
+          Boolean(
+            deletingIngredient
+          )
+        }
         title="Deactivate ingredient?"
         message={
           deletingIngredient
-            ? `${deletingIngredient.displayName} will be deactivated. It will remain in past Carter records and reports.`
+            ? `${deletingIngredient.displayName} will be deactivated. Existing inventory and production history will remain available.`
             : ""
         }
         confirmText="Deactivate"
         cancelText="Cancel"
         isDanger
-        isLoading={isDeleting}
+        isLoading={
+          isDeleting
+        }
         onCancel={() => {
-          if (!isDeleting) setDeletingIngredient(null);
+          if (
+            !isDeleting
+          ) {
+            setDeletingIngredient(
+              null
+            );
+          }
         }}
-        onConfirm={handleDeactivate}
+        onConfirm={
+          handleDeactivate
+        }
       />
     </AppLayout>
+  );
+}
+
+function IngredientImage({
+  ingredient
+}: {
+  ingredient:
+    Ingredient;
+}) {
+  if (
+    ingredient.imageUrl
+  ) {
+    return (
+      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-bauraBorder bg-bauraCanvas2">
+        <img
+          src={
+            ingredient.imageUrl
+          }
+          alt={
+            ingredient.displayName
+          }
+          className="h-full w-full object-cover"
+          loading="lazy"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-bauraGoldSoft text-bauraGoldDark">
+      <Boxes
+        size={21}
+      />
+    </div>
+  );
+}
+
+function EmptyState({
+  text
+}: {
+  text: string;
+}) {
+  return (
+    <div className="flex min-h-[180px] flex-col items-center justify-center rounded-[16px] border border-dashed border-bauraBorder bg-bauraCanvas2 px-6 text-center">
+      <ImageIcon
+        size={22}
+        className="text-bauraMuted2"
+      />
+
+      <p className="mt-3 text-[10px] font-medium text-bauraMuted">
+        {text}
+      </p>
+    </div>
   );
 }
 
@@ -476,23 +1114,56 @@ function Input({
   onChange,
   placeholder,
   type = "text",
+  required = true
 }: {
   label: string;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (
+    value: string
+  ) => void;
   placeholder?: string;
   type?: string;
+  required?: boolean;
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-sm font-semibold">{label}</span>
+      <span className="erp-label">
+        {label}
+      </span>
+
       <input
-        className="w-full rounded-2xl border border-bauraBrown/10 bg-white px-4 py-3 text-sm outline-none transition focus:border-bauraGold"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        type={type}
-        required={label !== "Brand" && label !== "Low Stock Alert Qty"}
+        className="erp-input"
+        value={
+          value
+        }
+        onChange={(
+          event
+        ) =>
+          onChange(
+            event.target.value
+          )
+        }
+        placeholder={
+          placeholder
+        }
+        type={
+          type
+        }
+        required={
+          required
+        }
+        min={
+          type ===
+          "number"
+            ? "0"
+            : undefined
+        }
+        step={
+          type ===
+          "number"
+            ? "0.001"
+            : undefined
+        }
       />
     </label>
   );
@@ -502,26 +1173,51 @@ function Select({
   label,
   value,
   onChange,
-  options,
+  options
 }: {
   label: string;
   value: string;
-  onChange: (value: string) => void;
-  options: string[];
+  onChange: (
+    value: string
+  ) => void;
+  options:
+    string[];
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-sm font-semibold">{label}</span>
+      <span className="erp-label">
+        {label}
+      </span>
+
       <select
-        className="w-full rounded-2xl border border-bauraBrown/10 bg-white px-4 py-3 text-sm outline-none transition focus:border-bauraGold"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
+        className="erp-input"
+        value={
+          value
+        }
+        onChange={(
+          event
+        ) =>
+          onChange(
+            event.target.value
+          )
+        }
       >
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
+        {options.map(
+          (
+            option
+          ) => (
+            <option
+              key={
+                option
+              }
+              value={
+                option
+              }
+            >
+              {option}
+            </option>
+          )
+        )}
       </select>
     </label>
   );

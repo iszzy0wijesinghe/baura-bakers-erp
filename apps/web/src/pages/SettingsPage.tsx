@@ -139,7 +139,7 @@ export function SettingsPage() {
   const [isRunningBackup, setIsRunningBackup] = useState(false);
   const [isConnectingDrive, setIsConnectingDrive] = useState(false);
   const [isDisconnectingDrive, setIsDisconnectingDrive] = useState(false);
-  const [error, setError] = useState("");
+  const [, setError] = useState("");
 
   const latestBackup = history[0];
 
@@ -319,12 +319,12 @@ export function SettingsPage() {
     <AppLayout
       activeItem="Settings"
       title="Settings"
-      subtitle="Manage PostgreSQL database backup settings, storage location and backup history."
+      subtitle="Manage MySQL database backup settings, storage location and backup history."
       actions={
         <>
           <button
             onClick={() => loadSettings(true)}
-            className="flex items-center gap-2 rounded-2xl border border-bauraBrown/10 bg-bauraSoft px-4 py-3 text-sm font-semibold shadow-sm"
+            className="erp-button-secondary"
           >
             <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
             Refresh
@@ -333,7 +333,7 @@ export function SettingsPage() {
           <button
             onClick={handleRunBackupNow}
             disabled={isRunningBackup || isLoading}
-            className="flex items-center gap-2 rounded-2xl bg-bauraBrown px-5 py-3 text-sm font-bold text-bauraCream shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+            className="erp-button-primary disabled:cursor-not-allowed disabled:opacity-60"
           >
             <DatabaseBackup size={16} />
             {isRunningBackup ? "Running Backup..." : "Run Backup Now"}
@@ -342,11 +342,6 @@ export function SettingsPage() {
       }
     >
       <div className="grid gap-5">
-        {error && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
-        )}
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <SummaryCard
@@ -394,15 +389,15 @@ export function SettingsPage() {
         </section>
 
         <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-          <div className="rounded-[2rem] border border-bauraBrown/10 bg-bauraSoft p-5 shadow-sm">
+          <div className="rounded-xl border border-bauraBorder bg-white p-5 shadow-[0_1px_2px_rgba(45,33,27,0.03)]">
             <div className="mb-5">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-bauraGold">
                 Backup Configuration
               </p>
               <h3 className="mt-1 text-xl font-bold">Backup Settings</h3>
-              <p className="mt-1 text-sm text-bauraBrown/60">
+              <p className="mt-1 text-sm text-bauraMuted">
                 Configure local and Google Drive backup options for the
-                PostgreSQL database only.
+                MySQL database only.
               </p>
             </div>
 
@@ -420,7 +415,7 @@ export function SettingsPage() {
                       frequency: event.target.value as BackupFrequency
                     }))
                   }
-                  className="w-full rounded-2xl border border-bauraBrown/10 bg-white px-4 py-3 text-sm font-semibold outline-none transition focus:border-bauraGold"
+                  className="erp-input font-semibold"
                 >
                   {frequencyOptions.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -429,7 +424,7 @@ export function SettingsPage() {
                   ))}
                 </select>
 
-                <p className="mt-2 text-xs text-bauraBrown/50">
+                <p className="mt-2 text-xs text-bauraMuted">
                   {
                     frequencyOptions.find(
                       (option) => option.value === backupForm.frequency
@@ -438,11 +433,11 @@ export function SettingsPage() {
                 </p>
               </div>
 
-              <div className="rounded-3xl border border-bauraBrown/10 bg-white/60 p-4">
+              <div className="rounded-xl border border-bauraBorder bg-white p-4">
                 <ToggleRow
                   icon={<HardDrive size={20} />}
                   title="Local Backup"
-                  description="Store PostgreSQL database dump files on this computer or local server."
+                  description="Store MySQL database dump files on this computer or local server."
                   checked={backupForm.localBackupEnabled}
                   onChange={(checked) =>
                     setBackupForm((prev) => ({
@@ -457,8 +452,8 @@ export function SettingsPage() {
                     Local Backup Location
                   </label>
 
-                  <div className="flex items-center gap-3 rounded-2xl border border-bauraBrown/10 bg-white px-4 py-3">
-                    <Folder size={17} className="shrink-0 text-bauraBrown/45" />
+                  <div className="flex items-center gap-3 rounded-lg border border-bauraBorder bg-white px-4 py-3">
+                    <Folder size={17} className="shrink-0 text-bauraMuted" />
                     <input
                       value={backupForm.localBackupPath}
                       disabled={!backupForm.localBackupEnabled}
@@ -473,18 +468,18 @@ export function SettingsPage() {
                     />
                   </div>
 
-                  <p className="mt-2 text-xs text-bauraBrown/50">
+                  <p className="mt-2 text-xs text-bauraMuted">
                     Example: <span className="font-semibold">./backups</span> or{" "}
                     <span className="font-semibold">D:/BauraBackups</span>
                   </p>
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-bauraBrown/10 bg-white/60 p-4">
+              <div className="rounded-xl border border-bauraBorder bg-white p-4">
                 <ToggleRow
                   icon={<Cloud size={20} />}
                   title="Google Drive Backup"
-                  description="Upload the PostgreSQL database dump file to Google Drive after OAuth connection."
+                  description="Upload the MySQL database dump file to Google Drive after OAuth connection."
                   checked={backupForm.googleDriveEnabled}
                   onChange={(checked) =>
                     setBackupForm((prev) => ({
@@ -532,7 +527,7 @@ export function SettingsPage() {
                         isConnectingDrive ||
                         isSavingSettings
                       }
-                      className="flex items-center justify-center gap-2 rounded-2xl bg-bauraBrown px-5 py-3 text-sm font-bold text-bauraCream disabled:cursor-not-allowed disabled:opacity-50"
+                      className="flex items-center justify-center gap-2 rounded-lg bg-bauraBrown px-5 py-3 text-sm font-bold text-bauraCream disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Cloud size={16} />
                       {isConnectingDrive
@@ -547,7 +542,7 @@ export function SettingsPage() {
                         type="button"
                         onClick={handleDisconnectGoogleDrive}
                         disabled={isDisconnectingDrive}
-                        className="rounded-2xl border border-red-100 bg-red-50 px-5 py-3 text-sm font-bold text-red-700 disabled:opacity-60"
+                        className="rounded-lg border border-red-100 bg-red-50 px-5 py-3 text-sm font-bold text-red-700 disabled:opacity-60"
                       >
                         {isDisconnectingDrive ? "Disconnecting..." : "Disconnect"}
                       </button>
@@ -555,7 +550,7 @@ export function SettingsPage() {
                   </div>
 
                   {backupSetting?.isGoogleDriveConnected ? (
-                    <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+                    <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
                       Connected to Google Drive
                       {backupSetting.googleAccountEmail
                         ? ` as ${backupSetting.googleAccountEmail}`
@@ -568,13 +563,13 @@ export function SettingsPage() {
                       .
                     </div>
                   ) : backupForm.googleDriveEnabled ? (
-                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                       Connect Google Drive before running Drive backup. After
                       clicking Connect, Google will open a browser page to select
                       account and allow permission.
                     </div>
                   ) : (
-                    <div className="rounded-2xl border border-bauraBrown/10 bg-white/70 px-4 py-3 text-sm text-bauraBrown/60">
+                    <div className="rounded-lg border border-bauraBorder bg-white px-4 py-3 text-sm text-bauraMuted">
                       Turn on Google Drive Backup to connect a Google account.
                     </div>
                   )}
@@ -586,14 +581,14 @@ export function SettingsPage() {
                   type="button"
                   onClick={() => loadSettings()}
                   disabled={isSavingSettings}
-                  className="rounded-2xl border border-bauraBrown/10 bg-white px-5 py-3 text-sm font-bold text-bauraBrown disabled:opacity-60"
+                  className="erp-button-secondary"
                 >
                   Reset
                 </button>
 
                 <button
                   disabled={isSavingSettings}
-                  className="flex items-center justify-center gap-2 rounded-2xl bg-bauraBrown px-5 py-3 text-sm font-bold text-bauraCream disabled:opacity-60"
+                  className="flex items-center justify-center gap-2 erp-button-primary"
                 >
                   <Save size={16} />
                   {isSavingSettings ? "Saving..." : "Save Settings"}
@@ -603,7 +598,7 @@ export function SettingsPage() {
           </div>
 
           <div className="grid gap-5">
-            <section className="rounded-[2rem] border border-bauraBrown/10 bg-bauraSoft p-5 shadow-sm">
+            <section className="rounded-xl border border-bauraBorder bg-white p-5 shadow-[0_1px_2px_rgba(45,33,27,0.03)]">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-bauraGold">
@@ -612,12 +607,12 @@ export function SettingsPage() {
                   <h3 className="mt-1 text-xl font-bold">
                     Current Backup Status
                   </h3>
-                  <p className="mt-1 text-sm text-bauraBrown/60">
+                  <p className="mt-1 text-sm text-bauraMuted">
                     Monitor the most recent backup and enabled backup targets.
                   </p>
                 </div>
 
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-bauraBrown text-bauraGold">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-bauraBrown text-bauraGold">
                   <Settings size={22} />
                 </div>
               </div>
@@ -684,17 +679,17 @@ export function SettingsPage() {
                   isLoading ||
                   (!backupForm.localBackupEnabled && !backupForm.googleDriveEnabled)
                 }
-                className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-bauraBrown px-5 py-4 text-sm font-bold text-bauraCream shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-bauraBrown px-5 py-4 text-sm font-bold text-bauraCream shadow-[0_1px_2px_rgba(45,33,27,0.03)] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <DatabaseBackup size={17} />
                 {isRunningBackup ? "Creating Backup..." : "Run Backup Now"}
               </button>
             </section>
 
-            <section className="rounded-[2rem] border border-bauraBrown/10 bg-bauraSoft p-5 shadow-sm">
+            <section className="rounded-xl border border-bauraBorder bg-white p-5 shadow-[0_1px_2px_rgba(45,33,27,0.03)]">
               <div>
                 <h3 className="text-xl font-bold">Backup Instructions</h3>
-                <p className="mt-1 text-sm text-bauraBrown/60">
+                <p className="mt-1 text-sm text-bauraMuted">
                   Local backup works immediately. Google Drive needs one-time
                   OAuth connection.
                 </p>
@@ -714,21 +709,21 @@ export function SettingsPage() {
                 <InstructionStep
                   number="3"
                   title="Run database backup"
-                  text="The system creates a PostgreSQL .dump file locally and uploads the same database dump to Drive when connected."
+                  text="The system creates a MySQL .sql file locally and uploads the same database dump to Drive when connected."
                 />
               </div>
             </section>
           </div>
         </section>
 
-        <section className="rounded-[2rem] border border-bauraBrown/10 bg-bauraSoft p-5 shadow-sm">
+        <section className="rounded-xl border border-bauraBorder bg-white p-5 shadow-[0_1px_2px_rgba(45,33,27,0.03)]">
           <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-bauraGold">
                 Backup Records
               </p>
               <h3 className="mt-1 text-xl font-bold">Backup History</h3>
-              <p className="mt-1 text-sm text-bauraBrown/60">
+              <p className="mt-1 text-sm text-bauraMuted">
                 View local and Google Drive backup attempts with status, size and
                 path.
               </p>
@@ -736,7 +731,7 @@ export function SettingsPage() {
 
             <button
               onClick={() => loadSettings(true)}
-              className="flex w-fit items-center gap-2 rounded-2xl border border-bauraBrown/10 bg-white/70 px-4 py-2 text-sm font-semibold"
+              className="flex w-fit items-center gap-2 rounded-lg border border-bauraBorder bg-white px-4 py-2 text-sm font-semibold"
             >
               <RefreshCw size={15} />
               Refresh History
@@ -777,17 +772,17 @@ function SummaryCard({
 }) {
   return (
     <div
-      className={`rounded-[2rem] border p-5 shadow-sm ${
+      className={`rounded-xl border p-5 shadow-[0_1px_2px_rgba(45,33,27,0.03)] ${
         alert
           ? "border-amber-200 bg-amber-50"
-          : "border-bauraBrown/10 bg-bauraSoft"
+          : "border-bauraBorder bg-white"
       }`}
     >
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold text-bauraBrown/60">{title}</p>
+        <p className="text-sm font-semibold text-bauraMuted">{title}</p>
 
         <div
-          className={`flex h-11 w-11 items-center justify-center rounded-2xl ${
+          className={`flex h-11 w-11 items-center justify-center rounded-lg ${
             alert
               ? "bg-amber-100 text-amber-700"
               : "bg-bauraBrown text-bauraGold"
@@ -801,7 +796,7 @@ function SummaryCard({
         {value}
       </h3>
 
-      <p className="mt-1 text-xs text-bauraBrown/50">{note}</p>
+      <p className="mt-1 text-xs text-bauraMuted">{note}</p>
     </div>
   );
 }
@@ -822,13 +817,13 @@ function ToggleRow({
   return (
     <div className="flex items-start justify-between gap-4">
       <div className="flex min-w-0 gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-bauraBrown text-bauraGold">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-bauraBrown text-bauraGold">
           {icon}
         </div>
 
         <div>
           <h4 className="font-bold text-bauraBrown">{title}</h4>
-          <p className="mt-1 text-sm leading-6 text-bauraBrown/60">
+          <p className="mt-1 text-sm leading-6 text-bauraMuted">
             {description}
           </p>
         </div>
@@ -842,7 +837,7 @@ function ToggleRow({
         }`}
       >
         <span
-          className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-sm transition ${
+          className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-[0_1px_2px_rgba(45,33,27,0.03)] transition ${
             checked ? "left-7" : "left-1"
           }`}
         />
@@ -870,7 +865,7 @@ function Input({
     <label className="block">
       <span className="mb-2 block text-sm font-semibold">{label}</span>
       <input
-        className="w-full rounded-2xl border border-bauraBrown/10 bg-white px-4 py-3 text-sm outline-none transition focus:border-bauraGold disabled:bg-white/50 disabled:text-bauraBrown/40"
+        className="erp-input disabled:bg-white disabled:text-bauraMuted"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
@@ -898,7 +893,7 @@ function StatusBox({
 
   return (
     <div
-      className={`rounded-3xl border p-4 ${
+      className={`rounded-xl border p-4 ${
         isSuccess
           ? "border-green-200 bg-green-50"
           : isFailed
@@ -908,7 +903,7 @@ function StatusBox({
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-bauraBrown/60">{title}</p>
+          <p className="text-sm font-semibold text-bauraMuted">{title}</p>
           <h4 className="mt-1 font-bold text-bauraBrown">{value}</h4>
         </div>
 
@@ -931,7 +926,7 @@ function StatusBox({
         </div>
       </div>
 
-      <p className="mt-2 line-clamp-2 text-xs text-bauraBrown/55">{note}</p>
+      <p className="mt-2 line-clamp-2 text-xs text-bauraMuted">{note}</p>
 
       {isRunning && (
         <p className="mt-2 text-xs font-semibold text-amber-700">
@@ -952,15 +947,15 @@ function InstructionStep({
   text: string;
 }) {
   return (
-    <div className="rounded-3xl border border-bauraBrown/10 bg-white/60 p-4">
+    <div className="rounded-xl border border-bauraBorder bg-white p-4">
       <div className="flex gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-bauraBrown text-sm font-bold text-bauraGold">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-bauraBrown text-sm font-bold text-bauraGold">
           {number}
         </div>
 
         <div>
           <h4 className="font-bold text-bauraBrown">{title}</h4>
-          <p className="mt-1 text-sm leading-6 text-bauraBrown/60">{text}</p>
+          <p className="mt-1 text-sm leading-6 text-bauraMuted">{text}</p>
         </div>
       </div>
     </div>
@@ -974,7 +969,7 @@ function BackupHistoryCard({ item }: { item: BackupHistoryItem }) {
 
   return (
     <div
-      className={`rounded-3xl border p-4 ${
+      className={`rounded-xl border p-4 ${
         isSuccess
           ? "border-green-200 bg-green-50"
           : isFailed
@@ -997,11 +992,11 @@ function BackupHistoryCard({ item }: { item: BackupHistoryItem }) {
               {item.status}
             </span>
 
-            <span className="rounded-full bg-white/70 px-3 py-1 text-xs font-bold text-bauraBrown/65">
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-bauraMuted">
               {formatTarget(item.target)}
             </span>
 
-            <span className="rounded-full bg-white/70 px-3 py-1 text-xs font-bold text-bauraBrown/65">
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-bauraMuted">
               {formatFileSize(item.sizeBytes)}
             </span>
           </div>
@@ -1010,31 +1005,31 @@ function BackupHistoryCard({ item }: { item: BackupHistoryItem }) {
             {item.fileName || "Database backup attempt"}
           </h4>
 
-          <p className="mt-1 text-sm text-bauraBrown/60">
+          <p className="mt-1 text-sm text-bauraMuted">
             Started: {formatDateTime(item.startedAt)} · Completed:{" "}
             {formatDateTime(item.completedAt)}
           </p>
 
           {item.filePath && (
-            <p className="mt-1 truncate text-xs text-bauraBrown/45">
+            <p className="mt-1 truncate text-xs text-bauraMuted">
               Path: {item.filePath}
             </p>
           )}
 
           {item.googleAccountEmail && (
-            <p className="mt-1 truncate text-xs text-bauraBrown/45">
+            <p className="mt-1 truncate text-xs text-bauraMuted">
               Drive Account: {item.googleAccountEmail}
             </p>
           )}
 
           {item.googleDriveFileId && (
-            <p className="mt-1 truncate text-xs text-bauraBrown/45">
+            <p className="mt-1 truncate text-xs text-bauraMuted">
               Drive File ID: {item.googleDriveFileId}
             </p>
           )}
 
           {item.errorMessage && (
-            <p className="mt-2 rounded-2xl bg-white/70 px-3 py-2 text-xs text-red-700">
+            <p className="mt-2 rounded-lg bg-white px-3 py-2 text-xs text-red-700">
               {item.errorMessage}
             </p>
           )}
@@ -1042,7 +1037,7 @@ function BackupHistoryCard({ item }: { item: BackupHistoryItem }) {
 
         <div className="flex shrink-0 items-center gap-3">
           <div
-            className={`flex h-12 w-12 items-center justify-center rounded-2xl ${
+            className={`flex h-12 w-12 items-center justify-center rounded-lg ${
               isSuccess
                 ? "bg-green-100 text-green-700"
                 : isFailed
@@ -1058,7 +1053,7 @@ function BackupHistoryCard({ item }: { item: BackupHistoryItem }) {
           </div>
 
           <div className="text-right">
-            <p className="text-xs text-bauraBrown/45">Target</p>
+            <p className="text-xs text-bauraMuted">Target</p>
             <p className="font-bold text-bauraBrown">
               {formatTarget(item.target)}
             </p>
@@ -1077,7 +1072,7 @@ function BackupHistoryCard({ item }: { item: BackupHistoryItem }) {
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="rounded-3xl bg-white/50 p-6 text-center text-sm text-bauraBrown/60">
+    <div className="rounded-xl bg-white p-6 text-center text-sm text-bauraMuted">
       {text}
     </div>
   );

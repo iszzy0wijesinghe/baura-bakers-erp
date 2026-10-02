@@ -157,7 +157,7 @@ export function CartersPage() {
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isSavingCarter, setIsSavingCarter] = useState(false);
   const [isSavingItem, setIsSavingItem] = useState(false);
-  const [error, setError] = useState("");
+  const [, setError] = useState("");
 
   async function loadInventory() {
     setIsInventoryLoading(true);
@@ -459,7 +459,7 @@ export function CartersPage() {
         <>
           <button
             onClick={() => refreshPage(true)}
-            className="flex items-center gap-2 rounded-2xl border border-bauraBrown/10 bg-bauraSoft px-4 py-3 text-sm font-semibold shadow-sm"
+            className="erp-button-secondary"
           >
             <RefreshCw size={16} />
             Refresh
@@ -467,7 +467,7 @@ export function CartersPage() {
 
           <button
             onClick={openCarterModal}
-            className="flex items-center gap-2 rounded-2xl bg-bauraBrown px-5 py-3 text-sm font-bold text-bauraCream shadow-sm"
+            className="erp-button-primary"
           >
             <Plus size={16} />
             New Carter
@@ -475,7 +475,7 @@ export function CartersPage() {
         </>
       }
     >
-      <section className="mb-5 rounded-[2rem] border border-bauraBrown/10 bg-bauraSoft p-5 shadow-sm">
+      <section className="mb-5 rounded-xl border border-bauraBorder bg-white p-5 shadow-[0_1px_2px_rgba(45,33,27,0.03)]">
         <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-bauraGold">
@@ -504,8 +504,8 @@ export function CartersPage() {
               />
             </div>
 
-            <div className="flex items-center gap-3 rounded-2xl border border-bauraBrown/10 bg-white px-4 py-3 sm:w-72">
-              <Search size={17} className="text-bauraBrown/45" />
+            <div className="flex items-center gap-3 rounded-lg border border-bauraBorder bg-white px-4 py-3 sm:w-72">
+              <Search size={17} className="text-bauraMuted" />
               <input
                 className="w-full bg-transparent text-sm outline-none"
                 value={stockSearch}
@@ -518,11 +518,11 @@ export function CartersPage() {
 
         <div className="baura-scrollbar overflow-x-auto pb-2">
           {isInventoryLoading ? (
-            <div className="flex min-h-36 items-center justify-center rounded-3xl bg-white/50 p-6 text-sm text-bauraBrown/60">
+            <div className="flex min-h-36 items-center justify-center rounded-xl bg-white p-6 text-sm text-bauraMuted">
               Loading live stock...
             </div>
           ) : filteredInventory.length === 0 ? (
-            <div className="flex min-h-36 items-center justify-center rounded-3xl bg-white/50 p-6 text-sm text-bauraBrown/60">
+            <div className="flex min-h-36 items-center justify-center rounded-xl bg-white p-6 text-sm text-bauraMuted">
               No live stock found.
             </div>
           ) : (
@@ -536,17 +536,17 @@ export function CartersPage() {
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[0.75fr_1.25fr]">
-        <section className="rounded-[2rem] border border-bauraBrown/10 bg-bauraSoft p-5 shadow-sm">
+        <section className="rounded-xl border border-bauraBorder bg-white p-5 shadow-[0_1px_2px_rgba(45,33,27,0.03)]">
           <div className="mb-5 flex flex-col gap-4">
             <div>
               <h3 className="font-bold">Purchase Carters</h3>
-              <p className="text-sm text-bauraBrown/60">
+              <p className="text-sm text-bauraMuted">
                 {filteredCarters.length} shown · {carters.length} total
               </p>
             </div>
 
-            <div className="flex items-center gap-3 rounded-2xl border border-bauraBrown/10 bg-white px-4 py-3">
-              <Search size={17} className="text-bauraBrown/45" />
+            <div className="flex items-center gap-3 rounded-lg border border-bauraBorder bg-white px-4 py-3">
+              <Search size={17} className="text-bauraMuted" />
               <input
                 className="w-full bg-transparent text-sm outline-none"
                 value={search}
@@ -555,12 +555,6 @@ export function CartersPage() {
               />
             </div>
           </div>
-
-          {error && (
-            <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </div>
-          )}
 
           <div className="baura-scrollbar max-h-[calc(100vh-500px)] min-h-[360px] overflow-auto pr-1">
             {isLoading ? (
@@ -576,28 +570,28 @@ export function CartersPage() {
                     <button
                       key={carter.id}
                       onClick={() => loadCarterDetail(carter.id)}
-                      className={`rounded-3xl border p-4 text-left transition ${
+                      className={`rounded-xl border p-4 text-left transition ${
                         isSelected
-                          ? "border-bauraGold bg-bauraGold/15"
-                          : "border-bauraBrown/10 bg-white/60 hover:bg-white/80"
+                          ? "border-bauraGold bg-bauraGoldSoft"
+                          : "border-bauraBorder bg-white hover:bg-white"
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <h4 className="font-bold">{carter.carterNo}</h4>
-                          <p className="mt-1 flex items-center gap-2 text-sm text-bauraBrown/60">
+                          <p className="mt-1 flex items-center gap-2 text-sm text-bauraMuted">
                             <CalendarDays size={15} />
                             {formatDate(carter.purchasedAt)}
                           </p>
                         </div>
 
-                        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-bauraBrown/65">
+                        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-bauraMuted">
                           {carter.itemCount || 0} items
                         </span>
                       </div>
 
                       <div className="mt-3 flex items-center justify-between gap-3 text-sm">
-                        <span className="truncate text-bauraBrown/60">
+                        <span className="truncate text-bauraMuted">
                           {carter.supplierName || "No supplier"}
                         </span>
                         <span className="shrink-0 font-bold">
@@ -612,15 +606,15 @@ export function CartersPage() {
           </div>
         </section>
 
-        <section className="rounded-[2rem] border border-bauraBrown/10 bg-bauraSoft p-5 shadow-sm">
+        <section className="rounded-xl border border-bauraBorder bg-white p-5 shadow-[0_1px_2px_rgba(45,33,27,0.03)]">
           {!selectedCarter ? (
-            <div className="flex min-h-[420px] items-center justify-center rounded-3xl bg-white/50 p-6 text-center">
+            <div className="flex min-h-[420px] items-center justify-center rounded-xl bg-white p-6 text-center">
               <div>
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-3xl bg-bauraBrown text-bauraGold">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-bauraBrown text-bauraGold">
                   <ShoppingBasket size={26} />
                 </div>
                 <h3 className="mt-4 font-bold">No Carter selected</h3>
-                <p className="mt-2 text-sm text-bauraBrown/60">
+                <p className="mt-2 text-sm text-bauraMuted">
                   Create or select a Carter to add purchased ingredient stock.
                 </p>
               </div>
@@ -635,7 +629,7 @@ export function CartersPage() {
                   <h3 className="mt-1 text-2xl font-bold">
                     {selectedCarter.carterNo}
                   </h3>
-                  <p className="mt-1 text-sm text-bauraBrown/60">
+                  <p className="mt-1 text-sm text-bauraMuted">
                     {formatDate(selectedCarter.purchasedAt)} ·{" "}
                     {selectedCarter.supplierName || "No supplier"}
                   </p>
@@ -643,7 +637,7 @@ export function CartersPage() {
 
                 <button
                   onClick={openItemModal}
-                  className="flex items-center gap-2 rounded-2xl bg-bauraBrown px-5 py-3 text-sm font-bold text-bauraCream shadow-sm"
+                  className="erp-button-primary"
                 >
                   <PackagePlus size={16} />
                   Add Ingredient Stock
@@ -673,11 +667,11 @@ export function CartersPage() {
                     {selectedCarter.items.map((item) => (
                       <div
                         key={item.id}
-                        className="rounded-3xl border border-bauraBrown/10 bg-white/60 p-4"
+                        className="rounded-xl border border-bauraBorder bg-white p-4"
                       >
                         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                           <div className="flex items-start gap-3">
-                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-bauraBrown text-bauraGold">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-bauraBrown text-bauraGold">
                               <ClipboardList size={20} />
                             </div>
 
@@ -685,11 +679,11 @@ export function CartersPage() {
                               <h4 className="font-bold">
                                 {getIngredientName(item)}
                               </h4>
-                              <p className="mt-1 text-sm text-bauraBrown/60">
+                              <p className="mt-1 text-sm text-bauraMuted">
                                 Loaded: {formatQty(item.loadedQty)} packs ·
                                 Base: {formatQty(item.totalBaseQty)}
                               </p>
-                              <p className="mt-1 text-xs text-bauraBrown/45">
+                              <p className="mt-1 text-xs text-bauraMuted">
                                 Cost/base unit:{" "}
                                 {formatCurrency(item.unitCostBase)}
                               </p>
@@ -697,13 +691,13 @@ export function CartersPage() {
                           </div>
 
                           <div className="text-left md:text-right">
-                            <p className="text-sm text-bauraBrown/60">
+                            <p className="text-sm text-bauraMuted">
                               Price/package
                             </p>
                             <p className="font-bold">
                               {formatCurrency(item.pricePerPackage)}
                             </p>
-                            <p className="mt-1 text-xs text-bauraBrown/50">
+                            <p className="mt-1 text-xs text-bauraMuted">
                               Total {formatCurrency(item.totalPrice)}
                             </p>
                           </div>
@@ -747,7 +741,7 @@ export function CartersPage() {
           <label className="block">
             <span className="mb-2 block text-sm font-semibold">Notes</span>
             <textarea
-              className="min-h-24 w-full resize-none rounded-2xl border border-bauraBrown/10 bg-white px-4 py-3 text-sm outline-none transition focus:border-bauraGold"
+              className="min-h-24 w-full resize-none rounded-lg border border-bauraBorder bg-white px-4 py-3 text-sm outline-none transition focus:border-bauraGold"
               value={carterForm.notes}
               onChange={(event) =>
                 setCarterForm((prev) => ({
@@ -781,7 +775,7 @@ export function CartersPage() {
           <label className="block">
             <span className="mb-2 block text-sm font-semibold">Ingredient</span>
             <select
-              className="w-full rounded-2xl border border-bauraBrown/10 bg-white px-4 py-3 text-sm outline-none transition focus:border-bauraGold"
+              className="erp-input"
               value={itemForm.ingredientId}
               onChange={(event) =>
                 setItemForm((prev) => ({
@@ -826,7 +820,7 @@ export function CartersPage() {
           </div>
 
           {itemPreview && selectedIngredient && (
-            <div className="rounded-3xl border border-bauraBrown/10 bg-white/60 p-4">
+            <div className="rounded-xl border border-bauraBorder bg-white p-4">
               <p className="text-sm font-bold">Stock Preview</p>
               <div className="mt-3 grid gap-3 text-sm md:grid-cols-3">
                 <PreviewStat
@@ -863,17 +857,17 @@ function LiveStockCard({ item }: { item: InventoryItem }) {
 
   return (
     <div
-      className={`w-56 shrink-0 rounded-3xl border p-4 ${
+      className={`w-56 shrink-0 rounded-xl border p-4 ${
         isOutOfStock
           ? "border-red-200 bg-red-50"
           : item.isLowStock
             ? "border-amber-200 bg-amber-50"
-            : "border-bauraBrown/10 bg-white/70"
+            : "border-bauraBorder bg-white"
       }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${
             isOutOfStock
               ? "bg-red-100 text-red-700"
               : item.isLowStock
@@ -909,18 +903,18 @@ function LiveStockCard({ item }: { item: InventoryItem }) {
         {formatQty(item.qtyOnHand)}
       </p>
 
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-bauraBrown/45">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-bauraMuted">
         {item.baseUnit} on hand
       </p>
 
       <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-        <div className="rounded-2xl bg-white/70 p-3">
-          <p className="text-bauraBrown/45">Lots</p>
+        <div className="rounded-lg bg-white p-3">
+          <p className="text-bauraMuted">Lots</p>
           <p className="mt-1 font-bold text-bauraBrown">{item.stockLotCount}</p>
         </div>
 
-        <div className="rounded-2xl bg-white/70 p-3">
-          <p className="text-bauraBrown/45">Value</p>
+        <div className="rounded-lg bg-white p-3">
+          <p className="text-bauraMuted">Value</p>
           <p className="mt-1 truncate font-bold text-bauraBrown">
             {formatCurrency(item.stockValue)}
           </p>
@@ -928,7 +922,7 @@ function LiveStockCard({ item }: { item: InventoryItem }) {
       </div>
 
       {item.lowStockAlertQty !== null && (
-        <p className="mt-3 text-xs text-bauraBrown/50">
+        <p className="mt-3 text-xs text-bauraMuted">
           Low alert: {formatQty(item.lowStockAlertQty, item.baseUnit)}
         </p>
       )}
@@ -938,8 +932,8 @@ function LiveStockCard({ item }: { item: InventoryItem }) {
 
 function LiveStockMiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-white/70 px-4 py-3">
-      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-bauraBrown/45">
+    <div className="rounded-lg bg-white px-4 py-3">
+      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-bauraMuted">
         {label}
       </p>
       <p className="mt-1 max-w-24 truncate text-sm font-black text-bauraBrown">
@@ -951,7 +945,7 @@ function LiveStockMiniStat({ label, value }: { label: string; value: string }) {
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="rounded-3xl bg-white/50 p-6 text-center text-sm text-bauraBrown/60">
+    <div className="rounded-xl bg-white p-6 text-center text-sm text-bauraMuted">
       {text}
     </div>
   );
@@ -959,8 +953,8 @@ function EmptyState({ text }: { text: string }) {
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-3xl bg-white/60 p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-bauraBrown/45">
+    <div className="rounded-xl bg-white p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-bauraMuted">
         {label}
       </p>
       <p className="mt-2 truncate text-sm font-bold">{value}</p>
@@ -971,7 +965,7 @@ function MiniStat({ label, value }: { label: string; value: string }) {
 function PreviewStat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs text-bauraBrown/50">{label}</p>
+      <p className="text-xs text-bauraMuted">{label}</p>
       <p className="mt-1 font-bold text-bauraBrown">{value}</p>
     </div>
   );
@@ -996,7 +990,7 @@ function Input({
     <label className="block">
       <span className="mb-2 block text-sm font-semibold">{label}</span>
       <input
-        className="w-full rounded-2xl border border-bauraBrown/10 bg-white px-4 py-3 text-sm outline-none transition focus:border-bauraGold"
+        className="erp-input"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
@@ -1022,14 +1016,14 @@ function ModalActions({
         type="button"
         onClick={onCancel}
         disabled={isLoading}
-        className="rounded-2xl border border-bauraBrown/10 bg-white px-5 py-3 text-sm font-bold text-bauraBrown disabled:opacity-60"
+        className="erp-button-secondary"
       >
         Cancel
       </button>
 
       <button
         disabled={isLoading}
-        className="rounded-2xl bg-bauraBrown px-5 py-3 text-sm font-bold text-bauraCream disabled:opacity-60"
+        className="erp-button-primary"
       >
         {isLoading ? "Saving..." : submitText}
       </button>

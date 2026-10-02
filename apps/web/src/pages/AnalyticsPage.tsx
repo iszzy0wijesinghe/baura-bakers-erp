@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle,
   BarChart3,
   CalendarDays,
   Download,
@@ -12,6 +11,7 @@ import {
 } from "lucide-react";
 import { AppLayout } from "../layouts/AppLayout";
 import { apiRequest } from "../lib/api";
+import { useToast } from "../ui/ToastProvider";
 
 type BaseUnit = "G" | "ML" | "UNIT";
 
@@ -199,13 +199,13 @@ function downloadSvg(svgId: string, filename: string) {
 }
 
 export function AnalyticsPage() {
+  const toast = useToast();
   const [fromDate, setFromDate] = useState(daysAgoInputValue(29));
   const [toDate, setToDate] = useState(todayInputValue());
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const [error, setError] = useState("");
 
   const summary = analytics?.summary || emptySummary;
 
@@ -219,7 +219,6 @@ export function AnalyticsPage() {
 
   async function loadAnalytics() {
     setIsLoading(true);
-    setError("");
 
     try {
       const query = new URLSearchParams({
@@ -235,7 +234,7 @@ export function AnalyticsPage() {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to load analytics";
-      setError(message);
+      toast.error("Failed to load analytics", message);
     } finally {
       setIsLoading(false);
     }
@@ -264,10 +263,10 @@ export function AnalyticsPage() {
         <>
           <button
             onClick={() => setAutoRefresh((prev) => !prev)}
-            className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold shadow-sm ${
+            className={`flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold shadow-[0_1px_2px_rgba(45,33,27,0.03)] ${
               autoRefresh
                 ? "bg-green-100 text-green-700"
-                : "border border-bauraBrown/10 bg-bauraSoft"
+                : "border border-bauraBorder bg-white"
             }`}
           >
             <Zap size={16} />
@@ -276,7 +275,7 @@ export function AnalyticsPage() {
 
           <button
             onClick={loadAnalytics}
-            className="flex items-center gap-2 rounded-2xl border border-bauraBrown/10 bg-bauraSoft px-4 py-3 text-sm font-semibold shadow-sm"
+            className="erp-button-secondary"
           >
             <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
             Refresh
@@ -285,7 +284,7 @@ export function AnalyticsPage() {
       }
     >
       <div className="grid gap-5">
-        <section className="rounded-[2rem] border border-bauraBrown/10 bg-bauraSoft p-5 shadow-sm">
+        <section className="rounded-xl border border-bauraBorder bg-white p-5 shadow-[0_1px_2px_rgba(45,33,27,0.03)]">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-bauraGold">
@@ -294,7 +293,7 @@ export function AnalyticsPage() {
               <h3 className="mt-1 text-xl font-bold">
                 Date-range Performance View
               </h3>
-              <p className="mt-1 text-sm text-bauraBrown/60">
+              <p className="mt-1 text-sm text-bauraMuted">
                 Select period, refresh realtime, and download charts or data.
               </p>
             </div>
@@ -305,7 +304,7 @@ export function AnalyticsPage() {
 
               <button
                 onClick={loadAnalytics}
-                className="flex items-center justify-center gap-2 rounded-2xl bg-bauraBrown px-5 py-3 text-sm font-bold text-bauraCream"
+                className="flex items-center justify-center gap-2 rounded-lg bg-bauraBrown px-5 py-3 text-sm font-bold text-bauraCream"
               >
                 <CalendarDays size={16} />
                 Apply Range
@@ -313,12 +312,6 @@ export function AnalyticsPage() {
             </div>
           </div>
         </section>
-
-        {error && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
-        )}
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <MetricCard
@@ -435,8 +428,8 @@ export function AnalyticsPage() {
                 value={formatCurrency(summary.profit)}
                 highlight
               />
-              <div className="rounded-3xl bg-white/60 p-4">
-                <p className="text-sm text-bauraBrown/60">Profit Margin</p>
+              <div className="rounded-xl bg-white p-4">
+                <p className="text-sm text-bauraMuted">Profit Margin</p>
                 <p className="mt-2 text-3xl font-black text-bauraBrown">
                   {summary.profitMarginPercent}%
                 </p>
@@ -575,14 +568,14 @@ function DateInput({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-bauraBrown/50">
+      <span className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-bauraMuted">
         {label}
       </span>
       <input
         type="date"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-2xl border border-bauraBrown/10 bg-white px-4 py-3 text-sm font-semibold outline-none transition focus:border-bauraGold"
+        className="erp-input font-semibold"
       />
     </label>
   );
@@ -605,16 +598,16 @@ function MetricCard({
 }) {
   return (
     <div
-      className={`rounded-[2rem] border p-5 shadow-sm ${
+      className={`rounded-xl border p-5 shadow-[0_1px_2px_rgba(45,33,27,0.03)] ${
         alert
           ? "border-amber-200 bg-amber-50"
-          : "border-bauraBrown/10 bg-bauraSoft"
+          : "border-bauraBorder bg-white"
       }`}
     >
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold text-bauraBrown/60">{label}</p>
+        <p className="text-sm font-semibold text-bauraMuted">{label}</p>
         <div
-          className={`flex h-11 w-11 items-center justify-center rounded-2xl ${
+          className={`flex h-11 w-11 items-center justify-center rounded-lg ${
             alert
               ? "bg-amber-100 text-amber-700"
               : "bg-bauraBrown text-bauraGold"
@@ -632,7 +625,7 @@ function MetricCard({
         {value}
       </h3>
 
-      <p className="mt-1 text-xs text-bauraBrown/50">{note}</p>
+      <p className="mt-1 text-xs text-bauraMuted">{note}</p>
     </div>
   );
 }
@@ -649,11 +642,11 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-[2rem] border border-bauraBrown/10 bg-bauraSoft p-5 shadow-sm">
+    <div className="rounded-xl border border-bauraBorder bg-white p-5 shadow-[0_1px_2px_rgba(45,33,27,0.03)]">
       <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h3 className="text-xl font-bold">{title}</h3>
-          <p className="mt-1 text-sm text-bauraBrown/60">{subtitle}</p>
+          <p className="mt-1 text-sm text-bauraMuted">{subtitle}</p>
         </div>
 
         {action}
@@ -674,7 +667,7 @@ function SmallButton({
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-2 rounded-2xl border border-bauraBrown/10 bg-white/70 px-3 py-2 text-xs font-bold text-bauraBrown"
+      className="flex items-center gap-2 rounded-lg border border-bauraBorder bg-white px-3 py-2 text-xs font-bold text-bauraBrown"
     >
       {children}
     </button>
@@ -718,7 +711,7 @@ function SalesProfitCurve({
   }
 
   return (
-    <div className="overflow-hidden rounded-3xl bg-white/60 p-4">
+    <div className="overflow-hidden rounded-xl bg-white p-4">
       {data.length === 0 ? (
         <EmptyState text="No trend data yet." />
       ) : (
@@ -850,7 +843,7 @@ function HorizontalBarList({
           return (
             <div
               key={item.id}
-              className="rounded-3xl border border-bauraBrown/10 bg-white/60 p-4"
+              className="rounded-xl border border-bauraBorder bg-white p-4"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
@@ -860,7 +853,7 @@ function HorizontalBarList({
                   <h4 className="mt-1 truncate font-bold text-bauraBrown">
                     {item.label}
                   </h4>
-                  <p className="mt-1 truncate text-sm text-bauraBrown/55">
+                  <p className="mt-1 truncate text-sm text-bauraMuted">
                     {item.subValue}
                   </p>
                 </div>
@@ -895,11 +888,11 @@ function StructureRow({
 }) {
   return (
     <div
-      className={`flex items-center justify-between rounded-3xl px-4 py-3 ${
-        highlight ? "bg-bauraBrown text-bauraCream" : "bg-white/60"
+      className={`flex items-center justify-between rounded-xl px-4 py-3 ${
+        highlight ? "bg-bauraBrown text-bauraCream" : "bg-white"
       }`}
     >
-      <span className={highlight ? "text-bauraCream/70" : "text-bauraBrown/60"}>
+      <span className={highlight ? "text-bauraCream/70" : "text-bauraMuted"}>
         {label}
       </span>
       <span className={`font-bold ${highlight ? "text-bauraGold" : ""}`}>
@@ -912,12 +905,12 @@ function StructureRow({
 function InventoryRiskRow({ item }: { item: InventoryRiskItem }) {
   return (
     <div
-      className={`rounded-3xl border p-4 ${
+      className={`rounded-xl border p-4 ${
         item.isOutOfStock
           ? "border-red-200 bg-red-50"
           : item.isLowStock
           ? "border-amber-200 bg-amber-50"
-          : "border-bauraBrown/10 bg-white/60"
+          : "border-bauraBorder bg-white"
       }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -925,7 +918,7 @@ function InventoryRiskRow({ item }: { item: InventoryRiskItem }) {
           <h4 className="truncate font-bold text-bauraBrown">
             {item.displayName}
           </h4>
-          <p className="mt-1 text-sm text-bauraBrown/60">
+          <p className="mt-1 text-sm text-bauraMuted">
             {formatQty(item.qtyOnHand, item.baseUnit)} on hand ·{" "}
             {item.stockLotCount} lots
           </p>
@@ -944,7 +937,7 @@ function InventoryRiskRow({ item }: { item: InventoryRiskItem }) {
         </span>
       </div>
 
-      <p className="mt-2 text-xs text-bauraBrown/50">
+      <p className="mt-2 text-xs text-bauraMuted">
         Value: {formatCurrency(item.stockValue)}
         {item.lowStockAlertQty !== null
           ? ` · Alert: ${formatQty(item.lowStockAlertQty, item.baseUnit)}`
@@ -956,7 +949,7 @@ function InventoryRiskRow({ item }: { item: InventoryRiskItem }) {
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="rounded-3xl bg-white/50 p-6 text-center text-sm text-bauraBrown/60">
+    <div className="rounded-xl bg-white p-6 text-center text-sm text-bauraMuted">
       {text}
     </div>
   );

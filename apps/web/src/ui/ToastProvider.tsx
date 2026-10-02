@@ -1,119 +1,434 @@
-import type { ReactNode } from "react";
-import { createContext, useContext, useMemo, useState } from "react";
-import { Check, Info, X, XCircle } from "lucide-react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 
-type ToastType = "success" | "error" | "info";
+import type {
+  ReactNode
+} from "react";
 
-type Toast = {
+import {
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
+  Info,
+  X
+} from "lucide-react";
+
+type ToastType =
+  | "success"
+  | "error"
+  | "warning"
+  | "info";
+
+type ToastItem = {
   id: string;
   type: ToastType;
   title: string;
   message?: string;
+  exiting?: boolean;
 };
 
 type ToastContextValue = {
-  success: (title: string, message?: string) => void;
-  error: (title: string, message?: string) => void;
-  info: (title: string, message?: string) => void;
+  success: (
+    title: string,
+    message?: string
+  ) => void;
+
+  error: (
+    title: string,
+    message?: string
+  ) => void;
+
+  warning: (
+    title: string,
+    message?: string
+  ) => void;
+
+  info: (
+    title: string,
+    message?: string
+  ) => void;
 };
 
-const ToastContext = createContext<ToastContextValue | null>(null);
+const ToastContext =
+  createContext<
+    ToastContextValue | null
+  >(null);
 
-export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toasts, setToasts] = useState<Toast[]>([]);
+const TOAST_DURATION =
+  4200;
 
-  function removeToast(id: string) {
-    setToasts((prev) => prev.filter((toast) => toast.id !== id));
-  }
+const EXIT_DURATION =
+  190;
 
-  function addToast(type: ToastType, title: string, message?: string) {
-    const id = crypto.randomUUID();
+function createToastId() {
+  return `${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2)}`;
+}
 
-    setToasts((prev) => [{ id, type, title, message }, ...prev].slice(0, 4));
+export function ToastProvider({
+  children
+}: {
+  children: ReactNode;
+}) {
+  const [
+    toasts,
+    setToasts
+  ] =
+    useState<
+      ToastItem[]
+    >([]);
 
-    window.setTimeout(() => {
-      removeToast(id);
-    }, 4200);
-  }
+  const timers =
+    useRef(
+      new Map<
+        string,
+        number
+      >()
+    );
 
-  const value = useMemo(
-    () => ({
-      success: (title: string, message?: string) =>
-        addToast("success", title, message),
-      error: (title: string, message?: string) =>
-        addToast("error", title, message),
-      info: (title: string, message?: string) => addToast("info", title, message)
-    }),
-    []
-  );
+  const removeToast =
+    useCallback(
+      (
+        id: string
+      ) => {
+        const timer =
+          timers.current.get(
+            id
+          );
+
+        if (timer) {
+          window.clearTimeout(
+            timer
+          );
+
+          timers.current.delete(
+            id
+          );
+        }
+
+        setToasts(
+          (current) =>
+            current.map(
+              (toast) =>
+                toast.id ===
+                id
+                  ? {
+                      ...toast,
+                      exiting:
+                        true
+                    }
+                  : toast
+            )
+        );
+
+        window.setTimeout(
+          () => {
+            setToasts(
+              (current) =>
+                current.filter(
+                  (toast) =>
+                    toast.id !==
+                    id
+                )
+            );
+          },
+
+          EXIT_DURATION
+        );
+      },
+      []
+    );
+
+  const pushToast =
+    useCallback(
+      (
+        type:
+          ToastType,
+
+        title:
+          string,
+
+        message?:
+          string
+      ) => {
+        const id =
+          createToastId();
+
+        const toast:
+          ToastItem = {
+          id,
+          type,
+          title,
+          message
+        };
+
+        setToasts(
+          (current) => [
+            ...current.slice(
+              -3
+            ),
+
+            toast
+          ]
+        );
+
+        const timer =
+          window.setTimeout(
+            () =>
+              removeToast(
+                id
+              ),
+
+            TOAST_DURATION
+          );
+
+        timers.current.set(
+          id,
+          timer
+        );
+      },
+      [
+        removeToast
+      ]
+    );
+
+  useEffect(() => {
+    const currentTimers =
+      timers.current;
+
+    return () => {
+      currentTimers.forEach(
+        (timer) => {
+          window.clearTimeout(
+            timer
+          );
+        }
+      );
+
+      currentTimers.clear();
+    };
+  }, []);
+
+  const value =
+    useMemo<ToastContextValue>(
+      () => ({
+        success(
+          title,
+          message
+        ) {
+          pushToast(
+            "success",
+            title,
+            message
+          );
+        },
+
+        error(
+          title,
+          message
+        ) {
+          pushToast(
+            "error",
+            title,
+            message
+          );
+        },
+
+        warning(
+          title,
+          message
+        ) {
+          pushToast(
+            "warning",
+            title,
+            message
+          );
+        },
+
+        info(
+          title,
+          message
+        ) {
+          pushToast(
+            "info",
+            title,
+            message
+          );
+        }
+      }),
+      [
+        pushToast
+      ]
+    );
 
   return (
-    <ToastContext.Provider value={value}>
+    <ToastContext.Provider
+      value={value}
+    >
       {children}
 
-      <div className="pointer-events-none fixed right-5 top-5 z-[100] flex w-[calc(100vw-2.5rem)] max-w-[360px] flex-col gap-3">
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            className="pointer-events-auto animate-bauraToastIn overflow-hidden rounded-xl border border-bauraBrown/10 bg-[#fffaf0]/95 shadow-[0_18px_45px_rgba(55,38,25,0.16)] backdrop-blur-xl"
-          >
-            <div className="flex items-start gap-3 px-4 py-3.5">
-              <div
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
-                  toast.type === "success"
-                    ? "bg-[#eff8ef] text-[#2f7d43]"
-                    : toast.type === "error"
-                      ? "bg-[#fff0ed] text-[#c2412d]"
-                      : "bg-bauraBrown text-bauraGold"
-                }`}
-              >
-                {toast.type === "success" && <Check size={18} strokeWidth={3} />}
-                {toast.type === "error" && <XCircle size={18} />}
-                {toast.type === "info" && <Info size={18} />}
-              </div>
-
-              <div className="min-w-0 flex-1 pt-0.5">
-                <p className="text-sm font-bold leading-5 text-bauraBrown">
-                  {toast.title}
-                </p>
-                {toast.message && (
-                  <p className="mt-0.5 text-xs leading-5 text-bauraBrown/58">
-                    {toast.message}
-                  </p>
-                )}
-              </div>
-
-              <button
-                onClick={() => removeToast(toast.id)}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-bauraBrown/35 transition hover:bg-bauraBrown/5 hover:text-bauraBrown"
-              >
-                <X size={15} />
-              </button>
-            </div>
-
-            <div className="h-[3px] bg-bauraBrown/5">
-              <div
-                className={`h-full animate-bauraToastBar ${
-                  toast.type === "success"
-                    ? "bg-[#8fbf73]"
-                    : toast.type === "error"
-                      ? "bg-[#d86b55]"
-                      : "bg-bauraGold"
-                }`}
-              />
-            </div>
-          </div>
-        ))}
+      {/*
+       * TOP-RIGHT NOTIFICATION STACK
+       */}
+      <div className="pointer-events-none fixed right-4 top-4 z-[250] flex w-[calc(100vw-32px)] max-w-[390px] flex-col gap-2.5 sm:right-5 sm:top-5 sm:w-full">
+        {toasts.map(
+          (toast) => (
+            <ToastChip
+              key={
+                toast.id
+              }
+              toast={
+                toast
+              }
+              onClose={() =>
+                removeToast(
+                  toast.id
+                )
+              }
+            />
+          )
+        )}
       </div>
     </ToastContext.Provider>
   );
 }
 
+function ToastChip({
+  toast,
+  onClose
+}: {
+  toast: ToastItem;
+  onClose: () => void;
+}) {
+  const config = {
+    success: {
+      icon:
+        CheckCircle2,
+
+      iconClass:
+        "bg-bauraSuccessSoft text-bauraSuccess",
+
+      bar:
+        "bg-bauraSuccess"
+    },
+
+    error: {
+      icon:
+        AlertCircle,
+
+      iconClass:
+        "bg-bauraDangerSoft text-bauraDanger",
+
+      bar:
+        "bg-bauraDanger"
+    },
+
+    warning: {
+      icon:
+        AlertTriangle,
+
+      iconClass:
+        "bg-bauraWarningSoft text-bauraWarning",
+
+      bar:
+        "bg-bauraWarning"
+    },
+
+    info: {
+      icon:
+        Info,
+
+      iconClass:
+        "bg-bauraGoldSoft text-bauraGoldDark",
+
+      bar:
+        "bg-bauraGold"
+    }
+  }[
+    toast.type
+  ];
+
+  const Icon =
+    config.icon;
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={`pointer-events-auto relative overflow-hidden rounded-[15px] border border-bauraBorder bg-white shadow-bauraToast ${
+        toast.exiting
+          ? "animate-bauraToastOut"
+          : "animate-bauraToastIn"
+      }`}
+    >
+      <div className="flex items-start gap-3 p-3.5">
+        <div
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${config.iconClass}`}
+        >
+          <Icon
+            size={17}
+          />
+        </div>
+
+        <div className="min-w-0 flex-1 pt-0.5">
+          <p className="text-[10px] font-semibold text-bauraInk">
+            {
+              toast.title
+            }
+          </p>
+
+          {toast.message && (
+            <p className="mt-1 text-[9px] leading-4 text-bauraMuted">
+              {
+                toast.message
+              }
+            </p>
+          )}
+        </div>
+
+        <button
+          type="button"
+          aria-label="Close notification"
+          onClick={
+            onClose
+          }
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-bauraMuted transition hover:bg-bauraCanvas2 hover:text-bauraInk"
+        >
+          <X
+            size={13}
+          />
+        </button>
+      </div>
+
+      {!toast.exiting && (
+        <div className="h-[2px] bg-bauraCanvas2">
+          <div
+            className={`h-full animate-bauraToastBar ${config.bar}`}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function useToast() {
-  const context = useContext(ToastContext);
+  const context =
+    useContext(
+      ToastContext
+    );
 
   if (!context) {
-    throw new Error("useToast must be used inside ToastProvider");
+    throw new Error(
+      "useToast must be used inside ToastProvider"
+    );
   }
 
   return context;

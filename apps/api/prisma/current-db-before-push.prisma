@@ -1,0 +1,591 @@
+﻿generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model auditlog {
+  id         String   @id @db.Char(36)
+  userId     String?  @db.Char(36)
+  action     String
+  entityType String
+  entityId   String?
+  beforeJson String?  @db.LongText
+  afterJson  String?  @db.LongText
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+  user       user?    @relation(fields: [userId], references: [id], map: "AuditLog_userId_fkey")
+
+  @@index([createdAt], map: "AuditLog_createdAt_idx")
+  @@index([entityType, entityId], map: "AuditLog_entityType_entityId_idx")
+  @@index([userId], map: "AuditLog_userId_idx")
+}
+
+model backuphistory {
+  id                 String               @id @db.Char(36)
+  target             backuphistory_target
+  status             backuphistory_status @default(RUNNING)
+  fileName           String?
+  filePath           String?
+  googleDriveFileId  String?
+  googleAccountEmail String?
+  sizeBytes          Int?
+  startedAt          DateTime             @default(now())
+  completedAt        DateTime?
+  errorMessage       String?
+  createdAt          DateTime             @default(now())
+}
+
+model backupsetting {
+  id                      String                  @id @db.Char(36)
+  frequency               backupsetting_frequency @default(MANUAL)
+  localBackupEnabled      Boolean                 @default(true)
+  localBackupPath         String                  @default("./backups")
+  googleDriveEnabled      Boolean                 @default(false)
+  googleAccountEmail      String?
+  googleDriveFolderId     String?
+  googleDriveRefreshToken String?
+  googleDriveAccessToken  String?
+  googleDriveTokenExpiry  DateTime?
+  googleDriveConnectedAt  DateTime?
+  googleOauthState        String?
+  lastBackupAt            DateTime?
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime
+}
+
+model documentsequence {
+  key       String   @id
+  prefix    String
+  nextValue Int      @default(1)
+  updatedAt DateTime
+}
+
+model finishedgoodslot {
+  id                           String                         @id @db.Char(36)
+  productionBatchId            String                         @unique(map: "FinishedGoodsLot_productionBatchId_key") @db.Char(36)
+  productId                    String                         @db.Char(36)
+  producedQty                  Decimal                        @db.Decimal(12, 3)
+  remainingQty                 Decimal                        @db.Decimal(12, 3)
+  unitCost                     Decimal                        @db.Decimal(14, 6)
+  producedAt                   DateTime
+  expiryDate                   DateTime?
+  createdAt                    DateTime                       @default(now())
+  product                      product                        @relation(fields: [productId], references: [id], map: "FinishedGoodsLot_productId_fkey")
+  productionbatch              productionbatch                @relation(fields: [productionBatchId], references: [id], map: "FinishedGoodsLot_productionBatchId_fkey")
+  finishedgoodsmovement        finishedgoodsmovement[]
+  salefinishedgoodsconsumption salefinishedgoodsconsumption[]
+
+  @@index([expiryDate], map: "FinishedGoodsLot_expiryDate_idx")
+  @@index([producedAt], map: "FinishedGoodsLot_producedAt_idx")
+  @@index([productId, remainingQty], map: "FinishedGoodsLot_productId_remainingQty_idx")
+}
+
+model finishedgoodsmovement {
+  id               String                             @id @db.Char(36)
+  productId        String                             @db.Char(36)
+  stockLotId       String?                            @db.Char(36)
+  movementType     finishedgoodsmovement_movementType
+  refType          String?
+  refId            String?
+  qtyDelta         Decimal                            @db.Decimal(12, 3)
+  unitCost         Decimal?                           @db.Decimal(14, 6)
+  costAmount       Decimal?                           @db.Decimal(14, 2)
+  note             String?
+  occurredAt       DateTime                           @default(now())
+  product          product                            @relation(fields: [productId], references: [id], map: "FinishedGoodsMovement_productId_fkey")
+  finishedgoodslot finishedgoodslot?                  @relation(fields: [stockLotId], references: [id], onDelete: Restrict, map: "FinishedGoodsMovement_stockLotId_fkey")
+
+  @@index([movementType], map: "FinishedGoodsMovement_movementType_idx")
+  @@index([occurredAt], map: "FinishedGoodsMovement_occurredAt_idx")
+  @@index([productId], map: "FinishedGoodsMovement_productId_idx")
+  @@index([refType, refId], map: "FinishedGoodsMovement_refType_refId_idx")
+  @@index([stockLotId], map: "FinishedGoodsMovement_stockLotId_idx")
+}
+
+model goodsreceipt {
+  id                                  String              @id @db.Char(36)
+  grnNo                               String              @unique(map: "GoodsReceipt_grnNo_key")
+  supplierId                          String              @db.Char(36)
+  supplierInvoiceNo                   String?
+  invoiceDate                         DateTime?
+  receivedAt                          DateTime
+  status                              goodsreceipt_status @default(DRAFT)
+  notes                               String?
+  subtotal                            Decimal             @default(0.00) @db.Decimal(14, 2)
+  createdById                         String              @db.Char(36)
+  postedById                          String?             @db.Char(36)
+  postedAt                            DateTime?
+  createdAt                           DateTime            @default(now())
+  updatedAt                           DateTime
+  user_goodsreceipt_createdByIdTouser user                @relation("goodsreceipt_createdByIdTouser", fields: [createdById], references: [id], map: "GoodsReceipt_createdById_fkey")
+  user_goodsreceipt_postedByIdTouser  user?               @relation("goodsreceipt_postedByIdTouser", fields: [postedById], references: [id], onDelete: Restrict, map: "GoodsReceipt_postedById_fkey")
+  supplier                            supplier            @relation(fields: [supplierId], references: [id], map: "GoodsReceipt_supplierId_fkey")
+  goodsreceiptitem                    goodsreceiptitem[]
+
+  @@unique([supplierId, supplierInvoiceNo], map: "GoodsReceipt_supplierId_supplierInvoiceNo_key")
+  @@index([createdById], map: "GoodsReceipt_createdById_fkey")
+  @@index([postedById], map: "GoodsReceipt_postedById_fkey")
+  @@index([receivedAt], map: "GoodsReceipt_receivedAt_idx")
+  @@index([status], map: "GoodsReceipt_status_idx")
+  @@index([supplierId], map: "GoodsReceipt_supplierId_idx")
+}
+
+model goodsreceiptitem {
+  id                 String              @id @db.Char(36)
+  goodsReceiptId     String              @db.Char(36)
+  ingredientId       String              @db.Char(36)
+  orderedPackageQty  Decimal?            @db.Decimal(12, 3)
+  receivedPackageQty Decimal             @db.Decimal(12, 3)
+  acceptedBaseQty    Decimal             @db.Decimal(12, 3)
+  rejectedBaseQty    Decimal             @default(0.000) @db.Decimal(12, 3)
+  pricePerPackage    Decimal             @db.Decimal(14, 2)
+  totalPrice         Decimal             @db.Decimal(14, 2)
+  unitCostBase       Decimal             @db.Decimal(14, 6)
+  lotNumber          String?
+  expiryDate         DateTime?
+  notes              String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime
+  goodsreceipt       goodsreceipt        @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade, map: "GoodsReceiptItem_goodsReceiptId_fkey")
+  ingredient         ingredient          @relation(fields: [ingredientId], references: [id], map: "GoodsReceiptItem_ingredientId_fkey")
+  ingredientstocklot ingredientstocklot?
+
+  @@index([expiryDate], map: "GoodsReceiptItem_expiryDate_idx")
+  @@index([goodsReceiptId], map: "GoodsReceiptItem_goodsReceiptId_idx")
+  @@index([ingredientId], map: "GoodsReceiptItem_ingredientId_idx")
+}
+
+model ingredient {
+  id                      String                    @id @db.Char(36)
+  name                    String
+  brand                   String?
+  packageQty              Decimal                   @db.Decimal(12, 3)
+  packageUnit             ingredient_packageUnit
+  baseQty                 Decimal                   @db.Decimal(12, 3)
+  baseUnit                ingredient_baseUnit
+  lowStockAlertQty        Decimal?                  @db.Decimal(12, 3)
+  isActive                Boolean                   @default(true)
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime
+  goodsreceiptitem        goodsreceiptitem[]
+  ingredientstocklot      ingredientstocklot[]
+  productionconsumption   productionconsumption[]
+  productrecipeitem       productrecipeitem[]
+  purchasecarteritem      purchasecarteritem[]
+  saleitemfifoconsumption saleitemfifoconsumption[]
+  stockmovement           stockmovement[]
+
+  @@index([brand], map: "Ingredient_brand_idx")
+  @@index([isActive], map: "Ingredient_isActive_idx")
+  @@index([name], map: "Ingredient_name_idx")
+}
+
+model ingredientstocklot {
+  id                      String                      @id @db.Char(36)
+  carterItemId            String?                     @db.Char(36)
+  ingredientId            String                      @db.Char(36)
+  receivedBaseQty         Decimal                     @db.Decimal(12, 3)
+  remainingBaseQty        Decimal                     @db.Decimal(12, 3)
+  baseUnit                ingredientstocklot_baseUnit
+  unitCostBase            Decimal                     @db.Decimal(14, 6)
+  receivedAt              DateTime                    @default(now())
+  expiryDate              DateTime?
+  goodsReceiptItemId      String?                     @unique(map: "IngredientStockLot_goodsReceiptItemId_key") @db.Char(36)
+  lotNumber               String?
+  purchasecarteritem      purchasecarteritem?         @relation(fields: [carterItemId], references: [id], onDelete: Cascade, map: "IngredientStockLot_carterItemId_fkey")
+  goodsreceiptitem        goodsreceiptitem?           @relation(fields: [goodsReceiptItemId], references: [id], onDelete: Restrict, map: "IngredientStockLot_goodsReceiptItemId_fkey")
+  ingredient              ingredient                  @relation(fields: [ingredientId], references: [id], map: "IngredientStockLot_ingredientId_fkey")
+  productionconsumption   productionconsumption[]
+  saleitemfifoconsumption saleitemfifoconsumption[]
+  stockmovement           stockmovement[]
+
+  @@index([carterItemId], map: "IngredientStockLot_carterItemId_fkey")
+  @@index([expiryDate], map: "IngredientStockLot_expiryDate_idx")
+  @@index([ingredientId, remainingBaseQty], map: "IngredientStockLot_ingredientId_remainingBaseQty_idx")
+  @@index([lotNumber], map: "IngredientStockLot_lotNumber_idx")
+  @@index([receivedAt], map: "IngredientStockLot_receivedAt_idx")
+}
+
+model product {
+  id                           String                         @id @db.Char(36)
+  name                         String
+  variantName                  String?
+  sellPrice                    Decimal                        @db.Decimal(14, 2)
+  isActive                     Boolean                        @default(true)
+  createdAt                    DateTime                       @default(now())
+  updatedAt                    DateTime
+  finishedStockAlertQty        Decimal?                       @db.Decimal(12, 3)
+  finishedgoodslot             finishedgoodslot[]
+  finishedgoodsmovement        finishedgoodsmovement[]
+  productionbatch              productionbatch[]
+  productrecipeitem            productrecipeitem[]
+  salefinishedgoodsconsumption salefinishedgoodsconsumption[]
+  saleitem                     saleitem[]
+
+  @@index([isActive], map: "Product_isActive_idx")
+  @@index([name], map: "Product_name_idx")
+}
+
+model productionbatch {
+  id                                     String                  @id @db.Char(36)
+  batchNo                                String                  @unique(map: "ProductionBatch_batchNo_key")
+  productId                              String                  @db.Char(36)
+  plannedQty                             Decimal                 @db.Decimal(12, 3)
+  producedQty                            Decimal                 @default(0.000) @db.Decimal(12, 3)
+  rejectedQty                            Decimal                 @default(0.000) @db.Decimal(12, 3)
+  status                                 productionbatch_status  @default(DRAFT)
+  productionDate                         DateTime                @default(now())
+  expiryDate                             DateTime?
+  ingredientCostTotal                    Decimal                 @default(0.00) @db.Decimal(14, 2)
+  unitCost                               Decimal                 @default(0.000000) @db.Decimal(14, 6)
+  notes                                  String?
+  createdById                            String                  @db.Char(36)
+  postedById                             String?                 @db.Char(36)
+  postedAt                               DateTime?
+  createdAt                              DateTime                @default(now())
+  updatedAt                              DateTime
+  finishedgoodslot                       finishedgoodslot?
+  user_productionbatch_createdByIdTouser user                    @relation("productionbatch_createdByIdTouser", fields: [createdById], references: [id], map: "ProductionBatch_createdById_fkey")
+  user_productionbatch_postedByIdTouser  user?                   @relation("productionbatch_postedByIdTouser", fields: [postedById], references: [id], onDelete: Restrict, map: "ProductionBatch_postedById_fkey")
+  product                                product                 @relation(fields: [productId], references: [id], map: "ProductionBatch_productId_fkey")
+  productionconsumption                  productionconsumption[]
+
+  @@index([createdById], map: "ProductionBatch_createdById_fkey")
+  @@index([postedById], map: "ProductionBatch_postedById_fkey")
+  @@index([productId], map: "ProductionBatch_productId_idx")
+  @@index([productionDate], map: "ProductionBatch_productionDate_idx")
+  @@index([status], map: "ProductionBatch_status_idx")
+}
+
+model productionconsumption {
+  id                 String             @id @db.Char(36)
+  productionBatchId  String             @db.Char(36)
+  ingredientId       String             @db.Char(36)
+  stockLotId         String             @db.Char(36)
+  consumedBaseQty    Decimal            @db.Decimal(12, 3)
+  unitCostBase       Decimal            @db.Decimal(14, 6)
+  costAmount         Decimal            @db.Decimal(14, 2)
+  createdAt          DateTime           @default(now())
+  ingredient         ingredient         @relation(fields: [ingredientId], references: [id], map: "ProductionConsumption_ingredientId_fkey")
+  productionbatch    productionbatch    @relation(fields: [productionBatchId], references: [id], onDelete: Cascade, map: "ProductionConsumption_productionBatchId_fkey")
+  ingredientstocklot ingredientstocklot @relation(fields: [stockLotId], references: [id], map: "ProductionConsumption_stockLotId_fkey")
+
+  @@index([ingredientId], map: "ProductionConsumption_ingredientId_idx")
+  @@index([productionBatchId], map: "ProductionConsumption_productionBatchId_idx")
+  @@index([stockLotId], map: "ProductionConsumption_stockLotId_idx")
+}
+
+model productrecipeitem {
+  id              String                     @id @db.Char(36)
+  productId       String                     @db.Char(36)
+  ingredientId    String                     @db.Char(36)
+  requiredBaseQty Decimal                    @db.Decimal(12, 3)
+  baseUnit        productrecipeitem_baseUnit
+  createdAt       DateTime                   @default(now())
+  ingredient      ingredient                 @relation(fields: [ingredientId], references: [id], map: "ProductRecipeItem_ingredientId_fkey")
+  product         product                    @relation(fields: [productId], references: [id], onDelete: Cascade, map: "ProductRecipeItem_productId_fkey")
+
+  @@unique([productId, ingredientId], map: "ProductRecipeItem_productId_ingredientId_key")
+  @@index([ingredientId], map: "ProductRecipeItem_ingredientId_idx")
+  @@index([productId], map: "ProductRecipeItem_productId_idx")
+}
+
+model purchasecarter {
+  id                 String               @id @db.Char(36)
+  carterNo           String               @unique(map: "PurchaseCarter_carterNo_key")
+  purchasedAt        DateTime
+  supplierName       String?
+  notes              String?
+  createdById        String?              @db.Char(36)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime
+  user               user?                @relation(fields: [createdById], references: [id], map: "PurchaseCarter_createdById_fkey")
+  purchasecarteritem purchasecarteritem[]
+
+  @@index([createdById], map: "PurchaseCarter_createdById_fkey")
+}
+
+model purchasecarteritem {
+  id                 String               @id @db.Char(36)
+  carterId           String               @db.Char(36)
+  ingredientId       String               @db.Char(36)
+  loadedQty          Decimal              @db.Decimal(12, 3)
+  pricePerPackage    Decimal              @db.Decimal(12, 2)
+  totalBaseQty       Decimal              @db.Decimal(12, 3)
+  totalPrice         Decimal              @db.Decimal(12, 2)
+  unitCostBase       Decimal              @db.Decimal(12, 6)
+  createdAt          DateTime             @default(now())
+  ingredientstocklot ingredientstocklot[]
+  purchasecarter     purchasecarter       @relation(fields: [carterId], references: [id], onDelete: Cascade, map: "PurchaseCarterItem_carterId_fkey")
+  ingredient         ingredient           @relation(fields: [ingredientId], references: [id], map: "PurchaseCarterItem_ingredientId_fkey")
+
+  @@index([carterId], map: "PurchaseCarterItem_carterId_idx")
+  @@index([ingredientId], map: "PurchaseCarterItem_ingredientId_idx")
+}
+
+model role {
+  id          String     @id @db.Char(36)
+  name        String     @unique(map: "Role_name_key")
+  description String?
+  createdAt   DateTime   @default(now())
+  userrole    userrole[]
+}
+
+model salefinishedgoodsconsumption {
+  id                 String           @id @db.Char(36)
+  saleItemId         String           @db.Char(36)
+  finishedGoodsLotId String           @db.Char(36)
+  productId          String           @db.Char(36)
+  consumedQty        Decimal          @db.Decimal(12, 3)
+  unitCost           Decimal          @db.Decimal(14, 6)
+  costAmount         Decimal          @db.Decimal(14, 2)
+  createdAt          DateTime         @default(now())
+  finishedgoodslot   finishedgoodslot @relation(fields: [finishedGoodsLotId], references: [id], map: "SaleFinishedGoodsConsumption_finishedGoodsLotId_fkey")
+  product            product          @relation(fields: [productId], references: [id], map: "SaleFinishedGoodsConsumption_productId_fkey")
+  saleitem           saleitem         @relation(fields: [saleItemId], references: [id], onDelete: Cascade, map: "SaleFinishedGoodsConsumption_saleItemId_fkey")
+
+  @@index([finishedGoodsLotId], map: "SaleFinishedGoodsConsumption_finishedGoodsLotId_idx")
+  @@index([productId], map: "SaleFinishedGoodsConsumption_productId_idx")
+  @@index([saleItemId], map: "SaleFinishedGoodsConsumption_saleItemId_idx")
+}
+
+model saleitem {
+  id                           String                         @id @db.Char(36)
+  salesOrderId                 String                         @db.Char(36)
+  productId                    String                         @db.Char(36)
+  qty                          Decimal                        @db.Decimal(12, 3)
+  unitSellPrice                Decimal                        @db.Decimal(14, 2)
+  lineTotal                    Decimal                        @db.Decimal(14, 2)
+  cogsTotal                    Decimal                        @default(0.00) @db.Decimal(14, 2)
+  profitTotal                  Decimal                        @default(0.00) @db.Decimal(14, 2)
+  createdAt                    DateTime                       @default(now())
+  discountTotal                Decimal                        @default(0.00) @db.Decimal(14, 2)
+  netTotal                     Decimal                        @default(0.00) @db.Decimal(14, 2)
+  salefinishedgoodsconsumption salefinishedgoodsconsumption[]
+  product                      product                        @relation(fields: [productId], references: [id], map: "SaleItem_productId_fkey")
+  salesorder                   salesorder                     @relation(fields: [salesOrderId], references: [id], onDelete: Cascade, map: "SaleItem_salesOrderId_fkey")
+  saleitemfifoconsumption      saleitemfifoconsumption[]
+
+  @@index([productId], map: "SaleItem_productId_idx")
+  @@index([salesOrderId], map: "SaleItem_salesOrderId_idx")
+}
+
+model saleitemfifoconsumption {
+  id                 String             @id @db.Char(36)
+  saleItemId         String             @db.Char(36)
+  stockLotId         String             @db.Char(36)
+  ingredientId       String             @db.Char(36)
+  consumedBaseQty    Decimal            @db.Decimal(12, 3)
+  unitCostBase       Decimal            @db.Decimal(14, 6)
+  costAmount         Decimal            @db.Decimal(14, 2)
+  createdAt          DateTime           @default(now())
+  ingredient         ingredient         @relation(fields: [ingredientId], references: [id], map: "SaleItemFifoConsumption_ingredientId_fkey")
+  saleitem           saleitem           @relation(fields: [saleItemId], references: [id], onDelete: Cascade, map: "SaleItemFifoConsumption_saleItemId_fkey")
+  ingredientstocklot ingredientstocklot @relation(fields: [stockLotId], references: [id], map: "SaleItemFifoConsumption_stockLotId_fkey")
+
+  @@index([ingredientId], map: "SaleItemFifoConsumption_ingredientId_idx")
+  @@index([saleItemId], map: "SaleItemFifoConsumption_saleItemId_idx")
+  @@index([stockLotId], map: "SaleItemFifoConsumption_stockLotId_idx")
+}
+
+model saleschannel {
+  id         String       @id @db.Char(36)
+  name       String       @unique(map: "SalesChannel_name_key")
+  isActive   Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+  salesorder salesorder[]
+}
+
+model salesorder {
+  id             String                   @id @db.Char(36)
+  orderNo        String                   @unique(map: "SalesOrder_orderNo_key")
+  salesChannelId String?                  @db.Char(36)
+  saleType       salesorder_saleType      @default(POS)
+  paymentMethod  salesorder_paymentMethod @default(CASH)
+  grossTotal     Decimal                  @default(0.00) @db.Decimal(14, 2)
+  discountTotal  Decimal                  @default(0.00) @db.Decimal(14, 2)
+  netTotal       Decimal                  @default(0.00) @db.Decimal(14, 2)
+  cogsTotal      Decimal                  @default(0.00) @db.Decimal(14, 2)
+  profitTotal    Decimal                  @default(0.00) @db.Decimal(14, 2)
+  status         salesorder_status        @default(COMPLETED)
+  createdById    String?                  @db.Char(36)
+  soldAt         DateTime                 @default(now())
+  createdAt      DateTime                 @default(now())
+  saleitem       saleitem[]
+  user           user?                    @relation(fields: [createdById], references: [id], map: "SalesOrder_createdById_fkey")
+  saleschannel   saleschannel?            @relation(fields: [salesChannelId], references: [id], map: "SalesOrder_salesChannelId_fkey")
+
+  @@index([createdById], map: "SalesOrder_createdById_fkey")
+  @@index([salesChannelId], map: "SalesOrder_salesChannelId_fkey")
+  @@index([soldAt], map: "SalesOrder_soldAt_idx")
+  @@index([status], map: "SalesOrder_status_idx")
+}
+
+model stockmovement {
+  id                 String                     @id @db.Char(36)
+  ingredientId       String                     @db.Char(36)
+  stockLotId         String?                    @db.Char(36)
+  movementType       stockmovement_movementType
+  refType            String?
+  refId              String?
+  qtyDelta           Decimal                    @db.Decimal(12, 3)
+  unitCostBase       Decimal?                   @db.Decimal(14, 6)
+  costAmount         Decimal?                   @db.Decimal(14, 2)
+  note               String?
+  occurredAt         DateTime                   @default(now())
+  ingredient         ingredient                 @relation(fields: [ingredientId], references: [id], map: "StockMovement_ingredientId_fkey")
+  ingredientstocklot ingredientstocklot?        @relation(fields: [stockLotId], references: [id], onDelete: Restrict, map: "StockMovement_stockLotId_fkey")
+
+  @@index([ingredientId], map: "StockMovement_ingredientId_idx")
+  @@index([movementType], map: "StockMovement_movementType_idx")
+  @@index([occurredAt], map: "StockMovement_occurredAt_idx")
+  @@index([refType, refId], map: "StockMovement_refType_refId_idx")
+  @@index([stockLotId], map: "StockMovement_stockLotId_idx")
+}
+
+model supplier {
+  id               String         @id @db.Char(36)
+  code             String         @unique(map: "Supplier_code_key")
+  name             String
+  phone            String?
+  email            String?
+  address          String?
+  taxId            String?
+  paymentTermsDays Int            @default(0)
+  creditLimit      Decimal?       @db.Decimal(14, 2)
+  notes            String?
+  isActive         Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime
+  goodsreceipt     goodsreceipt[]
+
+  @@index([isActive], map: "Supplier_isActive_idx")
+  @@index([name], map: "Supplier_name_idx")
+}
+
+model user {
+  id                                                String            @id @db.Char(36)
+  firstName                                         String
+  lastName                                          String
+  email                                             String            @unique(map: "User_email_key")
+  passwordHash                                      String
+  isActive                                          Boolean           @default(true)
+  createdAt                                         DateTime          @default(now())
+  updatedAt                                         DateTime
+  auditlog                                          auditlog[]
+  goodsreceipt_goodsreceipt_createdByIdTouser       goodsreceipt[]    @relation("goodsreceipt_createdByIdTouser")
+  goodsreceipt_goodsreceipt_postedByIdTouser        goodsreceipt[]    @relation("goodsreceipt_postedByIdTouser")
+  productionbatch_productionbatch_createdByIdTouser productionbatch[] @relation("productionbatch_createdByIdTouser")
+  productionbatch_productionbatch_postedByIdTouser  productionbatch[] @relation("productionbatch_postedByIdTouser")
+  purchasecarter                                    purchasecarter[]
+  salesorder                                        salesorder[]
+  userrole                                          userrole[]
+}
+
+model userrole {
+  userId String @db.Char(36)
+  roleId String @db.Char(36)
+  role   role   @relation(fields: [roleId], references: [id], onDelete: Cascade, map: "UserRole_roleId_fkey")
+  user   user   @relation(fields: [userId], references: [id], onDelete: Cascade, map: "UserRole_userId_fkey")
+
+  @@id([userId, roleId])
+  @@index([roleId], map: "UserRole_roleId_fkey")
+}
+
+enum backuphistory_target {
+  LOCAL
+  GOOGLE_DRIVE
+}
+
+enum backupsetting_frequency {
+  MANUAL
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum backuphistory_status {
+  SUCCESS
+  FAILED
+  RUNNING
+}
+
+enum finishedgoodsmovement_movementType {
+  PRODUCTION
+  SALE
+  WASTE
+  ADJUSTMENT
+  RETURN
+}
+
+enum salesorder_saleType {
+  POS
+  MANUAL
+}
+
+enum stockmovement_movementType {
+  PURCHASE
+  PRODUCTION
+  SALE
+  WASTE
+  ADJUSTMENT
+  RETURN
+}
+
+enum ingredient_packageUnit {
+  G
+  KG
+  ML
+  L
+  UNIT
+}
+
+enum productrecipeitem_baseUnit {
+  G
+  ML
+  UNIT
+}
+
+enum salesorder_paymentMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+  ONLINE
+  OTHER
+}
+
+enum ingredientstocklot_baseUnit {
+  G
+  ML
+  UNIT
+}
+
+enum goodsreceipt_status {
+  DRAFT
+  POSTED
+  VOID
+}
+
+enum ingredient_baseUnit {
+  G
+  ML
+  UNIT
+}
+
+enum productionbatch_status {
+  DRAFT
+  POSTED
+  VOID
+}
+
+enum salesorder_status {
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+

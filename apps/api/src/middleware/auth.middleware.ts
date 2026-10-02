@@ -1,4 +1,8 @@
-import { Request, Response, NextFunction } from "express";
+import type {
+  NextFunction,
+  Request,
+  Response
+} from "express";
 import jwt from "jsonwebtoken";
 
 export type AuthUser = {
@@ -15,20 +19,88 @@ declare global {
   }
 }
 
-export function authMiddleware(req: Request, res: Response, next: NextFunction) {
-  const authHeader = req.headers.authorization;
+function getJwtSecret() {
+  const secret =
+    process.env.JWT_SECRET?.trim();
 
-  if (!authHeader?.startsWith("Bearer ")) {
-    return res.status(401).json({ message: "Unauthorized" });
+  if (!secret) {
+    throw new Error(
+      "JWT_SECRET is not configured"
+    );
   }
 
-  const token = authHeader.split(" ")[1];
+  return secret;
+}
+
+export function authMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  const authHeader =
+    req.headers.authorization;
+
+  if (
+    !authHeader?.startsWith("Bearer ")
+  ) {
+    return res.status(401).json({
+      message:
+        "Authentication required"
+    });
+  }
+
+  const token =
+    authHeader.slice(
+      "Bearer ".length
+    );
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "fallback_secret") as AuthUser;
+    const decoded = jwt.verify(
+      token,
+      getJwtSecret()
+    ) as AuthUser;
+
     req.user = decoded;
-    next();
+
+    return next();
   } catch {
-    return res.status(401).json({ message: "Invalid or expired token" });
+    return res.status(401).json({
+      message:
+        "Your session has expired. Please sign in again."
+    });
   }
+}
+
+export function requireRoles(
+  ...allowedRoles: string[]
+) {
+  return (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    if (!req.user) {
+      return res.status(401).json({
+        message:
+          "Authentication required"
+      });
+    }
+
+    const allowed =
+      req.user.roles.some(
+        (role) =>
+          allowedRoles.includes(
+            role
+          )
+      );
+
+    if (!allowed) {
+      return res.status(403).json({
+        message:
+          "You do not have permission to perform this action."
+      });
+    }
+
+    return next();
+  };
 }

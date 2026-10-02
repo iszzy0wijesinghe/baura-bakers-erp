@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { prisma } from "../../lib/prisma";
 import { authMiddleware } from "../../middleware/auth.middleware";
+import { env } from "../../config/env";
 
 const router = Router();
 
@@ -51,7 +52,7 @@ router.post("/login", async (req, res) => {
       email: user.email,
       roles
     },
-    process.env.JWT_SECRET || "fallback_secret",
+    env.JWT_SECRET,
     {
       expiresIn: "8h"
     }

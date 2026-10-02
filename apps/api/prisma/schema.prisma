@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -23,10 +23,31 @@ enum BaseUnit {
 
 enum StockMovementType {
   PURCHASE
+  PRODUCTION
   SALE
   WASTE
   ADJUSTMENT
   RETURN
+}
+
+enum FinishedGoodsMovementType {
+  PRODUCTION
+  SALE
+  WASTE
+  ADJUSTMENT
+  RETURN
+}
+
+enum GoodsReceiptStatus {
+  DRAFT
+  POSTED
+  VOID
+}
+
+enum ProductionStatus {
+  DRAFT
+  POSTED
+  VOID
 }
 
 enum SaleType {
@@ -67,7 +88,7 @@ enum BackupStatus {
 }
 
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
+  id           String   @id @default(uuid()) @db.Char(36)
   firstName    String
   lastName     String
   email        String   @unique
@@ -76,13 +97,18 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  roles           UserRole[]
-  purchaseCarters PurchaseCarter[] @relation("CarterCreatedBy")
-  salesOrders     SalesOrder[]     @relation("SaleCreatedBy")
+  roles                    UserRole[]
+  purchaseCarters          PurchaseCarter[]  @relation("CarterCreatedBy")
+  salesOrders              SalesOrder[]      @relation("SaleCreatedBy")
+  goodsReceiptsCreated     GoodsReceipt[]    @relation("GoodsReceiptCreatedBy")
+  goodsReceiptsPosted      GoodsReceipt[]    @relation("GoodsReceiptPostedBy")
+  productionBatchesCreated ProductionBatch[] @relation("ProductionCreatedBy")
+  productionBatchesPosted  ProductionBatch[] @relation("ProductionPostedBy")
+  auditLogs                AuditLog[]
 }
 
 model Role {
-  id          String   @id @default(uuid()) @db.Uuid
+  id          String   @id @default(uuid()) @db.Char(36)
   name        String   @unique
   description String?
   createdAt   DateTime @default(now())
@@ -91,8 +117,8 @@ model Role {
 }
 
 model UserRole {
-  userId String @db.Uuid
-  roleId String @db.Uuid
+  userId String @db.Char(36)
+  roleId String @db.Char(36)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
@@ -100,10 +126,32 @@ model UserRole {
   @@id([userId, roleId])
 }
 
+model Supplier {
+  id               String   @id @default(uuid()) @db.Char(36)
+  code             String   @unique
+  name             String
+  phone            String?
+  email            String?
+  address          String?
+  taxId            String?
+  paymentTermsDays Int      @default(0)
+  creditLimit      Decimal? @db.Decimal(14, 2)
+  notes            String?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  goodsReceipts GoodsReceipt[]
+
+  @@index([name])
+  @@index([isActive])
+}
+
 model Ingredient {
-  id               String      @id @default(uuid()) @db.Uuid
+  id               String      @id @default(uuid()) @db.Char(36)
   name             String
   brand            String?
+  imageUrl         String?     @db.VarChar(1000)
   packageQty       Decimal     @db.Decimal(12, 3)
   packageUnit      PackageUnit
   baseQty          Decimal     @db.Decimal(12, 3)
@@ -113,23 +161,31 @@ model Ingredient {
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
-  carterItems      PurchaseCarterItem[]
-  stockLots        IngredientStockLot[]
-  stockMovements   StockMovement[]
-  recipeItems      ProductRecipeItem[]
-  fifoConsumptions SaleItemFifoConsumption[]
+  carterItems            PurchaseCarterItem[]
+  goodsReceiptItems      GoodsReceiptItem[]
+  stockLots              IngredientStockLot[]
+  stockMovements         StockMovement[]
+  recipeItems            ProductRecipeItem[]
+  fifoConsumptions       SaleItemFifoConsumption[]
+  productionConsumptions ProductionConsumption[]
 
   @@index([name])
   @@index([brand])
+  @@index([isActive])
 }
 
+/**
+ * LEGACY CARTER TABLES
+ * These stay temporarily so old data is not destroyed.
+ * New purchases will eventually use GoodsReceipt / GRN.
+ */
 model PurchaseCarter {
-  id           String   @id @default(uuid()) @db.Uuid
+  id           String   @id @default(uuid()) @db.Char(36)
   carterNo     String   @unique
   purchasedAt  DateTime
   supplierName String?
   notes        String?
-  createdById  String?  @db.Uuid
+  createdById  String?  @db.Char(36)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -138,9 +194,9 @@ model PurchaseCarter {
 }
 
 model PurchaseCarterItem {
-  id              String   @id @default(uuid()) @db.Uuid
-  carterId        String   @db.Uuid
-  ingredientId    String   @db.Uuid
+  id              String   @id @default(uuid()) @db.Char(36)
+  carterId        String   @db.Char(36)
+  ingredientId    String   @db.Char(36)
   loadedQty       Decimal  @db.Decimal(12, 3)
   pricePerPackage Decimal  @db.Decimal(12, 2)
   totalBaseQty    Decimal  @db.Decimal(12, 3)
@@ -148,40 +204,108 @@ model PurchaseCarterItem {
   unitCostBase    Decimal  @db.Decimal(12, 6)
   createdAt       DateTime @default(now())
 
-  carter     PurchaseCarter @relation(fields: [carterId], references: [id], onDelete: Cascade)
-  ingredient Ingredient     @relation(fields: [ingredientId], references: [id])
-
-  stockLots IngredientStockLot[]
+  carter     PurchaseCarter       @relation(fields: [carterId], references: [id], onDelete: Cascade)
+  ingredient Ingredient           @relation(fields: [ingredientId], references: [id])
+  stockLots  IngredientStockLot[]
 
   @@index([carterId])
   @@index([ingredientId])
 }
 
+/**
+ * NEW GRN SYSTEM
+ * Draft GRNs do not change stock.
+ * Stock will only increase when a GRN is POSTED.
+ */
+model GoodsReceipt {
+  id                String             @id @default(uuid()) @db.Char(36)
+  grnNo             String             @unique
+  supplierId        String             @db.Char(36)
+  supplierInvoiceNo String?
+  invoiceDate       DateTime?
+  receivedAt        DateTime
+  status            GoodsReceiptStatus @default(DRAFT)
+  notes             String?
+  subtotal          Decimal            @default(0) @db.Decimal(14, 2)
+  createdById       String             @db.Char(36)
+  postedById        String?            @db.Char(36)
+  postedAt          DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  supplier  Supplier           @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  createdBy User               @relation("GoodsReceiptCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  postedBy  User?              @relation("GoodsReceiptPostedBy", fields: [postedById], references: [id], onDelete: Restrict)
+  items     GoodsReceiptItem[]
+
+  @@unique([supplierId, supplierInvoiceNo])
+  @@index([supplierId])
+  @@index([receivedAt])
+  @@index([status])
+}
+
+model GoodsReceiptItem {
+  id                 String    @id @default(uuid()) @db.Char(36)
+  goodsReceiptId     String    @db.Char(36)
+  ingredientId       String    @db.Char(36)
+  orderedPackageQty  Decimal?  @db.Decimal(12, 3)
+  receivedPackageQty Decimal   @db.Decimal(12, 3)
+  acceptedBaseQty    Decimal   @db.Decimal(12, 3)
+  rejectedBaseQty    Decimal   @default(0) @db.Decimal(12, 3)
+  pricePerPackage    Decimal   @db.Decimal(14, 2)
+  totalPrice         Decimal   @db.Decimal(14, 2)
+  unitCostBase       Decimal   @db.Decimal(14, 6)
+  lotNumber          String?
+  expiryDate         DateTime?
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  goodsReceipt GoodsReceipt        @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient          @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+  stockLot     IngredientStockLot?
+
+  @@index([goodsReceiptId])
+  @@index([ingredientId])
+  @@index([expiryDate])
+}
+
+/**
+ * RAW INGREDIENT STOCK
+ * A stock lot can come from:
+ * - legacy Carter
+ * - new GRN
+ */
 model IngredientStockLot {
-  id               String    @id @default(uuid()) @db.Uuid
-  carterItemId     String    @db.Uuid
-  ingredientId     String    @db.Uuid
-  receivedBaseQty  Decimal   @db.Decimal(12, 3)
-  remainingBaseQty Decimal   @db.Decimal(12, 3)
-  baseUnit         BaseUnit
-  unitCostBase     Decimal   @db.Decimal(12, 6)
-  receivedAt       DateTime  @default(now())
-  expiryDate       DateTime?
+  id                 String    @id @default(uuid()) @db.Char(36)
+  carterItemId       String?   @db.Char(36)
+  goodsReceiptItemId String?   @unique @db.Char(36)
+  ingredientId       String    @db.Char(36)
+  receivedBaseQty    Decimal   @db.Decimal(12, 3)
+  remainingBaseQty   Decimal   @db.Decimal(12, 3)
+  baseUnit           BaseUnit
+  unitCostBase       Decimal   @db.Decimal(12, 6)
+  receivedAt         DateTime  @default(now())
+  lotNumber          String?
+  expiryDate         DateTime?
 
-  carterItem PurchaseCarterItem @relation(fields: [carterItemId], references: [id], onDelete: Cascade)
-  ingredient Ingredient         @relation(fields: [ingredientId], references: [id])
-
-  stockMovements   StockMovement[]
-  fifoConsumptions SaleItemFifoConsumption[]
+  carterItem             PurchaseCarterItem?       @relation(fields: [carterItemId], references: [id], onDelete: Cascade)
+  goodsReceiptItem       GoodsReceiptItem?         @relation(fields: [goodsReceiptItemId], references: [id], onDelete: Restrict)
+  ingredient             Ingredient                @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+  stockMovements         StockMovement[]
+  fifoConsumptions       SaleItemFifoConsumption[]
+  productionConsumptions ProductionConsumption[]
 
   @@index([ingredientId, remainingBaseQty])
   @@index([receivedAt])
+  @@index([expiryDate])
+  @@index([lotNumber])
 }
 
 model StockMovement {
-  id           String            @id @default(uuid()) @db.Uuid
-  ingredientId String            @db.Uuid
-  stockLotId   String?           @db.Uuid
+  id           String            @id @default(uuid()) @db.Char(36)
+  ingredientId String            @db.Char(36)
+  stockLotId   String?           @db.Char(36)
   movementType StockMovementType
   refType      String?
   refId        String?
@@ -194,44 +318,168 @@ model StockMovement {
   ingredient Ingredient          @relation(fields: [ingredientId], references: [id])
   stockLot   IngredientStockLot? @relation(fields: [stockLotId], references: [id])
 
+  /**
+   * Do NOT add @@index([stockLotId]) here.
+   * MySQL already created the FK-supporting index and Prisma was
+   * attempting to rename/redefine it, which caused:
+   * Can't DROP INDEX StockMovement_stockLotId_fkey
+   */
   @@index([ingredientId])
   @@index([movementType])
   @@index([occurredAt])
+  @@index([refType, refId])
 }
 
 model Product {
-  id          String   @id @default(uuid()) @db.Uuid
-  name        String
-  variantName String?
-  sellPrice   Decimal  @db.Decimal(12, 2)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                    String   @id @default(uuid()) @db.Char(36)
+  name                  String
+  variantName           String?
+  imageUrl              String?  @db.VarChar(1000)
+  sellPrice             Decimal  @db.Decimal(12, 2)
+  finishedStockAlertQty Decimal? @db.Decimal(12, 3)
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  recipeItems ProductRecipeItem[]
-  saleItems   SaleItem[]
+  recipeItems                   ProductRecipeItem[]
+  saleItems                     SaleItem[]
+  productionBatches             ProductionBatch[]
+  finishedGoodsLots             FinishedGoodsLot[]
+  finishedGoodsMovements        FinishedGoodsMovement[]
+  saleFinishedGoodsConsumptions SaleFinishedGoodsConsumption[]
 
   @@index([name])
+  @@index([isActive])
 }
 
 model ProductRecipeItem {
-  id              String   @id @default(uuid()) @db.Uuid
-  productId       String   @db.Uuid
-  ingredientId    String   @db.Uuid
+  id              String   @id @default(uuid()) @db.Char(36)
+  productId       String   @db.Char(36)
+  ingredientId    String   @db.Char(36)
+  imageUrl        String?  @db.VarChar(1000)
   requiredBaseQty Decimal  @db.Decimal(12, 3)
   baseUnit        BaseUnit
   createdAt       DateTime @default(now())
 
   product    Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
-  ingredient Ingredient @relation(fields: [ingredientId], references: [id])
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
 
   @@unique([productId, ingredientId])
   @@index([productId])
   @@index([ingredientId])
 }
 
+/**
+ * PRODUCTION
+ * This is the new middle layer:
+ * Raw Ingredients
+ * ↓
+ * Production Batch
+ * ↓
+ * Bakery Stock
+ */
+model ProductionBatch {
+  id                  String           @id @default(uuid()) @db.Char(36)
+  batchNo             String           @unique
+  productId           String           @db.Char(36)
+  plannedQty          Decimal          @db.Decimal(12, 3)
+  producedQty         Decimal          @default(0) @db.Decimal(12, 3)
+  rejectedQty         Decimal          @default(0) @db.Decimal(12, 3)
+  status              ProductionStatus @default(DRAFT)
+  productionDate      DateTime         @default(now())
+  expiryDate          DateTime?
+  ingredientCostTotal Decimal          @default(0) @db.Decimal(14, 2)
+  unitCost            Decimal          @default(0) @db.Decimal(14, 6)
+  notes               String?
+  createdById         String           @db.Char(36)
+  postedById          String?          @db.Char(36)
+  postedAt            DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  product          Product                 @relation(fields: [productId], references: [id], onDelete: Restrict)
+  createdBy        User                    @relation("ProductionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  postedBy         User?                   @relation("ProductionPostedBy", fields: [postedById], references: [id], onDelete: Restrict)
+  consumptions     ProductionConsumption[]
+  finishedGoodsLot FinishedGoodsLot?
+
+  @@index([productId])
+  @@index([productionDate])
+  @@index([status])
+}
+
+/**
+ * Exact raw material lots consumed by a production batch.
+ */
+model ProductionConsumption {
+  id                String   @id @default(uuid()) @db.Char(36)
+  productionBatchId String   @db.Char(36)
+  ingredientId      String   @db.Char(36)
+  stockLotId        String   @db.Char(36)
+  consumedBaseQty   Decimal  @db.Decimal(12, 3)
+  unitCostBase      Decimal  @db.Decimal(14, 6)
+  costAmount        Decimal  @db.Decimal(14, 2)
+  createdAt         DateTime @default(now())
+
+  productionBatch ProductionBatch    @relation(fields: [productionBatchId], references: [id], onDelete: Cascade)
+  ingredient      Ingredient         @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+  stockLot        IngredientStockLot @relation(fields: [stockLotId], references: [id], onDelete: Restrict)
+
+  @@index([productionBatchId])
+  @@index([ingredientId])
+  @@index([stockLotId])
+}
+
+/**
+ * BAKERY STOCK / FINISHED GOODS
+ * This is what POS will sell.
+ */
+model FinishedGoodsLot {
+  id                String    @id @default(uuid()) @db.Char(36)
+  productionBatchId String    @unique @db.Char(36)
+  productId         String    @db.Char(36)
+  producedQty       Decimal   @db.Decimal(12, 3)
+  remainingQty      Decimal   @db.Decimal(12, 3)
+  unitCost          Decimal   @db.Decimal(14, 6)
+  producedAt        DateTime
+  expiryDate        DateTime?
+  createdAt         DateTime  @default(now())
+
+  productionBatch  ProductionBatch                @relation(fields: [productionBatchId], references: [id], onDelete: Restrict)
+  product          Product                        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  movements        FinishedGoodsMovement[]
+  saleConsumptions SaleFinishedGoodsConsumption[]
+
+  @@index([productId, remainingQty])
+  @@index([producedAt])
+  @@index([expiryDate])
+}
+
+model FinishedGoodsMovement {
+  id           String                    @id @default(uuid()) @db.Char(36)
+  productId    String                    @db.Char(36)
+  stockLotId   String?                   @db.Char(36)
+  movementType FinishedGoodsMovementType
+  refType      String?
+  refId        String?
+  qtyDelta     Decimal                   @db.Decimal(12, 3)
+  unitCost     Decimal?                  @db.Decimal(14, 6)
+  costAmount   Decimal?                  @db.Decimal(14, 2)
+  note         String?
+  occurredAt   DateTime                  @default(now())
+
+  product  Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  stockLot FinishedGoodsLot? @relation(fields: [stockLotId], references: [id], onDelete: Restrict)
+
+  @@index([productId])
+  @@index([stockLotId])
+  @@index([movementType])
+  @@index([occurredAt])
+  @@index([refType, refId])
+}
+
 model SalesChannel {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String   @id @default(uuid()) @db.Char(36)
   name      String   @unique
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -240,9 +488,9 @@ model SalesChannel {
 }
 
 model SalesOrder {
-  id             String        @id @default(uuid()) @db.Uuid
+  id             String        @id @default(uuid()) @db.Char(36)
   orderNo        String        @unique
-  salesChannelId String?       @db.Uuid
+  salesChannelId String?       @db.Char(36)
   saleType       SaleType      @default(POS)
   paymentMethod  PaymentMethod @default(CASH)
   grossTotal     Decimal       @default(0) @db.Decimal(12, 2)
@@ -251,7 +499,7 @@ model SalesOrder {
   cogsTotal      Decimal       @default(0) @db.Decimal(12, 2)
   profitTotal    Decimal       @default(0) @db.Decimal(12, 2)
   status         SaleStatus    @default(COMPLETED)
-  createdById    String?       @db.Uuid
+  createdById    String?       @db.Char(36)
   soldAt         DateTime      @default(now())
   createdAt      DateTime      @default(now())
 
@@ -264,30 +512,37 @@ model SalesOrder {
 }
 
 model SaleItem {
-  id            String   @id @default(uuid()) @db.Uuid
-  salesOrderId  String   @db.Uuid
-  productId     String   @db.Uuid
+  id            String   @id @default(uuid()) @db.Char(36)
+  salesOrderId  String   @db.Char(36)
+  productId     String   @db.Char(36)
   qty           Decimal  @db.Decimal(12, 3)
   unitSellPrice Decimal  @db.Decimal(12, 2)
   lineTotal     Decimal  @db.Decimal(12, 2)
+  discountTotal Decimal  @default(0) @db.Decimal(12, 2)
+  netTotal      Decimal  @default(0) @db.Decimal(12, 2)
   cogsTotal     Decimal  @default(0) @db.Decimal(12, 2)
   profitTotal   Decimal  @default(0) @db.Decimal(12, 2)
   createdAt     DateTime @default(now())
 
-  salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
-  product    Product    @relation(fields: [productId], references: [id])
-
-  fifoConsumptions SaleItemFifoConsumption[]
+  salesOrder                SalesOrder                     @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  product                   Product                        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  fifoConsumptions          SaleItemFifoConsumption[]
+  finishedGoodsConsumptions SaleFinishedGoodsConsumption[]
 
   @@index([salesOrderId])
   @@index([productId])
 }
 
+/**
+ * LEGACY POS -> RAW INGREDIENT CONSUMPTION
+ * Retained only for historical compatibility.
+ * Once Bakery Stock POS is fully live, new sales will stop writing here.
+ */
 model SaleItemFifoConsumption {
-  id              String   @id @default(uuid()) @db.Uuid
-  saleItemId      String   @db.Uuid
-  stockLotId      String   @db.Uuid
-  ingredientId    String   @db.Uuid
+  id              String   @id @default(uuid()) @db.Char(36)
+  saleItemId      String   @db.Char(36)
+  stockLotId      String   @db.Char(36)
+  ingredientId    String   @db.Char(36)
   consumedBaseQty Decimal  @db.Decimal(12, 3)
   unitCostBase    Decimal  @db.Decimal(12, 6)
   costAmount      Decimal  @db.Decimal(12, 2)
@@ -302,42 +557,93 @@ model SaleItemFifoConsumption {
   @@index([ingredientId])
 }
 
+/**
+ * NEW POS -> BAKERY STOCK CONSUMPTION
+ */
+model SaleFinishedGoodsConsumption {
+  id                 String   @id @default(uuid()) @db.Char(36)
+  saleItemId         String   @db.Char(36)
+  finishedGoodsLotId String   @db.Char(36)
+  productId          String   @db.Char(36)
+  consumedQty        Decimal  @db.Decimal(12, 3)
+  unitCost           Decimal  @db.Decimal(14, 6)
+  costAmount         Decimal  @db.Decimal(14, 2)
+  createdAt          DateTime @default(now())
+
+  saleItem         SaleItem         @relation(fields: [saleItemId], references: [id], onDelete: Cascade)
+  finishedGoodsLot FinishedGoodsLot @relation(fields: [finishedGoodsLotId], references: [id], onDelete: Restrict)
+  product          Product          @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([saleItemId])
+  @@index([finishedGoodsLotId])
+  @@index([productId])
+}
+
+/**
+ * Atomic number sequences.
+ * Replaces count() + 1.
+ */
+model DocumentSequence {
+  key       String   @id
+  prefix    String
+  nextValue Int      @default(1)
+  updatedAt DateTime @updatedAt
+}
+
+/**
+ * ERP audit trail.
+ */
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Char(36)
+  userId     String?  @db.Char(36)
+  action     String
+  entityType String
+  entityId   String?
+  beforeJson Json?
+  afterJson  Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+/**
+ * Keep IDs as default MySQL String/VARCHAR because these tables already
+ * exist in the current database with that representation.
+ */
 model BackupSetting {
-  id                    String          @id @default(uuid())
-  frequency             BackupFrequency @default(MANUAL)
-
-  localBackupEnabled    Boolean         @default(true)
-  localBackupPath       String          @default("./backups")
-
-  googleDriveEnabled    Boolean         @default(false)
-  googleAccountEmail    String?
-  googleDriveFolderId   String?
-
+  id                      String          @id @default(uuid())
+  frequency               BackupFrequency @default(MANUAL)
+  localBackupEnabled      Boolean         @default(true)
+  localBackupPath         String          @default("./backups")
+  googleDriveEnabled      Boolean         @default(false)
+  googleAccountEmail      String?
+  googleDriveFolderId     String?
   googleDriveRefreshToken String?
   googleDriveAccessToken  String?
   googleDriveTokenExpiry  DateTime?
   googleDriveConnectedAt  DateTime?
   googleOauthState        String?
-
-  lastBackupAt          DateTime?
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
+  lastBackupAt            DateTime?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
 }
 
 model BackupHistory {
-  id                  String       @id @default(uuid())
-  target              BackupTarget
-  status              BackupStatus @default(RUNNING)
-
-  fileName            String?
-  filePath            String?
-  googleDriveFileId   String?
-  googleAccountEmail  String?
-
-  sizeBytes           Int?
-  startedAt           DateTime     @default(now())
-  completedAt         DateTime?
-  errorMessage        String?
-
-  createdAt           DateTime     @default(now())
+  id                 String       @id @default(uuid())
+  target             BackupTarget
+  status             BackupStatus @default(RUNNING)
+  fileName           String?
+  filePath           String?
+  googleDriveFileId  String?
+  googleAccountEmail String?
+  sizeBytes          Int?
+  startedAt          DateTime     @default(now())
+  completedAt        DateTime?
+  errorMessage       String?
+  createdAt          DateTime     @default(now())
 }

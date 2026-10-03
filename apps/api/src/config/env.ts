@@ -51,9 +51,22 @@ const envSchema = z.object({
 
   FRONTEND_URL: z
     .string()
-    .url()
+    .min(1)
     .default(
       "http://localhost:5173",
+    ),
+
+  OFFICIAL_SITE_API_URL: z
+    .string()
+    .url(
+      "OFFICIAL_SITE_API_URL must be a valid URL",
+    ),
+
+  ERP_INTEGRATION_TOKEN: z
+    .string()
+    .min(
+      32,
+      "ERP_INTEGRATION_TOKEN must contain at least 32 characters",
     ),
 
   LOGIN_RATE_LIMIT_WINDOW_MINUTES:

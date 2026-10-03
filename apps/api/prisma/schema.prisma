@@ -103,14 +103,15 @@ enum PosApprovalStatus {
 }
 
 model User {
-  id           String   @id @default(uuid()) @db.Char(36)
-  firstName    String
-  lastName     String
-  email        String   @unique
-  passwordHash String
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                 String   @id @default(uuid()) @db.Char(36)
+  officialSiteUserId Int?     @unique
+  firstName          String
+  lastName           String
+  email              String   @unique
+  passwordHash       String?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   roles                    UserRole[]
   purchaseCarters          PurchaseCarter[]  @relation("CarterCreatedBy")
@@ -123,6 +124,8 @@ model User {
 
   posApprovalsRequested PosApproval[] @relation("PosApprovalRequestedBy")
   posApprovalsApproved  PosApproval[] @relation("PosApprovalApprovedBy")
+
+  @@index([isActive])
 }
 
 model Role {

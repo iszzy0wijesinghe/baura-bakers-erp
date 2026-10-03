@@ -1,11 +1,21 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../lib/prisma";
-import { authMiddleware } from "../../middleware/auth.middleware";
+import {
+  authMiddleware,
+  requireRoles
+} from "../../middleware/auth.middleware";
 
 const router = Router();
 
 router.use(authMiddleware);
+
+router.use(
+  requireRoles(
+    "ADMIN",
+    "MANAGER"
+  )
+);
 
 const createCarterSchema = z.object({
   purchasedAt: z.string().min(1, "Purchased date is required"),

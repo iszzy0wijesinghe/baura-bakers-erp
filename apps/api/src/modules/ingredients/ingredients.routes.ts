@@ -11,7 +11,8 @@ import {
   prisma
 } from "../../lib/prisma";
 import {
-  authMiddleware
+  authMiddleware,
+  requireRoles
 } from "../../middleware/auth.middleware";
 
 const router =
@@ -143,6 +144,13 @@ function getDisplayName(
 
 router.use(
   authMiddleware
+);
+
+router.use(
+  requireRoles(
+    "ADMIN",
+    "MANAGER"
+  )
 );
 
 router.get(

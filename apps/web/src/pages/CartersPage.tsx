@@ -24,6 +24,7 @@ type Ingredient = {
   baseQty: string;
   baseUnit: BaseUnit;
   isActive: boolean;
+  imageUrl?: string | null;
 };
 
 type InventoryItem = {
@@ -39,6 +40,7 @@ type InventoryItem = {
   stockLotCount: number;
   oldestLotDate: string | null;
   latestLotDate: string | null;
+  imageUrl?: string | null;
 };
 
 type InventoryStats = {
@@ -51,17 +53,21 @@ type InventoryStats = {
 
 type CarterItem = {
   id: string;
+  ingredientId?: string;
   ingredientDisplayName?: string;
+  imageUrl?: string | null;
   loadedQty: string;
   pricePerPackage: string;
   totalBaseQty: string;
   totalPrice: string;
   unitCostBase: string;
   ingredient?: {
+    id?: string;
     brand: string | null;
     name: string;
     packageQty: string;
     packageUnit: string;
+    imageUrl?: string | null;
   };
 };
 
@@ -129,7 +135,12 @@ function getIngredientName(item: CarterItem) {
   if (!item.ingredient) return "Ingredient";
 
   const brand = item.ingredient.brand ? `${item.ingredient.brand} ` : "";
+
   return `${brand}${item.ingredient.name} ${item.ingredient.packageQty}${item.ingredient.packageUnit.toLowerCase()}`;
+}
+
+function getCarterItemIngredientId(item: CarterItem) {
+  return item.ingredientId || item.ingredient?.id || null;
 }
 
 export function CartersPage() {
@@ -168,7 +179,9 @@ export function CartersPage() {
         stats?: InventoryStats;
       }>("/inventory");
 
-      const apiInventory = Array.isArray(data.inventory) ? data.inventory : [];
+      const apiInventory = Array.isArray(data.inventory)
+        ? data.inventory
+        : [];
 
       setInventory(apiInventory);
 
@@ -196,6 +209,7 @@ export function CartersPage() {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to load inventory";
+
       toast.error("Failed to load live stock", message);
     } finally {
       setIsInventoryLoading(false);
@@ -208,6 +222,7 @@ export function CartersPage() {
 
     try {
       const data = await apiRequest<{ carters: Carter[] }>("/carters");
+
       setCarters(data.carters);
 
       const selectedId = selectedCarter?.id;
@@ -225,6 +240,7 @@ export function CartersPage() {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to load Carters";
+
       setError(message);
       toast.error("Failed to load Carters", message);
     } finally {
@@ -244,6 +260,7 @@ export function CartersPage() {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to load ingredients";
+
       toast.error("Failed to load ingredients", message);
     }
   }
@@ -253,11 +270,15 @@ export function CartersPage() {
     setError("");
 
     try {
-      const data = await apiRequest<{ carter: Carter }>(`/carters/${carterId}`);
+      const data = await apiRequest<{ carter: Carter }>(
+        `/carters/${carterId}`,
+      );
+
       setSelectedCarter(data.carter);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to load Carter details";
+
       setError(message);
       toast.error("Failed to load Carter", message);
     } finally {
@@ -266,7 +287,11 @@ export function CartersPage() {
   }
 
   async function refreshPage(showToast = false) {
-    await Promise.all([loadCarters(), loadIngredients(), loadInventory()]);
+    await Promise.all([
+      loadCarters(),
+      loadIngredients(),
+      loadInventory(),
+    ]);
 
     if (showToast) {
       toast.success("Carter inventory refreshed");
@@ -276,6 +301,15 @@ export function CartersPage() {
   useEffect(() => {
     refreshPage();
   }, []);
+
+  const ingredientImageMap = useMemo(() => {
+    return new Map(
+      ingredients.map((ingredient) => [
+        ingredient.id,
+        ingredient.imageUrl || null,
+      ]),
+    );
+  }, [ingredients]);
 
   const filteredCarters = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -316,8 +350,6 @@ export function CartersPage() {
       });
   }, [inventory, activeIngredientIds]);
 
-
-  
   const filteredInventory = useMemo(() => {
     const keyword = stockSearch.trim().toLowerCase();
 
@@ -363,6 +395,7 @@ export function CartersPage() {
 
   async function handleCreateCarter(event: FormEvent) {
     event.preventDefault();
+
     setIsSavingCarter(true);
     setError("");
 
@@ -376,14 +409,20 @@ export function CartersPage() {
         }),
       });
 
-      toast.success("Carter created", `${data.carter.carterNo} was created.`);
-      closeCarterModal();
+      toast.success(
+        "Carter created",
+        `${data.carter.carterNo} was created.`,
+      );
+
+      setIsCarterModalOpen(false);
+      setCarterForm(initialCarterForm);
 
       await loadCarters();
       await loadCarterDetail(data.carter.id);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to create Carter";
+
       setError(message);
       toast.error("Create failed", message);
     } finally {
@@ -409,14 +448,21 @@ export function CartersPage() {
         }),
       });
 
-      toast.success("Stock added", "Ingredient stock lot was created.");
-      closeItemModal();
+      toast.success(
+        "Stock added",
+        "Ingredient stock lot was created.",
+      );
+
+      setIsItemModalOpen(false);
+      setItemForm(initialItemForm);
 
       await loadCarterDetail(selectedCarter.id);
       await loadCarters();
       await loadInventory();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to add item";
+      const message =
+        err instanceof Error ? err.message : "Failed to add item";
+
       setError(message);
       toast.error("Add stock failed", message);
     } finally {
@@ -439,16 +485,28 @@ export function CartersPage() {
 
     const loadedQty = Number(itemForm.loadedQty);
     const pricePerPackage = Number(itemForm.pricePerPackage);
-    const totalBaseQty = Number(selectedIngredient.baseQty) * loadedQty;
-    const totalPrice = loadedQty * pricePerPackage;
-    const unitCost = totalBaseQty > 0 ? totalPrice / totalBaseQty : 0;
+
+    const totalBaseQty =
+      Number(selectedIngredient.baseQty) * loadedQty;
+
+    const totalPrice =
+      loadedQty * pricePerPackage;
+
+    const unitCost =
+      totalBaseQty > 0
+        ? totalPrice / totalBaseQty
+        : 0;
 
     return {
       totalBaseQty,
       totalPrice,
       unitCost,
     };
-  }, [selectedIngredient, itemForm.loadedQty, itemForm.pricePerPackage]);
+  }, [
+    selectedIngredient,
+    itemForm.loadedQty,
+    itemForm.pricePerPackage,
+  ]);
 
   return (
     <AppLayout
@@ -481,7 +539,10 @@ export function CartersPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-bauraGold">
               Live Stock On Hand
             </p>
-            <h3 className="mt-1 font-bold">Ingredient-wise Inventory</h3>
+
+            <h3 className="mt-1 font-bold">
+              Ingredient-wise Inventory
+            </h3>
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -490,14 +551,17 @@ export function CartersPage() {
                 label="Active"
                 value={String(inventoryStats.totalActiveIngredients)}
               />
+
               <LiveStockMiniStat
                 label="Out"
                 value={String(inventoryStats.outOfStockItems)}
               />
+
               <LiveStockMiniStat
                 label="Low"
                 value={String(inventoryStats.lowStockItems)}
               />
+
               <LiveStockMiniStat
                 label="Value"
                 value={formatCurrency(inventoryStats.totalStockValue)}
@@ -505,11 +569,17 @@ export function CartersPage() {
             </div>
 
             <div className="flex items-center gap-3 rounded-lg border border-bauraBorder bg-white px-4 py-3 sm:w-72">
-              <Search size={17} className="text-bauraMuted" />
+              <Search
+                size={17}
+                className="text-bauraMuted"
+              />
+
               <input
                 className="w-full bg-transparent text-sm outline-none"
                 value={stockSearch}
-                onChange={(event) => setStockSearch(event.target.value)}
+                onChange={(event) =>
+                  setStockSearch(event.target.value)
+                }
                 placeholder="Search live stock..."
               />
             </div>
@@ -528,7 +598,15 @@ export function CartersPage() {
           ) : (
             <div className="flex min-w-max gap-3">
               {filteredInventory.map((item) => (
-                <LiveStockCard key={item.ingredientId} item={item} />
+                <LiveStockCard
+                  key={item.ingredientId}
+                  item={item}
+                  imageUrl={
+                    item.imageUrl ||
+                    ingredientImageMap.get(item.ingredientId) ||
+                    null
+                  }
+                />
               ))}
             </div>
           )}
@@ -539,18 +617,27 @@ export function CartersPage() {
         <section className="rounded-xl border border-bauraBorder bg-white p-5 shadow-[0_1px_2px_rgba(45,33,27,0.03)]">
           <div className="mb-5 flex flex-col gap-4">
             <div>
-              <h3 className="font-bold">Purchase Carters</h3>
+              <h3 className="font-bold">
+                Purchase Carters
+              </h3>
+
               <p className="text-sm text-bauraMuted">
                 {filteredCarters.length} shown · {carters.length} total
               </p>
             </div>
 
             <div className="flex items-center gap-3 rounded-lg border border-bauraBorder bg-white px-4 py-3">
-              <Search size={17} className="text-bauraMuted" />
+              <Search
+                size={17}
+                className="text-bauraMuted"
+              />
+
               <input
                 className="w-full bg-transparent text-sm outline-none"
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) =>
+                  setSearch(event.target.value)
+                }
                 placeholder="Search Carter..."
               />
             </div>
@@ -564,21 +651,27 @@ export function CartersPage() {
             ) : (
               <div className="grid gap-3">
                 {filteredCarters.map((carter) => {
-                  const isSelected = selectedCarter?.id === carter.id;
+                  const isSelected =
+                    selectedCarter?.id === carter.id;
 
                   return (
                     <button
                       key={carter.id}
-                      onClick={() => loadCarterDetail(carter.id)}
+                      onClick={() =>
+                        loadCarterDetail(carter.id)
+                      }
                       className={`rounded-xl border p-4 text-left transition ${
                         isSelected
                           ? "border-bauraGold bg-bauraGoldSoft"
-                          : "border-bauraBorder bg-white hover:bg-white"
+                          : "border-bauraBorder bg-white hover:border-bauraGold/40"
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <h4 className="font-bold">{carter.carterNo}</h4>
+                          <h4 className="font-bold">
+                            {carter.carterNo}
+                          </h4>
+
                           <p className="mt-1 flex items-center gap-2 text-sm text-bauraMuted">
                             <CalendarDays size={15} />
                             {formatDate(carter.purchasedAt)}
@@ -594,6 +687,7 @@ export function CartersPage() {
                         <span className="truncate text-bauraMuted">
                           {carter.supplierName || "No supplier"}
                         </span>
+
                         <span className="shrink-0 font-bold">
                           {formatCurrency(carter.totalCost)}
                         </span>
@@ -613,7 +707,11 @@ export function CartersPage() {
                 <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-bauraBrown text-bauraGold">
                   <ShoppingBasket size={26} />
                 </div>
-                <h3 className="mt-4 font-bold">No Carter selected</h3>
+
+                <h3 className="mt-4 font-bold">
+                  No Carter selected
+                </h3>
+
                 <p className="mt-2 text-sm text-bauraMuted">
                   Create or select a Carter to add purchased ingredient stock.
                 </p>
@@ -626,9 +724,11 @@ export function CartersPage() {
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-bauraGold">
                     Selected Carter
                   </p>
+
                   <h3 className="mt-1 text-2xl font-bold">
                     {selectedCarter.carterNo}
                   </h3>
+
                   <p className="mt-1 text-sm text-bauraMuted">
                     {formatDate(selectedCarter.purchasedAt)} ·{" "}
                     {selectedCarter.supplierName || "No supplier"}
@@ -649,11 +749,16 @@ export function CartersPage() {
                   label="Items"
                   value={String(selectedCarter.items?.length || 0)}
                 />
+
                 <MiniStat
                   label="Total Cost"
                   value={formatCurrency(selectedCarter.totalCost)}
                 />
-                <MiniStat label="Notes" value={selectedCarter.notes || "—"} />
+
+                <MiniStat
+                  label="Notes"
+                  value={selectedCarter.notes || "—"}
+                />
               </div>
 
               <div className="baura-scrollbar max-h-[calc(100vh-580px)] min-h-[360px] overflow-auto pr-1">
@@ -664,46 +769,65 @@ export function CartersPage() {
                   <EmptyState text="No ingredient stock added yet." />
                 ) : (
                   <div className="grid gap-3">
-                    {selectedCarter.items.map((item) => (
-                      <div
-                        key={item.id}
-                        className="rounded-xl border border-bauraBorder bg-white p-4"
-                      >
-                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                          <div className="flex items-start gap-3">
-                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-bauraBrown text-bauraGold">
-                              <ClipboardList size={20} />
+                    {selectedCarter.items.map((item) => {
+                      const ingredientId =
+                        getCarterItemIngredientId(item);
+
+                      const imageUrl =
+                        item.imageUrl ||
+                        item.ingredient?.imageUrl ||
+                        (ingredientId
+                          ? ingredientImageMap.get(ingredientId)
+                          : null) ||
+                        null;
+
+                      return (
+                        <div
+                          key={item.id}
+                          className="rounded-xl border border-bauraBorder bg-white p-4"
+                        >
+                          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                            <div className="flex min-w-0 items-start gap-3">
+                              <IngredientThumbnail
+                                imageUrl={imageUrl}
+                                name={getIngredientName(item)}
+                                size="medium"
+                              />
+
+                              <div className="min-w-0">
+                                <h4 className="truncate font-bold">
+                                  {getIngredientName(item)}
+                                </h4>
+
+                                <p className="mt-1 text-sm text-bauraMuted">
+                                  Loaded: {formatQty(item.loadedQty)} packs ·
+                                  Base: {formatQty(item.totalBaseQty)}
+                                </p>
+
+                                <p className="mt-1 text-xs text-bauraMuted">
+                                  Cost/base unit:{" "}
+                                  {formatCurrency(item.unitCostBase)}
+                                </p>
+                              </div>
                             </div>
 
-                            <div>
-                              <h4 className="font-bold">
-                                {getIngredientName(item)}
-                              </h4>
-                              <p className="mt-1 text-sm text-bauraMuted">
-                                Loaded: {formatQty(item.loadedQty)} packs ·
-                                Base: {formatQty(item.totalBaseQty)}
+                            <div className="shrink-0 text-left md:text-right">
+                              <p className="text-sm text-bauraMuted">
+                                Price/package
                               </p>
+
+                              <p className="font-bold">
+                                {formatCurrency(item.pricePerPackage)}
+                              </p>
+
                               <p className="mt-1 text-xs text-bauraMuted">
-                                Cost/base unit:{" "}
-                                {formatCurrency(item.unitCostBase)}
+                                Total {formatCurrency(item.totalPrice)}
                               </p>
                             </div>
-                          </div>
-
-                          <div className="text-left md:text-right">
-                            <p className="text-sm text-bauraMuted">
-                              Price/package
-                            </p>
-                            <p className="font-bold">
-                              {formatCurrency(item.pricePerPackage)}
-                            </p>
-                            <p className="mt-1 text-xs text-bauraMuted">
-                              Total {formatCurrency(item.totalPrice)}
-                            </p>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -718,13 +842,19 @@ export function CartersPage() {
         title="Create Carter"
         subtitle="Create a new purchase Carter before adding bought ingredients."
       >
-        <form onSubmit={handleCreateCarter} className="grid gap-4">
+        <form
+          onSubmit={handleCreateCarter}
+          className="grid gap-4"
+        >
           <Input
             label="Purchased Date"
             type="date"
             value={carterForm.purchasedAt}
             onChange={(value) =>
-              setCarterForm((prev) => ({ ...prev, purchasedAt: value }))
+              setCarterForm((prev) => ({
+                ...prev,
+                purchasedAt: value,
+              }))
             }
           />
 
@@ -732,14 +862,20 @@ export function CartersPage() {
             label="Supplier Name"
             value={carterForm.supplierName}
             onChange={(value) =>
-              setCarterForm((prev) => ({ ...prev, supplierName: value }))
+              setCarterForm((prev) => ({
+                ...prev,
+                supplierName: value,
+              }))
             }
             placeholder="Supermarket"
             required={false}
           />
 
           <label className="block">
-            <span className="mb-2 block text-sm font-semibold">Notes</span>
+            <span className="mb-2 block text-sm font-semibold">
+              Notes
+            </span>
+
             <textarea
               className="min-h-24 w-full resize-none rounded-lg border border-bauraBorder bg-white px-4 py-3 text-sm outline-none transition focus:border-bauraGold"
               value={carterForm.notes}
@@ -771,9 +907,15 @@ export function CartersPage() {
             : ""
         }
       >
-        <form onSubmit={handleAddItem} className="grid gap-4">
+        <form
+          onSubmit={handleAddItem}
+          className="grid gap-4"
+        >
           <label className="block">
-            <span className="mb-2 block text-sm font-semibold">Ingredient</span>
+            <span className="mb-2 block text-sm font-semibold">
+              Ingredient
+            </span>
+
             <select
               className="erp-input"
               value={itemForm.ingredientId}
@@ -785,14 +927,44 @@ export function CartersPage() {
               }
               required
             >
-              <option value="">Select ingredient</option>
+              <option value="">
+                Select ingredient
+              </option>
+
               {ingredients.map((ingredient) => (
-                <option key={ingredient.id} value={ingredient.id}>
+                <option
+                  key={ingredient.id}
+                  value={ingredient.id}
+                >
                   {ingredient.displayName}
                 </option>
               ))}
             </select>
           </label>
+
+          {selectedIngredient && (
+            <div className="flex items-center gap-3 rounded-xl border border-bauraBorder bg-bauraGoldSoft/30 p-3">
+              <IngredientThumbnail
+                imageUrl={selectedIngredient.imageUrl}
+                name={selectedIngredient.displayName}
+                size="large"
+              />
+
+              <div className="min-w-0">
+                <p className="truncate text-sm font-bold text-bauraBrown">
+                  {selectedIngredient.displayName}
+                </p>
+
+                <p className="mt-1 text-xs text-bauraMuted">
+                  Package contains{" "}
+                  {formatQty(
+                    selectedIngredient.baseQty,
+                    selectedIngredient.baseUnit,
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="grid gap-3 md:grid-cols-2">
             <Input
@@ -800,7 +972,10 @@ export function CartersPage() {
               type="number"
               value={itemForm.loadedQty}
               onChange={(value) =>
-                setItemForm((prev) => ({ ...prev, loadedQty: value }))
+                setItemForm((prev) => ({
+                  ...prev,
+                  loadedQty: value,
+                }))
               }
               placeholder="5"
             />
@@ -821,7 +996,10 @@ export function CartersPage() {
 
           {itemPreview && selectedIngredient && (
             <div className="rounded-xl border border-bauraBorder bg-white p-4">
-              <p className="text-sm font-bold">Stock Preview</p>
+              <p className="text-sm font-bold">
+                Stock Preview
+              </p>
+
               <div className="mt-3 grid gap-3 text-sm md:grid-cols-3">
                 <PreviewStat
                   label="Total Base Qty"
@@ -829,10 +1007,12 @@ export function CartersPage() {
                     selectedIngredient.baseUnit
                   }`}
                 />
+
                 <PreviewStat
                   label="Total Cost"
                   value={formatCurrency(itemPreview.totalPrice)}
                 />
+
                 <PreviewStat
                   label={`Cost / ${selectedIngredient.baseUnit}`}
                   value={formatCurrency(itemPreview.unitCost)}
@@ -852,8 +1032,65 @@ export function CartersPage() {
   );
 }
 
-function LiveStockCard({ item }: { item: InventoryItem }) {
-  const isOutOfStock = item.isOutOfStock || Number(item.qtyOnHand) <= 0;
+function IngredientThumbnail({
+  imageUrl,
+  name,
+  size = "medium",
+}: {
+  imageUrl?: string | null;
+  name: string;
+  size?: "small" | "medium" | "large";
+}) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [imageUrl]);
+
+  const sizeClass =
+    size === "small"
+      ? "h-9 w-9"
+      : size === "large"
+        ? "h-14 w-14"
+        : "h-11 w-11";
+
+  if (!imageUrl || failed) {
+    return (
+      <div
+        className={`${sizeClass} flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-bauraBrown text-bauraGold`}
+      >
+        <ClipboardList
+          size={size === "large" ? 22 : 19}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`${sizeClass} shrink-0 overflow-hidden rounded-lg border border-bauraBorder bg-white`}
+    >
+      <img
+        src={imageUrl}
+        alt={name}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        className="h-full w-full object-cover"
+      />
+    </div>
+  );
+}
+
+function LiveStockCard({
+  item,
+  imageUrl,
+}: {
+  item: InventoryItem;
+  imageUrl?: string | null;
+}) {
+  const isOutOfStock =
+    item.isOutOfStock ||
+    Number(item.qtyOnHand) <= 0;
 
   return (
     <div
@@ -866,21 +1103,29 @@ function LiveStockCard({ item }: { item: InventoryItem }) {
       }`}
     >
       <div className="flex items-start justify-between gap-3">
-        <div
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${
-            isOutOfStock
-              ? "bg-red-100 text-red-700"
-              : item.isLowStock
-                ? "bg-amber-100 text-amber-700"
-                : "bg-bauraBrown text-bauraGold"
-          }`}
-        >
-          {isOutOfStock || item.isLowStock ? (
-            <AlertTriangle size={20} />
-          ) : (
-            <Boxes size={20} />
-          )}
-        </div>
+        {imageUrl ? (
+          <IngredientThumbnail
+            imageUrl={imageUrl}
+            name={item.displayName}
+            size="medium"
+          />
+        ) : (
+          <div
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${
+              isOutOfStock
+                ? "bg-red-100 text-red-700"
+                : item.isLowStock
+                  ? "bg-amber-100 text-amber-700"
+                  : "bg-bauraBrown text-bauraGold"
+            }`}
+          >
+            {isOutOfStock || item.isLowStock ? (
+              <AlertTriangle size={20} />
+            ) : (
+              <Boxes size={20} />
+            )}
+          </div>
+        )}
 
         <span
           className={`rounded-full px-3 py-1 text-xs font-bold ${
@@ -891,7 +1136,11 @@ function LiveStockCard({ item }: { item: InventoryItem }) {
                 : "bg-green-100 text-green-700"
           }`}
         >
-          {isOutOfStock ? "Out" : item.isLowStock ? "Low" : "OK"}
+          {isOutOfStock
+            ? "Out"
+            : item.isLowStock
+              ? "Low"
+              : "OK"}
         </span>
       </div>
 
@@ -909,12 +1158,20 @@ function LiveStockCard({ item }: { item: InventoryItem }) {
 
       <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
         <div className="rounded-lg bg-white p-3">
-          <p className="text-bauraMuted">Lots</p>
-          <p className="mt-1 font-bold text-bauraBrown">{item.stockLotCount}</p>
+          <p className="text-bauraMuted">
+            Lots
+          </p>
+
+          <p className="mt-1 font-bold text-bauraBrown">
+            {item.stockLotCount}
+          </p>
         </div>
 
         <div className="rounded-lg bg-white p-3">
-          <p className="text-bauraMuted">Value</p>
+          <p className="text-bauraMuted">
+            Value
+          </p>
+
           <p className="mt-1 truncate font-bold text-bauraBrown">
             {formatCurrency(item.stockValue)}
           </p>
@@ -923,19 +1180,30 @@ function LiveStockCard({ item }: { item: InventoryItem }) {
 
       {item.lowStockAlertQty !== null && (
         <p className="mt-3 text-xs text-bauraMuted">
-          Low alert: {formatQty(item.lowStockAlertQty, item.baseUnit)}
+          Low alert:{" "}
+          {formatQty(
+            item.lowStockAlertQty,
+            item.baseUnit,
+          )}
         </p>
       )}
     </div>
   );
 }
 
-function LiveStockMiniStat({ label, value }: { label: string; value: string }) {
+function LiveStockMiniStat({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
   return (
     <div className="rounded-lg bg-white px-4 py-3">
       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-bauraMuted">
         {label}
       </p>
+
       <p className="mt-1 max-w-24 truncate text-sm font-black text-bauraBrown">
         {value}
       </p>
@@ -943,7 +1211,11 @@ function LiveStockMiniStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function EmptyState({ text }: { text: string }) {
+function EmptyState({
+  text,
+}: {
+  text: string;
+}) {
   return (
     <div className="rounded-xl bg-white p-6 text-center text-sm text-bauraMuted">
       {text}
@@ -951,22 +1223,42 @@ function EmptyState({ text }: { text: string }) {
   );
 }
 
-function MiniStat({ label, value }: { label: string; value: string }) {
+function MiniStat({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
   return (
     <div className="rounded-xl bg-white p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-bauraMuted">
         {label}
       </p>
-      <p className="mt-2 truncate text-sm font-bold">{value}</p>
+
+      <p className="mt-2 truncate text-sm font-bold">
+        {value}
+      </p>
     </div>
   );
 }
 
-function PreviewStat({ label, value }: { label: string; value: string }) {
+function PreviewStat({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
   return (
     <div>
-      <p className="text-xs text-bauraMuted">{label}</p>
-      <p className="mt-1 font-bold text-bauraBrown">{value}</p>
+      <p className="text-xs text-bauraMuted">
+        {label}
+      </p>
+
+      <p className="mt-1 font-bold text-bauraBrown">
+        {value}
+      </p>
     </div>
   );
 }
@@ -988,11 +1280,16 @@ function Input({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-sm font-semibold">{label}</span>
+      <span className="mb-2 block text-sm font-semibold">
+        {label}
+      </span>
+
       <input
         className="erp-input"
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) =>
+          onChange(event.target.value)
+        }
         placeholder={placeholder}
         type={type}
         required={required}
@@ -1025,7 +1322,9 @@ function ModalActions({
         disabled={isLoading}
         className="erp-button-primary"
       >
-        {isLoading ? "Saving..." : submitText}
+        {isLoading
+          ? "Saving..."
+          : submitText}
       </button>
     </div>
   );

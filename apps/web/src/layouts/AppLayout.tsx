@@ -38,6 +38,8 @@ type NavigationItem = {
   icon: LucideIcon;
 
   group: "Overview" | "Operations" | "Inventory" | "Management";
+
+  permissions: string[];
 };
 
 const BAURA_LOGO = "/images/logos/logo.webp";
@@ -48,54 +50,80 @@ const navigationItems: NavigationItem[] = [
     path: "/dashboard",
     icon: Home,
     group: "Overview",
+
+    permissions: ["erp.dashboard.read", "erp.dashboard.view"],
   },
+
   {
     label: "Production",
     path: "/dashboard/production",
     icon: ChefHat,
     group: "Operations",
+
+    permissions: ["erp.production.read", "erp.production.view"],
   },
+
   {
     label: "Bakery Stock",
     path: "/dashboard/bakery-stock",
     icon: PackageCheck,
     group: "Operations",
+
+    permissions: ["erp.bakery-stock.read", "erp.bakery-stock.view"],
   },
+
   {
     label: "POS Sales",
     path: "/pos",
     icon: ShoppingCart,
     group: "Operations",
+
+    permissions: ["erp.pos.access"],
   },
+
   {
     label: "Ingredients",
     path: "/dashboard/ingredients",
     icon: Boxes,
     group: "Inventory",
+
+    permissions: ["erp.ingredients.read", "erp.ingredients.view"],
   },
+
   {
     label: "Carter Inventory",
     path: "/dashboard/carters",
     icon: Warehouse,
     group: "Inventory",
+
+    permissions: ["erp.carters.read", "erp.carters.view"],
   },
+
   {
     label: "Products & Recipes",
     path: "/dashboard/products",
     icon: CakeSlice,
     group: "Inventory",
+
+    permissions: ["erp.products.read", "erp.products.view", "erp.recipes.read"],
   },
+
   {
     label: "Analytics",
     path: "/dashboard/analytics",
     icon: BarChart3,
     group: "Management",
+
+    permissions: ["erp.analytics.read", "erp.analytics.view"],
   },
+
   {
     label: "Settings",
     path: "/dashboard/settings",
     icon: Settings,
     group: "Management",
+
+    permissions: ["erp.settings.read"],
   },
 ];
 
@@ -110,7 +138,12 @@ export function AppLayout({
 }: AppLayoutProps) {
   const navigate = useNavigate();
 
-  const { user, logout } = useAuth();
+  const { user, logout, hasAnyPermission } = useAuth();
+
+  const visibleNavigationItems = useMemo(
+    () => navigationItems.filter((item) => hasAnyPermission(item.permissions)),
+    [hasAnyPermission],
+  );
 
   const [search, setSearch] = useState("");
 
@@ -125,10 +158,10 @@ export function AppLayout({
       return [];
     }
 
-    return navigationItems.filter((item) =>
+    return visibleNavigationItems.filter((item) =>
       item.label.toLowerCase().includes(keyword),
     );
-  }, [search]);
+  }, [search, visibleNavigationItems]);
 
   function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter" && searchResults.length > 0) {
@@ -196,9 +229,13 @@ export function AppLayout({
           {/* NAVIGATION */}
           <nav className="baura-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pb-5 pt-5">
             {groups.map((group) => {
-              const items = navigationItems.filter(
+              const items = visibleNavigationItems.filter(
                 (item) => item.group === group,
               );
+
+              if (items.length === 0) {
+                return null;
+              }
 
               return (
                 <div key={group} className="mb-5">
@@ -326,7 +363,7 @@ export function AppLayout({
             </div>
 
             <div className="baura-scrollbar flex gap-1 overflow-x-auto border-t border-bauraBorder px-3 py-2">
-              {navigationItems.map((item) => (
+              {visibleNavigationItems.map((item) => (
                 <button
                   key={item.label}
                   type="button"

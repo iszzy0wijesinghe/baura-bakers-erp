@@ -1,51 +1,53 @@
+/** @format */
+
 import {
   Navigate,
   Route,
-  Routes
+  Routes,
 } from "react-router-dom";
 
 import {
-  ProtectedRoute
+  ProtectedRoute,
 } from "./components/ProtectedRoute";
 
 import {
-  AnalyticsPage
+  AnalyticsPage,
 } from "./pages/AnalyticsPage";
 
 import {
-  BakeryStockPage
+  BakeryStockPage,
 } from "./pages/BakeryStockPage";
 
 import {
-  CartersPage
+  CartersPage,
 } from "./pages/CartersPage";
 
 import {
-  DashboardPage
+  DashboardPage,
 } from "./pages/DashboardPage";
 
 import {
-  IngredientsPage
+  IngredientsPage,
 } from "./pages/IngredientsPage";
 
 import {
-  LoginPage
+  LoginPage,
 } from "./pages/LoginPage";
 
 import {
-  PosPage
+  PosPage,
 } from "./pages/PosPage";
 
 import {
-  ProductionPage
+  ProductionPage,
 } from "./pages/ProductionPage";
 
 import {
-  ProductsPage
+  ProductsPage,
 } from "./pages/ProductsPage";
 
 import {
-  SettingsPage
+  SettingsPage,
 } from "./pages/SettingsPage";
 
 function App() {
@@ -71,7 +73,12 @@ function App() {
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute
+            anyPermissions={[
+              "erp.dashboard.read",
+              "erp.dashboard.view",
+            ]}
+          >
             <DashboardPage />
           </ProtectedRoute>
         }
@@ -80,7 +87,12 @@ function App() {
       <Route
         path="/dashboard/production"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute
+            anyPermissions={[
+              "erp.production.read",
+              "erp.production.view",
+            ]}
+          >
             <ProductionPage />
           </ProtectedRoute>
         }
@@ -89,7 +101,12 @@ function App() {
       <Route
         path="/dashboard/bakery-stock"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute
+            anyPermissions={[
+              "erp.bakery-stock.read",
+              "erp.bakery-stock.view",
+            ]}
+          >
             <BakeryStockPage />
           </ProtectedRoute>
         }
@@ -98,7 +115,12 @@ function App() {
       <Route
         path="/dashboard/ingredients"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute
+            anyPermissions={[
+              "erp.ingredients.read",
+              "erp.ingredients.view",
+            ]}
+          >
             <IngredientsPage />
           </ProtectedRoute>
         }
@@ -107,7 +129,12 @@ function App() {
       <Route
         path="/dashboard/carters"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute
+            anyPermissions={[
+              "erp.carters.read",
+              "erp.carters.view",
+            ]}
+          >
             <CartersPage />
           </ProtectedRoute>
         }
@@ -116,7 +143,13 @@ function App() {
       <Route
         path="/dashboard/products"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute
+            anyPermissions={[
+              "erp.products.read",
+              "erp.products.view",
+              "erp.recipes.read",
+            ]}
+          >
             <ProductsPage />
           </ProtectedRoute>
         }
@@ -125,7 +158,10 @@ function App() {
       <Route
         path="/pos"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute
+            permission="erp.pos.access"
+            requirePosAccess
+          >
             <PosPage />
           </ProtectedRoute>
         }
@@ -134,7 +170,12 @@ function App() {
       <Route
         path="/dashboard/analytics"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute
+            anyPermissions={[
+              "erp.analytics.read",
+              "erp.analytics.view",
+            ]}
+          >
             <AnalyticsPage />
           </ProtectedRoute>
         }
@@ -143,7 +184,9 @@ function App() {
       <Route
         path="/dashboard/settings"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute
+            permission="erp.settings.read"
+          >
             <SettingsPage />
           </ProtectedRoute>
         }

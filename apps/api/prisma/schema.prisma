@@ -352,15 +352,28 @@ model StockMovement {
 }
 
 model Product {
-  id                    String   @id @default(uuid()) @db.Char(36)
-  name                  String
-  variantName           String?
-  imageUrl              String?  @db.VarChar(1000)
-  sellPrice             Decimal  @db.Decimal(12, 2)
+  id String @id @default(uuid()) @db.Char(36)
+
+  // Canonical product identity from the Baura website/Laravel backend.
+  // ERP keeps its UUID as the operational foreign key so existing
+  // recipes, production, stock and sales relationships remain safe.
+  officialSiteProductId Int? @unique
+
+  name        String
+  variantName String?
+  imageUrl    String? @db.VarChar(1000)
+  sellPrice   Decimal @db.Decimal(12, 2)
+
+  // ERP-owned operational setting.
+  // This must not be overwritten by website catalogue synchronization.
   finishedStockAlertQty Decimal? @db.Decimal(12, 3)
-  isActive              Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+
+  isActive Boolean @default(true)
+
+  // Catalogue synchronization metadata.
+  officialSiteSyncedAt DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   recipeItems                   ProductRecipeItem[]
   saleItems                     SaleItem[]
@@ -371,6 +384,7 @@ model Product {
 
   @@index([name])
   @@index([isActive])
+  @@index([officialSiteProductId])
 }
 
 model ProductRecipeItem {

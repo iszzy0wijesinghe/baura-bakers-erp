@@ -12,14 +12,14 @@ import {
   CheckCircle2,
   ClipboardList,
   Edit3,
+  Globe2,
   ImageIcon,
   PackagePlus,
-  Plus,
   RefreshCw,
   Search,
-  Trash2,
-  XCircle
+  Trash2
 } from "lucide-react";
+
 import {
   ImageUploadField
 } from "../components/ImageUploadField";
@@ -79,20 +79,40 @@ type RecipeItem = {
 
 type Product = {
   id: string;
+
+  officialSiteProductId:
+    | number
+    | null;
+
   name: string;
+
   variantName:
     | string
     | null;
+
   imageUrl:
     | string
     | null;
+
   displayName: string;
+
   sellPrice: string;
+
   isActive: boolean;
+
+  isOfficialSiteProduct?:
+    boolean;
+
+  officialSiteSyncedAt?:
+    | string
+    | null;
+
   recipeItemCount?:
     number;
+
   recipeItems?:
     RecipeItem[];
+
   createdAt: string;
   updatedAt: string;
 };
@@ -100,40 +120,49 @@ type Product = {
 type CostPreviewLine = {
   recipeItemId: string;
   ingredientId: string;
+
   ingredientDisplayName:
     string;
+
   requiredBaseQty:
     number;
+
   baseUnit:
     BaseUnit;
-  estimatedCost: number;
+
+  estimatedCost:
+    number;
+
   availableBaseQty:
     number;
+
   shortageBaseQty:
     number;
+
   isAvailable:
     boolean;
 };
 
 type CostPreview = {
   productId: string;
-  sellPrice: number;
-  currentCost: number;
+
+  sellPrice:
+    number;
+
+  currentCost:
+    number;
+
   estimatedProfit:
     number;
+
   profitMarginPercent:
     number;
+
   canProduce:
     boolean;
+
   lines:
     CostPreviewLine[];
-};
-
-type ProductForm = {
-  name: string;
-  variantName: string;
-  imageUrl: string;
-  sellPrice: string;
 };
 
 type RecipeForm = {
@@ -142,14 +171,6 @@ type RecipeForm = {
   requiredBaseQty:
     string;
 };
-
-const initialProductForm:
-  ProductForm = {
-    name: "",
-    variantName: "",
-    imageUrl: "",
-    sellPrice: ""
-  };
 
 const initialRecipeForm:
   RecipeForm = {
@@ -165,8 +186,7 @@ function formatCurrency(
     | undefined
 ) {
   return `Rs. ${Number(
-    value ||
-      0
+    value || 0
   ).toLocaleString(
     "en-LK",
     {
@@ -187,8 +207,7 @@ function formatQty(
 ) {
   const amount =
     Number(
-      value ||
-        0
+      value || 0
     ).toLocaleString(
       "en-LK",
       {
@@ -200,6 +219,38 @@ function formatQty(
   return unit
     ? `${amount} ${unit}`
     : amount;
+}
+
+function formatSyncTime(
+  value:
+    | string
+    | null
+    | undefined
+) {
+  if (!value) {
+    return "Not synced";
+  }
+
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "Synced";
+  }
+
+  return date.toLocaleString(
+    "en-LK",
+    {
+      dateStyle:
+        "medium",
+      timeStyle:
+        "short"
+    }
+  );
 }
 
 export function ProductsPage() {
@@ -239,14 +290,6 @@ export function ProductsPage() {
     >(null);
 
   const [
-    productForm,
-    setProductForm
-  ] =
-    useState<ProductForm>(
-      initialProductForm
-    );
-
-  const [
     recipeForm,
     setRecipeForm
   ] =
@@ -255,27 +298,11 @@ export function ProductsPage() {
     );
 
   const [
-    editingProduct,
-    setEditingProduct
-  ] =
-    useState<
-      Product | null
-    >(null);
-
-  const [
     editingRecipeItem,
     setEditingRecipeItem
   ] =
     useState<
       RecipeItem | null
-    >(null);
-
-  const [
-    statusProduct,
-    setStatusProduct
-  ] =
-    useState<
-      Product | null
     >(null);
 
   const [
@@ -303,12 +330,6 @@ export function ProductsPage() {
     >("ACTIVE");
 
   const [
-    isProductModalOpen,
-    setIsProductModalOpen
-  ] =
-    useState(false);
-
-  const [
     isRecipeModalOpen,
     setIsRecipeModalOpen
   ] =
@@ -333,26 +354,20 @@ export function ProductsPage() {
     useState(false);
 
   const [
-    isSavingProduct,
-    setIsSavingProduct
-  ] =
-    useState(false);
-
-  const [
     isSavingRecipe,
     setIsSavingRecipe
   ] =
     useState(false);
 
   const [
-    isChangingStatus,
-    setIsChangingStatus
+    isDeletingRecipe,
+    setIsDeletingRecipe
   ] =
     useState(false);
 
   const [
-    isDeletingRecipe,
-    setIsDeletingRecipe
+    isSyncing,
+    setIsSyncing
   ] =
     useState(false);
 
@@ -365,6 +380,23 @@ export function ProductsPage() {
         recipeForm.ingredientId
     );
 
+  const officialProducts =
+    useMemo(
+      () =>
+        products.filter(
+          (
+            product
+          ) =>
+            product.officialSiteProductId !==
+              null ||
+            product.isOfficialSiteProduct ===
+              true
+        ),
+      [
+        products
+      ]
+    );
+
   const filteredProducts =
     useMemo(() => {
       const keyword =
@@ -372,7 +404,7 @@ export function ProductsPage() {
           .trim()
           .toLowerCase();
 
-      return products.filter(
+      return officialProducts.filter(
         (
           product
         ) => {
@@ -388,11 +420,13 @@ export function ProductsPage() {
               .includes(
                 keyword
               ) ||
-            product.variantName
-              ?.toLowerCase()
-              .includes(
-                keyword
-              );
+            Boolean(
+              product.variantName
+                ?.toLowerCase()
+                .includes(
+                  keyword
+                )
+            );
 
           const matchesStatus =
             statusFilter ===
@@ -415,13 +449,15 @@ export function ProductsPage() {
         }
       );
     }, [
-      products,
+      officialProducts,
       search,
       statusFilter
     ]);
 
   async function loadProducts(
-    showToast = false
+    showToast = false,
+    preferredProductId?:
+      string
   ) {
     setIsLoading(
       true
@@ -440,14 +476,56 @@ export function ProductsPage() {
         data.products
       );
 
+      const syncedProducts =
+        data.products.filter(
+          (
+            product
+          ) =>
+            product.officialSiteProductId !==
+              null ||
+            product.isOfficialSiteProduct ===
+              true
+        );
+
+      const targetProduct =
+        (
+          preferredProductId
+            ? syncedProducts.find(
+                (
+                  product
+                ) =>
+                  product.id ===
+                  preferredProductId
+              )
+            : null
+        ) ??
+        (
+          selectedProduct
+            ? syncedProducts.find(
+                (
+                  product
+                ) =>
+                  product.id ===
+                  selectedProduct.id
+              )
+            : null
+        ) ??
+        syncedProducts[0] ??
+        null;
+
       if (
-        !selectedProduct &&
-        data.products.length >
-          0
+        targetProduct
       ) {
         await loadProductDetail(
-          data.products[0]
-            .id
+          targetProduct.id
+        );
+      } else {
+        setSelectedProduct(
+          null
+        );
+
+        setCostPreview(
+          null
         );
       }
 
@@ -455,7 +533,8 @@ export function ProductsPage() {
         showToast
       ) {
         toast.success(
-          "Products refreshed"
+          "Products refreshed",
+          "The ERP catalogue has been reloaded."
         );
       }
     } catch (error) {
@@ -517,6 +596,25 @@ export function ProductsPage() {
           `/products/${productId}`
         );
 
+      if (
+        data.product
+          .officialSiteProductId ===
+          null &&
+        data.product
+          .isOfficialSiteProduct !==
+          true
+      ) {
+        setSelectedProduct(
+          null
+        );
+
+        setCostPreview(
+          null
+        );
+
+        return;
+      }
+
       setSelectedProduct(
         data.product
       );
@@ -569,75 +667,69 @@ export function ProductsPage() {
     }
   }
 
-  useEffect(() => {
-    loadProducts();
-    loadIngredients();
-  }, []);
-
-  function openCreateProductModal() {
-    setEditingProduct(
-      null
-    );
-
-    setProductForm({
-      ...initialProductForm
-    });
-
-    setIsProductModalOpen(
+  async function handleSyncOfficialProducts() {
+    setIsSyncing(
       true
     );
-  }
 
-  function openEditProductModal(
-    product:
-      Product
-  ) {
-    setEditingProduct(
-      product
-    );
+    try {
+      const data =
+        await apiRequest<{
+          message: string;
 
-    setProductForm({
-      name:
-        product.name,
+          sync: {
+            received:
+              number;
 
-      variantName:
-        product.variantName ||
-        "",
+            created:
+              number;
 
-      imageUrl:
-        product.imageUrl ||
-        "",
+            updated:
+              number;
 
-      sellPrice:
-        String(
-          product.sellPrice
-        )
-    });
+            syncedAt:
+              string;
+          };
+        }>(
+          "/products/sync-official-site",
+          {
+            method:
+              "POST"
+          }
+        );
 
-    setIsProductModalOpen(
-      true
-    );
-  }
+      toast.success(
+        "Catalogue synchronized",
+        `${data.sync.received} official product${
+          data.sync.received ===
+          1
+            ? ""
+            : "s"
+        } received. ${data.sync.created} created and ${data.sync.updated} updated.`
+      );
 
-  function closeProductModal() {
-    if (
-      isSavingProduct
-    ) {
-      return;
+      await loadProducts(
+        false,
+        selectedProduct?.id
+      );
+    } catch (error) {
+      toast.error(
+        "Synchronization failed",
+        error instanceof Error
+          ? error.message
+          : "Failed to synchronize the official product catalogue."
+      );
+    } finally {
+      setIsSyncing(
+        false
+      );
     }
-
-    setIsProductModalOpen(
-      false
-    );
-
-    setEditingProduct(
-      null
-    );
-
-    setProductForm({
-      ...initialProductForm
-    });
   }
+
+  useEffect(() => {
+    void loadProducts();
+    void loadIngredients();
+  }, []);
 
   function openCreateRecipeModal() {
     if (
@@ -654,8 +746,8 @@ export function ProductsPage() {
       !selectedProduct.isActive
     ) {
       toast.warning(
-        "Inactive product",
-        "Activate the product before editing its recipe."
+        "Product unavailable",
+        "This product is inactive on the official website, so its recipe cannot be changed."
       );
 
       return;
@@ -727,110 +819,6 @@ export function ProductsPage() {
     });
   }
 
-  async function handleSaveProduct(
-    event:
-      FormEvent
-  ) {
-    event.preventDefault();
-
-    setIsSavingProduct(
-      true
-    );
-
-    try {
-      const payload = {
-        name:
-          productForm.name.trim(),
-
-        variantName:
-          productForm.variantName.trim() ||
-          null,
-
-        imageUrl:
-          productForm.imageUrl.trim() ||
-          null,
-
-        sellPrice:
-          Number(
-            productForm.sellPrice
-          )
-      };
-
-      if (
-        editingProduct
-      ) {
-        await apiRequest(
-          `/products/${editingProduct.id}`,
-          {
-            method:
-              "PUT",
-
-            body:
-              JSON.stringify(
-                payload
-              )
-          }
-        );
-
-        toast.success(
-          "Product updated",
-          payload.name
-        );
-
-        const id =
-          editingProduct.id;
-
-        closeProductModal();
-
-        await loadProducts();
-        await loadProductDetail(
-          id
-        );
-      } else {
-        const data =
-          await apiRequest<{
-            product:
-              Product;
-          }>(
-            "/products",
-            {
-              method:
-                "POST",
-
-              body:
-                JSON.stringify(
-                  payload
-                )
-            }
-          );
-
-        toast.success(
-          "Product created",
-          data.product
-            .displayName
-        );
-
-        closeProductModal();
-
-        await loadProducts();
-        await loadProductDetail(
-          data.product.id
-        );
-      }
-    } catch (error) {
-      toast.error(
-        "Save failed",
-        error instanceof Error
-          ? error.message
-          : "Failed to save product."
-      );
-    } finally {
-      setIsSavingProduct(
-        false
-      );
-    }
-  }
-
   async function handleSaveRecipeItem(
     event:
       FormEvent
@@ -843,6 +831,17 @@ export function ProductsPage() {
     ) {
       toast.warning(
         "Select an ingredient"
+      );
+
+      return;
+    }
+
+    if (
+      !selectedProduct.isActive
+    ) {
+      toast.warning(
+        "Product unavailable",
+        "Recipes cannot be changed for an inactive official product."
       );
 
       return;
@@ -915,8 +914,8 @@ export function ProductsPage() {
 
       closeRecipeModal();
 
-      await loadProducts();
-      await loadProductDetail(
+      await loadProducts(
+        false,
         productId
       );
     } catch (error) {
@@ -928,63 +927,6 @@ export function ProductsPage() {
       );
     } finally {
       setIsSavingRecipe(
-        false
-      );
-    }
-  }
-
-  async function handleChangeProductStatus() {
-    if (
-      !statusProduct
-    ) {
-      return;
-    }
-
-    setIsChangingStatus(
-      true
-    );
-
-    try {
-      const endpoint =
-        statusProduct.isActive
-          ? `/products/${statusProduct.id}/deactivate`
-          : `/products/${statusProduct.id}/activate`;
-
-      await apiRequest(
-        endpoint,
-        {
-          method:
-            "PATCH"
-        }
-      );
-
-      toast.success(
-        statusProduct.isActive
-          ? "Product deactivated"
-          : "Product activated",
-        statusProduct.displayName
-      );
-
-      const id =
-        statusProduct.id;
-
-      setStatusProduct(
-        null
-      );
-
-      await loadProducts();
-      await loadProductDetail(
-        id
-      );
-    } catch (error) {
-      toast.error(
-        "Status update failed",
-        error instanceof Error
-          ? error.message
-          : "Failed to update product."
-      );
-    } finally {
-      setIsChangingStatus(
         false
       );
     }
@@ -1023,8 +965,8 @@ export function ProductsPage() {
         null
       );
 
-      await loadProducts();
-      await loadProductDetail(
+      await loadProducts(
+        false,
         productId
       );
     } catch (error) {
@@ -1045,15 +987,19 @@ export function ProductsPage() {
     <AppLayout
       activeItem="Products & Recipes"
       title="Products & Recipes"
-      subtitle="Manage finished bakery products, product images, recipe ingredients, recipe images and current production cost."
+      subtitle="Official Baura products are synchronized automatically into ERP. Manage production recipes, ingredient requirements, costing and raw-material availability here."
       actions={
         <>
           <button
             type="button"
             onClick={() =>
-              loadProducts(
+              void loadProducts(
                 true
               )
+            }
+            disabled={
+              isLoading ||
+              isSyncing
             }
             className="erp-button-secondary"
           >
@@ -1071,37 +1017,76 @@ export function ProductsPage() {
 
           <button
             type="button"
-            onClick={
-              openCreateProductModal
+            onClick={() =>
+              void handleSyncOfficialProducts()
+            }
+            disabled={
+              isSyncing ||
+              isLoading
             }
             className="erp-button-primary"
           >
-            <Plus
+            <RefreshCw
               size={14}
+              className={
+                isSyncing
+                  ? "animate-spin"
+                  : ""
+              }
             />
 
-            New Product
+            {isSyncing
+              ? "Syncing..."
+              : "Sync Website"}
           </button>
         </>
       }
     >
+      <div className="mb-4 rounded-[16px] border border-bauraBorder bg-white px-4 py-3">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-bauraGoldSoft text-bauraGoldDark">
+            <Globe2
+              size={17}
+            />
+          </div>
+
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold text-bauraInk">
+              Official website catalogue
+            </p>
+
+            <p className="mt-1 text-[9px] leading-5 text-bauraMuted">
+              Product names, sizes, images, prices and availability are controlled by the official Baura website. ERP only manages operational data such as recipes, production, stock and sales.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="grid gap-4 xl:grid-cols-[0.72fr_1.28fr]">
         <section className="erp-panel overflow-hidden">
           <div className="border-b border-bauraBorder p-4">
-            <h2 className="erp-section-title">
-              Sellable Products
-            </h2>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="erp-section-title">
+                  Official Products
+                </h2>
 
-            <p className="erp-section-subtitle">
-              {
-                filteredProducts.length
-              }{" "}
-              shown ·{" "}
-              {
-                products.length
-              }{" "}
-              total
-            </p>
+                <p className="erp-section-subtitle">
+                  {
+                    filteredProducts.length
+                  }{" "}
+                  shown ·{" "}
+                  {
+                    officialProducts.length
+                  }{" "}
+                  synchronized
+                </p>
+              </div>
+
+              <span className="erp-badge bg-bauraGoldSoft text-bauraGoldDark">
+                Website
+              </span>
+            </div>
 
             <div className="erp-search mt-4">
               <Search
@@ -1120,7 +1105,7 @@ export function ProductsPage() {
                     event.target.value
                   )
                 }
-                placeholder="Search products..."
+                placeholder="Search official products..."
                 className="w-full bg-transparent text-[11px] outline-none"
               />
             </div>
@@ -1160,15 +1145,15 @@ export function ProductsPage() {
             </div>
           </div>
 
-          <div className="baura-scrollbar max-h-[calc(100vh-325px)] overflow-y-auto p-3">
+          <div className="baura-scrollbar max-h-[calc(100vh-380px)] overflow-y-auto p-3">
             {isLoading ? (
               <EmptyState
-                text="Loading products..."
+                text="Loading official products..."
               />
             ) : filteredProducts.length ===
               0 ? (
               <EmptyState
-                text="No products found."
+                text="No synchronized products found."
               />
             ) : (
               <div className="grid gap-2.5">
@@ -1187,7 +1172,7 @@ export function ProductsPage() {
                         }
                         type="button"
                         onClick={() =>
-                          loadProductDetail(
+                          void loadProductDetail(
                             product.id
                           )
                         }
@@ -1233,18 +1218,24 @@ export function ProductsPage() {
                               </span>
                             </div>
 
-                            <p className="mt-2 text-[9px] text-bauraMuted">
-                              {
-                                product.recipeItemCount ||
-                                0
-                              }{" "}
-                              recipe ingredient
-                              {(product.recipeItemCount ||
-                                0) ===
-                              1
-                                ? ""
-                                : "s"}
-                            </p>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <span className="text-[9px] text-bauraMuted">
+                                {
+                                  product.recipeItemCount ||
+                                  0
+                                }{" "}
+                                recipe ingredient
+                                {(product.recipeItemCount ||
+                                  0) ===
+                                1
+                                  ? ""
+                                  : "s"}
+                              </span>
+
+                              <span className="erp-badge bg-bauraGoldSoft text-bauraGoldDark">
+                                Official
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </button>
@@ -1267,11 +1258,11 @@ export function ProductsPage() {
                 </div>
 
                 <h3 className="mt-4 text-[13px] font-semibold">
-                  No product selected
+                  No official product selected
                 </h3>
 
-                <p className="mt-2 text-[10px] text-bauraMuted">
-                  Select or create a product to manage its recipe.
+                <p className="mt-2 max-w-sm text-[10px] leading-5 text-bauraMuted">
+                  Select a synchronized website product to view costing and manage its ERP recipe.
                 </p>
               </div>
             </div>
@@ -1286,9 +1277,18 @@ export function ProductsPage() {
                   />
 
                   <div className="min-w-0">
-                    <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-bauraGoldDark">
-                      Selected Product
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-bauraGoldDark">
+                        Official Product
+                      </p>
+
+                      <span className="erp-badge bg-bauraGoldSoft text-bauraGoldDark">
+                        Website #
+                        {
+                          selectedProduct.officialSiteProductId
+                        }
+                      </span>
+                    </div>
 
                     <h2 className="mt-1 truncate text-[19px] font-semibold tracking-[-0.03em] text-bauraInk">
                       {
@@ -1308,77 +1308,71 @@ export function ProductsPage() {
                       }{" "}
                       recipe ingredients
                     </p>
+
+                    <p className="mt-1 text-[8px] text-bauraMuted2">
+                      Last website sync:{" "}
+                      {formatSyncTime(
+                        selectedProduct.officialSiteSyncedAt
+                      )}
+                    </p>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                  {selectedProduct.isActive && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          openEditProductModal(
-                            selectedProduct
-                          )
-                        }
-                        className="erp-button-secondary"
-                      >
-                        <Edit3
-                          size={13}
-                        />
-
-                        Edit
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={
-                          openCreateRecipeModal
-                        }
-                        className="erp-button-primary"
-                      >
-                        <PackagePlus
-                          size={13}
-                        />
-
-                        Add Recipe Item
-                      </button>
-                    </>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setStatusProduct(
-                        selectedProduct
-                      )
-                    }
-                    className={
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`erp-badge ${
                       selectedProduct.isActive
-                        ? "erp-button-danger"
-                        : "erp-button-secondary"
-                    }
+                        ? "bg-bauraSuccessSoft text-bauraSuccess"
+                        : "bg-bauraDangerSoft text-bauraDanger"
+                    }`}
                   >
-                    {selectedProduct.isActive ? (
-                      <XCircle
-                        size={13}
-                      />
-                    ) : (
-                      <CheckCircle2
-                        size={13}
-                      />
-                    )}
-
                     {selectedProduct.isActive
-                      ? "Deactivate"
-                      : "Activate"}
-                  </button>
+                      ? "Website Active"
+                      : "Website Inactive"}
+                  </span>
+
+                  {selectedProduct.isActive && (
+                    <button
+                      type="button"
+                      onClick={
+                        openCreateRecipeModal
+                      }
+                      className="erp-button-primary"
+                    >
+                      <PackagePlus
+                        size={13}
+                      />
+
+                      Add Recipe Item
+                    </button>
+                  )}
                 </div>
               </div>
 
+              {!selectedProduct.isActive && (
+                <div className="mt-5 rounded-[14px] border border-amber-200 bg-bauraWarningSoft p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle
+                      size={16}
+                      className="mt-0.5 shrink-0 text-bauraWarning"
+                    />
+
+                    <div>
+                      <p className="text-[10px] font-semibold text-bauraInk">
+                        This product is inactive on the official website.
+                      </p>
+
+                      <p className="mt-1 text-[9px] leading-5 text-bauraMuted">
+                        Its existing ERP recipe remains available for historical records, but recipe changes are disabled while the official product is inactive.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="my-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <MiniStat
-                  label="Sell Price"
+                  label="Website Price"
                   value={formatCurrency(
                     selectedProduct.sellPrice
                   )}
@@ -1455,19 +1449,38 @@ export function ProductsPage() {
                   </div>
                 )}
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-4">
                 <div>
                   <h3 className="erp-section-title">
-                    Recipe
+                    Production Recipe
                   </h3>
 
                   <p className="erp-section-subtitle">
-                    Ingredients required per finished product.
+                    ERP-managed ingredients required to produce one finished product.
                   </p>
                 </div>
+
+                {selectedProduct.isActive &&
+                  Boolean(
+                    selectedProduct.recipeItems?.length
+                  ) && (
+                    <button
+                      type="button"
+                      onClick={
+                        openCreateRecipeModal
+                      }
+                      className="erp-button-secondary"
+                    >
+                      <PackagePlus
+                        size={12}
+                      />
+
+                      Add Ingredient
+                    </button>
+                  )}
               </div>
 
-              <div className="baura-scrollbar mt-4 max-h-[calc(100vh-520px)] min-h-[240px] overflow-y-auto pr-1">
+              <div className="baura-scrollbar mt-4 max-h-[calc(100vh-570px)] min-h-[240px] overflow-y-auto pr-1">
                 {isDetailLoading ? (
                   <EmptyState
                     text="Loading recipe..."
@@ -1475,9 +1488,36 @@ export function ProductsPage() {
                 ) : !selectedProduct.recipeItems ||
                   selectedProduct.recipeItems.length ===
                     0 ? (
-                  <EmptyState
-                    text="No recipe ingredients added yet."
-                  />
+                  <div className="flex min-h-[240px] flex-col items-center justify-center rounded-[15px] border border-dashed border-bauraBorder bg-bauraCanvas2 px-6 text-center">
+                    <ClipboardList
+                      size={23}
+                      className="text-bauraMuted2"
+                    />
+
+                    <p className="mt-3 text-[10px] font-semibold text-bauraInk">
+                      No production recipe yet
+                    </p>
+
+                    <p className="mt-1 max-w-sm text-[9px] leading-5 text-bauraMuted">
+                      This product already exists on the official website. Add its ingredient requirements here so ERP can calculate production cost and raw-material usage.
+                    </p>
+
+                    {selectedProduct.isActive && (
+                      <button
+                        type="button"
+                        onClick={
+                          openCreateRecipeModal
+                        }
+                        className="erp-button-primary mt-4"
+                      >
+                        <PackagePlus
+                          size={13}
+                        />
+
+                        Add First Ingredient
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   <div className="grid gap-3">
                     {selectedProduct.recipeItems.map(
@@ -1542,17 +1582,19 @@ export function ProductsPage() {
                               </div>
 
                               <div className="flex flex-wrap items-center gap-2">
-                                <span
-                                  className={`erp-badge ${
-                                    previewLine?.isAvailable
-                                      ? "bg-bauraSuccessSoft text-bauraSuccess"
-                                      : "bg-bauraWarningSoft text-bauraWarning"
-                                  }`}
-                                >
-                                  {previewLine?.isAvailable
-                                    ? "Stock OK"
-                                    : "Low Stock"}
-                                </span>
+                                {previewLine && (
+                                  <span
+                                    className={`erp-badge ${
+                                      previewLine.isAvailable
+                                        ? "bg-bauraSuccessSoft text-bauraSuccess"
+                                        : "bg-bauraWarningSoft text-bauraWarning"
+                                    }`}
+                                  >
+                                    {previewLine.isAvailable
+                                      ? "Stock OK"
+                                      : "Low Stock"}
+                                  </span>
+                                )}
 
                                 {selectedProduct.isActive && (
                                   <>
@@ -1603,134 +1645,6 @@ export function ProductsPage() {
 
       <Modal
         open={
-          isProductModalOpen
-        }
-        onClose={
-          closeProductModal
-        }
-        title={
-          editingProduct
-            ? "Edit Product"
-            : "Create Product"
-        }
-        subtitle="Create the finished bakery product used by Production, Bakery Stock and POS."
-        widthClassName="max-w-3xl"
-      >
-        <form
-          onSubmit={
-            handleSaveProduct
-          }
-          className="grid gap-5"
-        >
-          <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-            <ImageUploadField
-              label="Product Image"
-              value={
-                productForm.imageUrl
-              }
-              onChange={(
-                imageUrl
-              ) =>
-                setProductForm(
-                  (
-                    current
-                  ) => ({
-                    ...current,
-                    imageUrl
-                  })
-                )
-              }
-              folder="baura/products"
-            />
-
-            <div className="grid content-start gap-4">
-              <Input
-                label="Product Name"
-                value={
-                  productForm.name
-                }
-                onChange={(
-                  value
-                ) =>
-                  setProductForm(
-                    (
-                      current
-                    ) => ({
-                      ...current,
-                      name:
-                        value
-                    })
-                  )
-                }
-                placeholder="Butter Cake"
-              />
-
-              <Input
-                label="Variant / Size"
-                value={
-                  productForm.variantName
-                }
-                onChange={(
-                  value
-                ) =>
-                  setProductForm(
-                    (
-                      current
-                    ) => ({
-                      ...current,
-                      variantName:
-                        value
-                    })
-                  )
-                }
-                placeholder="1kg / Slice / Small"
-                required={
-                  false
-                }
-              />
-
-              <Input
-                label="Sell Price"
-                type="number"
-                value={
-                  productForm.sellPrice
-                }
-                onChange={(
-                  value
-                ) =>
-                  setProductForm(
-                    (
-                      current
-                    ) => ({
-                      ...current,
-                      sellPrice:
-                        value
-                    })
-                  )
-                }
-                placeholder="2500"
-              />
-            </div>
-          </div>
-
-          <ModalActions
-            isLoading={
-              isSavingProduct
-            }
-            onCancel={
-              closeProductModal
-            }
-            submitText={
-              editingProduct
-                ? "Save Changes"
-                : "Create Product"
-            }
-          />
-        </form>
-      </Modal>
-
-      <Modal
-        open={
           isRecipeModalOpen
         }
         onClose={
@@ -1743,7 +1657,7 @@ export function ProductsPage() {
         }
         subtitle={
           selectedProduct
-            ? `Define ingredient quantity and optional recipe image for ${selectedProduct.displayName}.`
+            ? `Define the ERP production requirement for ${selectedProduct.displayName}.`
             : ""
         }
         widthClassName="max-w-3xl"
@@ -1888,52 +1802,13 @@ export function ProductsPage() {
       <ConfirmDialog
         open={
           Boolean(
-            statusProduct
-          )
-        }
-        title={
-          statusProduct?.isActive
-            ? "Deactivate product?"
-            : "Activate product?"
-        }
-        message={
-          statusProduct?.isActive
-            ? "The product will no longer be available for new production or sale selection."
-            : "The product will become available again."
-        }
-        confirmText={
-          statusProduct?.isActive
-            ? "Deactivate"
-            : "Activate"
-        }
-        isDanger={
-          Boolean(
-            statusProduct?.isActive
-          )
-        }
-        isLoading={
-          isChangingStatus
-        }
-        onCancel={() =>
-          setStatusProduct(
-            null
-          )
-        }
-        onConfirm={
-          handleChangeProductStatus
-        }
-      />
-
-      <ConfirmDialog
-        open={
-          Boolean(
             deletingRecipeItem
           )
         }
         title="Remove recipe ingredient?"
         message={
           deletingRecipeItem
-            ? `${deletingRecipeItem.ingredientDisplayName} will be removed from this product recipe.`
+            ? `${deletingRecipeItem.ingredientDisplayName} will be removed from this product recipe. This does not change the product on the official website.`
             : ""
         }
         confirmText="Remove"

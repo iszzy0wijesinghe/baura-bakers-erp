@@ -1,3 +1,5 @@
+/** @format */
+
 import { Router } from "express";
 import { z } from "zod";
 
@@ -8,7 +10,7 @@ import { getRouteParam } from "../../lib/http";
 
 import {
   authMiddleware,
-  requireRoles
+  requirePermission,
 } from "../../middleware/auth.middleware";
 
 const router = Router();
@@ -16,13 +18,9 @@ const router = Router();
 router.use(authMiddleware);
 
 const productionSchema = z.object({
-  productId: z
-    .string()
-    .uuid("Valid product is required"),
+  productId: z.string().uuid("Valid product is required"),
 
-  plannedQty: z.coerce
-    .number()
-    .positive("Planned quantity must be positive"),
+  plannedQty: z.coerce.number().positive("Planned quantity must be positive"),
 
   producedQty: z.coerce
     .number()
@@ -30,176 +28,139 @@ const productionSchema = z.object({
 
   rejectedQty: z.coerce
     .number()
-    .min(
-      0,
-      "Rejected quantity cannot be negative"
-    )
+    .min(0, "Rejected quantity cannot be negative")
     .default(0),
 
-  productionDate: z
-    .string()
-    .trim()
-    .optional()
-    .nullable(),
+  productionDate: z.string().trim().optional().nullable(),
 
-  expiryDate: z
-    .string()
-    .trim()
-    .optional()
-    .nullable(),
+  expiryDate: z.string().trim().optional().nullable(),
 
-  notes: z
-    .string()
-    .trim()
-    .max(1000)
-    .optional()
-    .nullable()
+  notes: z.string().trim().max(1000).optional().nullable(),
 });
 
 const previewSchema = z.object({
-  productId: z
-    .string()
-    .uuid("Valid product is required"),
+  productId: z.string().uuid("Valid product is required"),
 
   producedQty: z.coerce
     .number()
     .positive("Good quantity must be greater than 0"),
 
-  rejectedQty: z.coerce
-    .number()
-    .min(0)
-    .default(0)
+  rejectedQty: z.coerce.number().min(0).default(0),
 });
 
 function round2(value: number) {
-  return Number(
-    value.toFixed(2)
-  );
+  return Number(value.toFixed(2));
 }
 
 function round3(value: number) {
-  return Number(
-    value.toFixed(3)
-  );
+  return Number(value.toFixed(3));
 }
 
 function round6(value: number) {
-  return Number(
-    value.toFixed(6)
-  );
+  return Number(value.toFixed(6));
 }
 
-function getProductDisplayName(
-  product: {
-    name: string;
-    variantName: string | null;
-  }
-) {
+function getProductDisplayName(product: {
+  name: string;
+  variantName: string | null;
+}) {
   return product.variantName
     ? `${product.name} - ${product.variantName}`
     : product.name;
 }
 
-function getIngredientDisplayName(
-  ingredient: {
-    brand: string | null;
-    name: string;
-    packageQty: unknown;
-    packageUnit: string;
-  }
-) {
-  const brand =
-    ingredient.brand
-      ? `${ingredient.brand} `
-      : "";
+function getIngredientDisplayName(ingredient: {
+  brand: string | null;
+  name: string;
+  packageQty: unknown;
+  packageUnit: string;
+}) {
+  const brand = ingredient.brand ? `${ingredient.brand} ` : "";
 
   return `${brand}${ingredient.name} ${ingredient.packageQty}${ingredient.packageUnit.toLowerCase()}`;
 }
 
 function parseOptionalDate(
-  value:
-    | string
-    | null
-    | undefined,
-  fieldName: string
+  value: string | null | undefined,
+  fieldName: string,
 ) {
   if (!value) {
     return null;
   }
 
-  const date =
-    new Date(value);
+  const date = new Date(value);
 
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    throw new Error(
-      `${fieldName} is invalid`
-    );
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`${fieldName} is invalid`);
   }
 
   return date;
 }
 
-function isExpired(
-  expiryDate: Date | null,
-  at = new Date()
-) {
-  return Boolean(
-    expiryDate &&
-      expiryDate.getTime() <
-        at.getTime()
-  );
+function isExpired(expiryDate: Date | null, at = new Date()) {
+  return Boolean(expiryDate && expiryDate.getTime() < at.getTime());
 }
 
 function sortIngredientLots<
   T extends {
     expiryDate: Date | null;
     receivedAt: Date;
-  }
+  },
 >(lots: T[]) {
-  return [...lots].sort(
-    (a, b) => {
-      if (
-        a.expiryDate &&
-        b.expiryDate
-      ) {
-        const expiryDifference =
-          a.expiryDate.getTime() -
-          b.expiryDate.getTime();
+  return [...lots].sort((a, b) => {
+    if (a.expiryDate && b.expiryDate) {
+      const expiryDifference =
+        a.expiryDate.getTime() - b.expiryDate.getTime();
 
-        if (
-          expiryDifference !== 0
-        ) {
-          return expiryDifference;
-        }
-      } else if (
-        a.expiryDate
-      ) {
-        return -1;
-      } else if (
-        b.expiryDate
-      ) {
-        return 1;
+      if (expiryDifference !== 0) {
+        return expiryDifference;
       }
-
-      return (
-        a.receivedAt.getTime() -
-        b.receivedAt.getTime()
-      );
+    } else if (a.expiryDate) {
+      return -1;
+    } else if (b.expiryDate) {
+      return 1;
     }
-  );
+
+    return a.receivedAt.getTime() - b.receivedAt.getTime();
+  });
 }
 
-async function loadProductForPlanning(
-  productId: string
-) {
+/*
+ * --------------------------------------------------------------------------
+ * LOAD CANONICAL PRODUCT FOR PRODUCTION
+ * --------------------------------------------------------------------------
+ *
+ * Production may only use products synchronized from the official Baura
+ * website.
+ *
+ * The website owns:
+ * - product identity
+ * - product name
+ * - variant / size
+ * - product image
+ * - selling price
+ * - active status
+ *
+ * ERP owns:
+ * - recipes
+ * - ingredient requirements
+ * - production
+ * - costing
+ * - finished-goods stock
+ * - POS stock movement
+ * --------------------------------------------------------------------------
+ */
+
+async function loadProductForPlanning(productId: string) {
   return prisma.product.findFirst({
     where: {
       id: productId,
-      isActive: true
+
+      isActive: true,
+
+      officialSiteProductId: {
+        not: null,
+      },
     },
 
     include: {
@@ -210,45 +171,34 @@ async function loadProductForPlanning(
               stockLots: {
                 where: {
                   remainingBaseQty: {
-                    gt: 0
-                  }
-                }
-              }
-            }
-          }
+                    gt: 0,
+                  },
+                },
+              },
+            },
+          },
         },
 
         orderBy: {
-          createdAt: "asc"
-        }
-      }
-    }
+          createdAt: "asc",
+        },
+      },
+    },
   });
 }
 
 async function calculateMaterialPlan(
-  product: Awaited<
-    ReturnType<
-      typeof loadProductForPlanning
-    >
-  >,
+  product: Awaited<ReturnType<typeof loadProductForPlanning>>,
   attemptedQty: number,
-  at = new Date()
+  at = new Date(),
 ) {
   if (!product) {
-    throw new Error(
-      "Active product not found"
-    );
+    throw new Error("Active official website product not found");
   }
 
-  if (
-    product.recipeItems.length ===
-    0
-  ) {
+  if (product.recipeItems.length === 0) {
     throw new Error(
-      `${getProductDisplayName(
-        product
-      )} does not have a recipe`
+      `${getProductDisplayName(product)} does not have a recipe`,
     );
   }
 
@@ -271,160 +221,90 @@ async function calculateMaterialPlan(
     isAvailable: boolean;
   };
 
-  const allocations:
-    Allocation[] = [];
+  const allocations: Allocation[] = [];
 
-  const requirements:
-    Requirement[] = [];
+  const requirements: Requirement[] = [];
 
-  let totalEstimatedCost =
-    0;
+  let totalEstimatedCost = 0;
 
-  let canPost =
-    true;
+  let canPost = true;
 
-  for (
-    const recipeItem of
-    product.recipeItems
-  ) {
-    const requiredBaseQty =
-      round3(
-        Number(
-          recipeItem.requiredBaseQty
-        ) *
-          attemptedQty
-      );
+  for (const recipeItem of product.recipeItems) {
+    const requiredBaseQty = round3(
+      Number(recipeItem.requiredBaseQty) * attemptedQty,
+    );
 
-    const eligibleLots =
-      sortIngredientLots(
-        recipeItem.ingredient.stockLots.filter(
-          (lot) =>
-            Number(
-              lot.remainingBaseQty
-            ) >
-              0 &&
-            !isExpired(
-              lot.expiryDate,
-              at
-            )
-        )
-      );
+    const eligibleLots = sortIngredientLots(
+      recipeItem.ingredient.stockLots.filter(
+        (lot) =>
+          Number(lot.remainingBaseQty) > 0 &&
+          !isExpired(lot.expiryDate, at),
+      ),
+    );
 
-    const availableBaseQty =
-      round3(
-        eligibleLots.reduce(
-          (
-            total,
-            lot
-          ) =>
-            total +
-            Number(
-              lot.remainingBaseQty
-            ),
-          0
-        )
-      );
+    const availableBaseQty = round3(
+      eligibleLots.reduce(
+        (total, lot) => total + Number(lot.remainingBaseQty),
+        0,
+      ),
+    );
 
-    let remainingNeed =
-      requiredBaseQty;
+    let remainingNeed = requiredBaseQty;
 
-    let ingredientEstimatedCost =
-      0;
+    let ingredientEstimatedCost = 0;
 
-    for (
-      const lot of
-      eligibleLots
-    ) {
-      if (
-        remainingNeed <= 0
-      ) {
+    for (const lot of eligibleLots) {
+      if (remainingNeed <= 0) {
         break;
       }
 
-      const available =
-        Number(
-          lot.remainingBaseQty
-        );
+      const available = Number(lot.remainingBaseQty);
 
-      const consumedQty =
-        round3(
-          Math.min(
-            remainingNeed,
-            available
-          )
-        );
+      const consumedQty = round3(Math.min(remainingNeed, available));
 
-      const unitCostBase =
-        Number(
-          lot.unitCostBase
-        );
+      const unitCostBase = Number(lot.unitCostBase);
 
-      const costAmount =
-        round2(
-          consumedQty *
-            unitCostBase
-        );
+      const costAmount = round2(consumedQty * unitCostBase);
 
       allocations.push({
-        stockLotId:
-          lot.id,
+        stockLotId: lot.id,
 
-        ingredientId:
-          recipeItem.ingredientId,
+        ingredientId: recipeItem.ingredientId,
 
-        consumedBaseQty:
-          consumedQty,
+        consumedBaseQty: consumedQty,
 
         unitCostBase,
 
-        costAmount
+        costAmount,
       });
 
-      ingredientEstimatedCost =
-        round2(
-          ingredientEstimatedCost +
-            costAmount
-        );
-
-      remainingNeed =
-        round3(
-          remainingNeed -
-            consumedQty
-        );
-    }
-
-    const shortageBaseQty =
-      round3(
-        Math.max(
-          remainingNeed,
-          0
-        )
+      ingredientEstimatedCost = round2(
+        ingredientEstimatedCost + costAmount,
       );
 
-    const isAvailable =
-      shortageBaseQty <= 0;
+      remainingNeed = round3(remainingNeed - consumedQty);
+    }
+
+    const shortageBaseQty = round3(Math.max(remainingNeed, 0));
+
+    const isAvailable = shortageBaseQty <= 0;
 
     if (!isAvailable) {
       canPost = false;
     }
 
-    totalEstimatedCost =
-      round2(
-        totalEstimatedCost +
-          ingredientEstimatedCost
-      );
+    totalEstimatedCost = round2(
+      totalEstimatedCost + ingredientEstimatedCost,
+    );
 
     requirements.push({
-      ingredientId:
-        recipeItem.ingredientId,
+      ingredientId: recipeItem.ingredientId,
 
-      ingredientDisplayName:
-        getIngredientDisplayName(
-          recipeItem.ingredient
-        ),
+      ingredientDisplayName: getIngredientDisplayName(
+        recipeItem.ingredient,
+      ),
 
-      baseUnit:
-        recipeItem.baseUnit,
+      baseUnit: recipeItem.baseUnit,
 
       requiredBaseQty,
 
@@ -432,10 +312,9 @@ async function calculateMaterialPlan(
 
       shortageBaseQty,
 
-      estimatedCost:
-        ingredientEstimatedCost,
+      estimatedCost: ingredientEstimatedCost,
 
-      isAvailable
+      isAvailable,
     });
   }
 
@@ -443,7 +322,7 @@ async function calculateMaterialPlan(
     allocations,
     requirements,
     canPost,
-    totalEstimatedCost
+    totalEstimatedCost,
   };
 }
 
@@ -451,79 +330,82 @@ async function calculateMaterialPlan(
  * --------------------------------------------------------------------------
  * PRODUCT OPTIONS FOR PRODUCTION
  * --------------------------------------------------------------------------
+ *
+ * Only active products synchronized from the official website are returned.
+ *
+ * Products without recipes are still returned so the UI can clearly show
+ * that a recipe must be configured before production.
+ * --------------------------------------------------------------------------
  */
 
 router.get(
   "/products",
+
+  requirePermission("erp.production.read"),
+
   async (_req, res) => {
     try {
-      const products =
-        await prisma.product.findMany({
-          where: {
-            isActive: true
+      const products = await prisma.product.findMany({
+        where: {
+          isActive: true,
+
+          officialSiteProductId: {
+            not: null,
           },
+        },
 
-          orderBy: [
-            {
-              name: "asc"
+        orderBy: [
+          {
+            name: "asc",
+          },
+          {
+            variantName: "asc",
+          },
+        ],
+
+        include: {
+          _count: {
+            select: {
+              recipeItems: true,
             },
-            {
-              variantName: "asc"
-            }
-          ],
-
-          include: {
-            _count: {
-              select: {
-                recipeItems: true
-              }
-            }
-          }
-        });
+          },
+        },
+      });
 
       return res.json({
-        products:
-          products.map(
-            (product) => ({
-              id:
-                product.id,
+        products: products.map((product) => ({
+          id: product.id,
 
-              name:
-                product.name,
+          officialSiteProductId: product.officialSiteProductId,
 
-              variantName:
-                product.variantName,
+          officialSiteSyncedAt: product.officialSiteSyncedAt,
 
-              displayName:
-                getProductDisplayName(
-                  product
-                ),
+          name: product.name,
 
-              sellPrice:
-                product.sellPrice,
+          variantName: product.variantName,
 
-              recipeItemCount:
-                product._count
-                  .recipeItems,
+          displayName: getProductDisplayName(product),
 
-              canProduce:
-                product._count
-                  .recipeItems >
-                0
-            })
-          )
+          imageUrl: product.imageUrl,
+
+          sellPrice: product.sellPrice,
+
+          isActive: product.isActive,
+
+          recipeItemCount: product._count.recipeItems,
+
+          canProduce: product._count.recipeItems > 0,
+        })),
       });
     } catch (error) {
-      return res
-        .status(500)
-        .json({
-          message:
-            error instanceof Error
-              ? error.message
-              : "Failed to load production products"
-        });
+      return res.status(500).json({
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to load production products",
+      });
     }
-  }
+  },
 );
 
 /*
@@ -534,97 +416,77 @@ router.get(
 
 router.post(
   "/preview",
+
+  requirePermission("erp.production.read"),
+
   async (req, res) => {
-    const parsed =
-      previewSchema.safeParse(
-        req.body
-      );
+    const parsed = previewSchema.safeParse(req.body);
 
-    if (
-      !parsed.success
-    ) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "Invalid production preview data",
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: "Invalid production preview data",
 
-          errors:
-            parsed.error.flatten()
-        });
+        errors: parsed.error.flatten(),
+      });
     }
 
     try {
-      const product =
-        await loadProductForPlanning(
-          parsed.data.productId
-        );
+      const product = await loadProductForPlanning(
+        parsed.data.productId,
+      );
 
-      const attemptedQty =
-        round3(
-          parsed.data.producedQty +
-            parsed.data.rejectedQty
-        );
+      const attemptedQty = round3(
+        parsed.data.producedQty + parsed.data.rejectedQty,
+      );
 
-      const plan =
-        await calculateMaterialPlan(
-          product,
-          attemptedQty
-        );
+      const plan = await calculateMaterialPlan(
+        product,
+        attemptedQty,
+      );
 
       return res.json({
         preview: {
-          productId:
-            parsed.data.productId,
+          productId: parsed.data.productId,
 
-          displayName:
-            product
-              ? getProductDisplayName(
-                  product
-                )
-              : "",
+          officialSiteProductId:
+            product?.officialSiteProductId ?? null,
+
+          displayName: product
+            ? getProductDisplayName(product)
+            : "",
+
+          imageUrl: product?.imageUrl ?? null,
 
           attemptedQty,
 
-          producedQty:
-            parsed.data.producedQty,
+          producedQty: parsed.data.producedQty,
 
-          rejectedQty:
-            parsed.data.rejectedQty,
+          rejectedQty: parsed.data.rejectedQty,
 
-          canPost:
-            plan.canPost,
+          canPost: plan.canPost,
 
-          totalEstimatedCost:
-            plan.totalEstimatedCost,
+          totalEstimatedCost: plan.totalEstimatedCost,
 
           estimatedUnitCost:
-            plan.canPost &&
-            parsed.data
-              .producedQty >
-              0
+            plan.canPost && parsed.data.producedQty > 0
               ? round6(
                   plan.totalEstimatedCost /
-                    parsed.data
-                      .producedQty
+                    parsed.data.producedQty,
                 )
               : null,
 
-          requirements:
-            plan.requirements
-        }
+          requirements: plan.requirements,
+        },
       });
     } catch (error) {
-      return res
-        .status(400)
-        .json({
-          message:
-            error instanceof Error
-              ? error.message
-              : "Failed to calculate production preview"
-        });
+      return res.status(400).json({
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to calculate production preview",
+      });
     }
-  }
+  },
 );
 
 /*
@@ -635,122 +497,103 @@ router.post(
 
 router.get(
   "/",
+
+  requirePermission("erp.production.read"),
+
   async (_req, res) => {
     try {
-      const batches =
-        await prisma.productionBatch.findMany({
-          orderBy: [
-            {
-              productionDate:
-                "desc"
+      const batches = await prisma.productionBatch.findMany({
+        orderBy: [
+          {
+            productionDate: "desc",
+          },
+          {
+            createdAt: "desc",
+          },
+        ],
+
+        take: 200,
+
+        include: {
+          product: true,
+
+          createdBy: {
+            select: {
+              firstName: true,
+              lastName: true,
             },
-            {
-              createdAt:
-                "desc"
-            }
-          ],
+          },
 
-          take: 200,
-
-          include: {
-            product: true,
-
-            createdBy: {
-              select: {
-                firstName: true,
-                lastName: true
-              }
+          postedBy: {
+            select: {
+              firstName: true,
+              lastName: true,
             },
+          },
 
-            postedBy: {
-              select: {
-                firstName: true,
-                lastName: true
-              }
-            },
-
-            finishedGoodsLot:
-              true
-          }
-        });
+          finishedGoodsLot: true,
+        },
+      });
 
       return res.json({
-        batches:
-          batches.map(
-            (batch) => ({
-              id:
-                batch.id,
+        batches: batches.map((batch) => ({
+          id: batch.id,
 
-              batchNo:
-                batch.batchNo,
+          batchNo: batch.batchNo,
 
-              productId:
-                batch.productId,
+          productId: batch.productId,
 
-              productDisplayName:
-                getProductDisplayName(
-                  batch.product
-                ),
+          officialSiteProductId:
+            batch.product.officialSiteProductId,
 
-              plannedQty:
-                batch.plannedQty,
+          productDisplayName: getProductDisplayName(
+            batch.product,
+          ),
 
-              producedQty:
-                batch.producedQty,
+          productImageUrl: batch.product.imageUrl,
 
-              rejectedQty:
-                batch.rejectedQty,
+          plannedQty: batch.plannedQty,
 
-              status:
-                batch.status,
+          producedQty: batch.producedQty,
 
-              productionDate:
-                batch.productionDate,
+          rejectedQty: batch.rejectedQty,
 
-              expiryDate:
-                batch.expiryDate,
+          status: batch.status,
 
-              ingredientCostTotal:
-                batch.ingredientCostTotal,
+          productionDate: batch.productionDate,
 
-              unitCost:
-                batch.unitCost,
+          expiryDate: batch.expiryDate,
 
-              notes:
-                batch.notes,
+          ingredientCostTotal: batch.ingredientCostTotal,
 
-              createdByName:
-                `${batch.createdBy.firstName} ${batch.createdBy.lastName}`,
+          unitCost: batch.unitCost,
 
-              postedByName:
-                batch.postedBy
-                  ? `${batch.postedBy.firstName} ${batch.postedBy.lastName}`
-                  : null,
+          notes: batch.notes,
 
-              postedAt:
-                batch.postedAt,
+          createdByName:
+            `${batch.createdBy.firstName} ${batch.createdBy.lastName}`,
 
-              bakeryStockRemaining:
-                batch.finishedGoodsLot
-                  ?.remainingQty ??
-                null,
+          postedByName: batch.postedBy
+            ? `${batch.postedBy.firstName} ${batch.postedBy.lastName}`
+            : null,
 
-              createdAt:
-                batch.createdAt
-            })
-          )
+          postedAt: batch.postedAt,
+
+          bakeryStockRemaining:
+            batch.finishedGoodsLot?.remainingQty ?? null,
+
+          createdAt: batch.createdAt,
+        })),
       });
     } catch (error) {
-      return res
-        .status(500)
-        .json({
-          message:
-            error instanceof Error
-              ? error.message
-              : "Failed to load production batches"
-        });
+      return res.status(500).json({
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to load production batches",
+      });
     }
-  }
+  },
 );
 
 /*
@@ -761,178 +604,141 @@ router.get(
 
 router.get(
   "/:id",
+
+  requirePermission("erp.production.read"),
+
   async (req, res) => {
     try {
-      const batchId =
-        getRouteParam(
-          req.params.id,
-          "Production batch id"
-        );
+      const batchId = getRouteParam(
+        req.params.id,
+        "Production batch id",
+      );
 
-      const batch =
-        await prisma.productionBatch.findUnique({
-          where: {
-            id:
-              batchId
+      const batch = await prisma.productionBatch.findUnique({
+        where: {
+          id: batchId,
+        },
+
+        include: {
+          product: true,
+
+          createdBy: {
+            select: {
+              firstName: true,
+              lastName: true,
+            },
           },
 
-          include: {
-            product:
-              true,
+          postedBy: {
+            select: {
+              firstName: true,
+              lastName: true,
+            },
+          },
 
-            createdBy: {
-              select: {
-                firstName: true,
-                lastName: true
-              }
+          consumptions: {
+            include: {
+              ingredient: true,
+
+              stockLot: true,
             },
 
-            postedBy: {
-              select: {
-                firstName: true,
-                lastName: true
-              }
+            orderBy: {
+              createdAt: "asc",
             },
+          },
 
-            consumptions: {
-              include: {
-                ingredient:
-                  true,
-
-                stockLot:
-                  true
-              },
-
-              orderBy: {
-                createdAt:
-                  "asc"
-              }
-            },
-
-            finishedGoodsLot:
-              true
-          }
-        });
+          finishedGoodsLot: true,
+        },
+      });
 
       if (!batch) {
-        return res
-          .status(404)
-          .json({
-            message:
-              "Production batch not found"
-          });
+        return res.status(404).json({
+          message: "Production batch not found",
+        });
       }
 
       return res.json({
         batch: {
-          id:
-            batch.id,
+          id: batch.id,
 
-          batchNo:
-            batch.batchNo,
+          batchNo: batch.batchNo,
 
-          productId:
-            batch.productId,
+          productId: batch.productId,
 
-          productDisplayName:
-            getProductDisplayName(
-              batch.product
-            ),
+          officialSiteProductId:
+            batch.product.officialSiteProductId,
 
-          plannedQty:
-            batch.plannedQty,
+          productDisplayName: getProductDisplayName(
+            batch.product,
+          ),
 
-          producedQty:
-            batch.producedQty,
+          productImageUrl: batch.product.imageUrl,
 
-          rejectedQty:
-            batch.rejectedQty,
+          sellPrice: batch.product.sellPrice,
 
-          status:
-            batch.status,
+          plannedQty: batch.plannedQty,
 
-          productionDate:
-            batch.productionDate,
+          producedQty: batch.producedQty,
 
-          expiryDate:
-            batch.expiryDate,
+          rejectedQty: batch.rejectedQty,
 
-          ingredientCostTotal:
-            batch.ingredientCostTotal,
+          status: batch.status,
 
-          unitCost:
-            batch.unitCost,
+          productionDate: batch.productionDate,
 
-          notes:
-            batch.notes,
+          expiryDate: batch.expiryDate,
+
+          ingredientCostTotal: batch.ingredientCostTotal,
+
+          unitCost: batch.unitCost,
+
+          notes: batch.notes,
 
           createdByName:
             `${batch.createdBy.firstName} ${batch.createdBy.lastName}`,
 
-          postedByName:
-            batch.postedBy
-              ? `${batch.postedBy.firstName} ${batch.postedBy.lastName}`
-              : null,
+          postedByName: batch.postedBy
+            ? `${batch.postedBy.firstName} ${batch.postedBy.lastName}`
+            : null,
 
-          postedAt:
-            batch.postedAt,
+          postedAt: batch.postedAt,
 
-          finishedGoodsLot:
-            batch.finishedGoodsLot,
+          finishedGoodsLot: batch.finishedGoodsLot,
 
-          consumptions:
-            batch.consumptions.map(
-              (
-                consumption
-              ) => ({
-                id:
-                  consumption.id,
+          consumptions: batch.consumptions.map(
+            (consumption) => ({
+              id: consumption.id,
 
-                ingredientId:
-                  consumption
-                    .ingredientId,
+              ingredientId: consumption.ingredientId,
 
-                ingredientDisplayName:
-                  getIngredientDisplayName(
-                    consumption
-                      .ingredient
-                  ),
+              ingredientDisplayName:
+                getIngredientDisplayName(
+                  consumption.ingredient,
+                ),
 
-                stockLotId:
-                  consumption
-                    .stockLotId,
+              stockLotId: consumption.stockLotId,
 
-                lotNumber:
-                  consumption
-                    .stockLot
-                    .lotNumber,
+              lotNumber: consumption.stockLot.lotNumber,
 
-                consumedBaseQty:
-                  consumption
-                    .consumedBaseQty,
+              consumedBaseQty: consumption.consumedBaseQty,
 
-                unitCostBase:
-                  consumption
-                    .unitCostBase,
+              unitCostBase: consumption.unitCostBase,
 
-                costAmount:
-                  consumption
-                    .costAmount
-              })
-            )
-        }
+              costAmount: consumption.costAmount,
+            }),
+          ),
+        },
       });
     } catch (error) {
-      return res
-        .status(400)
-        .json({
-          message:
-            error instanceof Error
-              ? error.message
-              : "Failed to load production batch"
-        });
+      return res.status(400).json({
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to load production batch",
+      });
     }
-  }
+  },
 );
 
 /*
@@ -944,242 +750,181 @@ router.get(
 router.post(
   "/",
 
-  requireRoles(
-    "ADMIN",
-    "MANAGER",
-    "PRODUCTION_STAFF"
-  ),
+  requirePermission("erp.production.create"),
 
   async (req, res) => {
-    const parsed =
-      productionSchema.safeParse(
-        req.body
-      );
+    const parsed = productionSchema.safeParse(req.body);
 
-    if (
-      !parsed.success
-    ) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "Invalid production data",
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: "Invalid production data",
 
-          errors:
-            parsed.error.flatten()
-        });
+        errors: parsed.error.flatten(),
+      });
     }
 
     if (!req.user) {
-      return res
-        .status(401)
-        .json({
-          message:
-            "Authentication required"
-        });
+      return res.status(401).json({
+        message: "Authentication required",
+      });
     }
 
     try {
       const productionDate =
         parseOptionalDate(
-          parsed.data
-            .productionDate,
-          "Production date"
-        ) ??
-        new Date();
+          parsed.data.productionDate,
+          "Production date",
+        ) ?? new Date();
 
-      const expiryDate =
-        parseOptionalDate(
-          parsed.data
-            .expiryDate,
-          "Expiry date"
-        );
+      const expiryDate = parseOptionalDate(
+        parsed.data.expiryDate,
+        "Expiry date",
+      );
 
-      if (
-        expiryDate &&
-        expiryDate <=
-          productionDate
-      ) {
+      if (expiryDate && expiryDate <= productionDate) {
         throw new Error(
-          "Expiry date must be after the production date"
+          "Expiry date must be after the production date",
         );
       }
 
-      const product =
-        await prisma.product.findFirst({
-          where: {
-            id:
-              parsed.data
-                .productId,
+      /*
+       * New production may only be created for an active,
+       * synchronized official-site product.
+       */
+      const product = await prisma.product.findFirst({
+        where: {
+          id: parsed.data.productId,
 
-            isActive:
-              true
+          isActive: true,
+
+          officialSiteProductId: {
+            not: null,
           },
+        },
 
-          include: {
-            _count: {
-              select: {
-                recipeItems:
-                  true
-              }
-            }
-          }
-        });
+        include: {
+          _count: {
+            select: {
+              recipeItems: true,
+            },
+          },
+        },
+      });
 
       if (!product) {
         throw new Error(
-          "Active product not found"
+          "Active official website product not found",
         );
       }
 
-      if (
-        product._count
-          .recipeItems ===
-        0
-      ) {
+      if (product._count.recipeItems === 0) {
         throw new Error(
-          `${getProductDisplayName(
-            product
-          )} does not have a recipe`
+          `${getProductDisplayName(product)} does not have a recipe`,
         );
       }
 
-      const batch =
-        await runSerializableTransaction(
-          async (tx) => {
-            const batchNo =
-              await nextDocumentNumber(
-                tx,
-                "PRODUCTION",
-                "PRD",
-                productionDate
-              );
+      const batch = await runSerializableTransaction(
+        async (tx) => {
+          const batchNo = await nextDocumentNumber(
+            tx,
+            "PRODUCTION",
+            "PRD",
+            productionDate,
+          );
 
-            const created =
-              await tx.productionBatch.create({
-                data: {
-                  batchNo,
+          const created = await tx.productionBatch.create({
+            data: {
+              batchNo,
 
-                  productId:
-                    parsed.data
-                      .productId,
+              productId: product.id,
 
-                  plannedQty:
-                    round3(
-                      parsed.data
-                        .plannedQty
-                    ),
+              plannedQty: round3(
+                parsed.data.plannedQty,
+              ),
 
-                  producedQty:
-                    round3(
-                      parsed.data
-                        .producedQty
-                    ),
+              producedQty: round3(
+                parsed.data.producedQty,
+              ),
 
-                  rejectedQty:
-                    round3(
-                      parsed.data
-                        .rejectedQty
-                    ),
+              rejectedQty: round3(
+                parsed.data.rejectedQty,
+              ),
 
-                  status:
-                    "DRAFT",
+              status: "DRAFT",
 
-                  productionDate,
+              productionDate,
 
-                  expiryDate,
+              expiryDate,
 
-                  notes:
-                    parsed.data
-                      .notes ||
-                    null,
+              notes: parsed.data.notes || null,
 
-                  createdById:
-                    req.user!.id
-                }
-              });
+              createdById: req.user!.id,
+            },
+          });
 
-            await tx.auditLog.create({
-              data: {
-                userId:
-                  req.user!.id,
+          await tx.auditLog.create({
+            data: {
+              userId: req.user!.id,
 
-                action:
-                  "CREATE",
+              action: "CREATE",
 
-                entityType:
-                  "ProductionBatch",
+              entityType: "ProductionBatch",
 
-                entityId:
-                  created.id,
+              entityId: created.id,
 
-                afterJson: {
-                  batchNo:
-                    created.batchNo,
+              afterJson: {
+                batchNo: created.batchNo,
 
-                  productId:
-                    created.productId,
+                productId: created.productId,
 
-                  plannedQty:
-                    String(
-                      created.plannedQty
-                    ),
+                officialSiteProductId:
+                  product.officialSiteProductId,
 
-                  producedQty:
-                    String(
-                      created.producedQty
-                    ),
+                plannedQty: String(
+                  created.plannedQty,
+                ),
 
-                  rejectedQty:
-                    String(
-                      created.rejectedQty
-                    ),
+                producedQty: String(
+                  created.producedQty,
+                ),
 
-                  status:
-                    created.status
-                }
-              }
-            });
+                rejectedQty: String(
+                  created.rejectedQty,
+                ),
 
-            return created;
-          }
-        );
+                status: created.status,
+              },
+            },
+          });
 
-      /*
-       * IMPORTANT:
-       *
-       * Do not use batch.product here.
-       *
-       * `batch` is intentionally returned as the plain
-       * ProductionBatch record from the transaction.
-       * We already loaded and validated `product` above.
-       */
-      return res
-        .status(201)
-        .json({
-          message:
-            "Production draft created",
+          return created;
+        },
+      );
 
-          batch: {
-            ...batch,
+      return res.status(201).json({
+        message: "Production draft created",
 
-            productDisplayName:
-              getProductDisplayName(
-                product
-              )
-          }
-        });
+        batch: {
+          ...batch,
+
+          officialSiteProductId:
+            product.officialSiteProductId,
+
+          productDisplayName:
+            getProductDisplayName(product),
+
+          productImageUrl: product.imageUrl,
+        },
+      });
     } catch (error) {
-      return res
-        .status(400)
-        .json({
-          message:
-            error instanceof Error
-              ? error.message
-              : "Failed to create production batch"
-        });
+      return res.status(400).json({
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to create production batch",
+      });
     }
-  }
+  },
 );
 
 /*
@@ -1187,6 +932,8 @@ router.post(
  * POST PRODUCTION
  *
  * DRAFT
+ *   ↓
+ * validate canonical official product
  *   ↓
  * consume raw ingredient lots
  *   ↓
@@ -1205,414 +952,372 @@ router.post(
 router.post(
   "/:id/post",
 
-  requireRoles(
-    "ADMIN",
-    "MANAGER",
-    "PRODUCTION_STAFF"
-  ),
+  requirePermission("erp.production.post"),
 
   async (req, res) => {
     if (!req.user) {
-      return res
-        .status(401)
-        .json({
-          message:
-            "Authentication required"
-        });
+      return res.status(401).json({
+        message: "Authentication required",
+      });
     }
 
     try {
-      const batchId =
-        getRouteParam(
-          req.params.id,
-          "Production batch id"
-        );
+      const batchId = getRouteParam(
+        req.params.id,
+        "Production batch id",
+      );
 
-      const postedBatch =
-        await runSerializableTransaction(
-          async (tx) => {
-            const batch =
-              await tx.productionBatch.findUnique({
+      const postedBatch = await runSerializableTransaction(
+        async (tx) => {
+          const batch = await tx.productionBatch.findUnique({
+            where: {
+              id: batchId,
+            },
+
+            include: {
+              product: {
+                include: {
+                  recipeItems: {
+                    include: {
+                      ingredient: {
+                        include: {
+                          stockLots: {
+                            where: {
+                              remainingBaseQty: {
+                                gt: 0,
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+
+                    orderBy: {
+                      createdAt: "asc",
+                    },
+                  },
+                },
+              },
+            },
+          });
+
+          if (!batch) {
+            throw new Error(
+              "Production batch not found",
+            );
+          }
+
+          if (batch.status !== "DRAFT") {
+            throw new Error(
+              "Only draft production batches can be posted",
+            );
+          }
+
+          /*
+           * Legacy locally-created ERP products must never enter
+           * the new canonical production flow.
+           */
+          if (
+            batch.product.officialSiteProductId ===
+            null
+          ) {
+            throw new Error(
+              "This production batch uses a legacy ERP product and cannot be posted. Create a new batch using the corresponding official website product.",
+            );
+          }
+
+          /*
+           * If the website product was deactivated after this
+           * draft was created, posting must stop.
+           */
+          if (!batch.product.isActive) {
+            throw new Error(
+              "This product is no longer active on the official website catalogue.",
+            );
+          }
+
+          const producedQty = Number(
+            batch.producedQty,
+          );
+
+          const rejectedQty = Number(
+            batch.rejectedQty,
+          );
+
+          /*
+           * Raw materials are consumed for every attempted unit.
+           *
+           * Example:
+           * 9 good + 1 rejected = ingredients consumed for 10.
+           *
+           * Only the 9 good units enter Bakery Stock.
+           */
+          const attemptedQty = round3(
+            producedQty + rejectedQty,
+          );
+
+          if (producedQty <= 0) {
+            throw new Error(
+              "Good produced quantity must be greater than 0",
+            );
+          }
+
+          if (
+            batch.product.recipeItems.length ===
+            0
+          ) {
+            throw new Error(
+              `${getProductDisplayName(batch.product)} does not have a recipe`,
+            );
+          }
+
+          /*
+           * Product, recipe and raw stock lots were loaded
+           * inside this serializable transaction.
+           */
+          const plan = await calculateMaterialPlan(
+            batch.product,
+            attemptedQty,
+            batch.productionDate,
+          );
+
+          if (!plan.canPost) {
+            const shortages = plan.requirements
+              .filter(
+                (item) => !item.isAvailable,
+              )
+              .map(
+                (item) =>
+                  `${item.ingredientDisplayName}: shortage ${item.shortageBaseQty} ${item.baseUnit}`,
+              )
+              .join("; ");
+
+            throw new Error(
+              `Not enough raw material stock. ${shortages}`,
+            );
+          }
+
+          /*
+           * Consume raw ingredient lots.
+           */
+          for (const allocation of plan.allocations) {
+            const updated =
+              await tx.ingredientStockLot.updateMany({
                 where: {
-                  id:
-                    batchId
+                  id: allocation.stockLotId,
+
+                  remainingBaseQty: {
+                    gte: allocation.consumedBaseQty,
+                  },
                 },
 
-                include: {
-                  product: {
-                    include: {
-                      recipeItems: {
-                        include: {
-                          ingredient: {
-                            include: {
-                              stockLots: {
-                                where: {
-                                  remainingBaseQty: {
-                                    gt: 0
-                                  }
-                                }
-                              }
-                            }
-                          }
-                        },
-
-                        orderBy: {
-                          createdAt:
-                            "asc"
-                        }
-                      }
-                    }
-                  }
-                }
-              });
-
-            if (!batch) {
-              throw new Error(
-                "Production batch not found"
-              );
-            }
-
-            if (
-              batch.status !==
-              "DRAFT"
-            ) {
-              throw new Error(
-                "Only draft production batches can be posted"
-              );
-            }
-
-            const producedQty =
-              Number(
-                batch.producedQty
-              );
-
-            const rejectedQty =
-              Number(
-                batch.rejectedQty
-              );
-
-            /*
-             * Raw materials are consumed for all attempted units.
-             *
-             * Example:
-             * 9 good + 1 rejected = ingredients consumed for 10.
-             *
-             * Only the 9 good units enter Bakery Stock.
-             */
-            const attemptedQty =
-              round3(
-                producedQty +
-                  rejectedQty
-              );
-
-            if (
-              producedQty <= 0
-            ) {
-              throw new Error(
-                "Good produced quantity must be greater than 0"
-              );
-            }
-
-            if (
-              batch.product
-                .recipeItems
-                .length ===
-              0
-            ) {
-              throw new Error(
-                `${getProductDisplayName(
-                  batch.product
-                )} does not have a recipe`
-              );
-            }
-
-            /*
-             * We already loaded the product, recipe and stock lots
-             * inside the serializable transaction.
-             *
-             * calculateMaterialPlan does not need to issue another
-             * database query here.
-             */
-            const plan =
-              await calculateMaterialPlan(
-                batch.product,
-                attemptedQty,
-                batch.productionDate
-              );
-
-            if (
-              !plan.canPost
-            ) {
-              const shortages =
-                plan.requirements
-                  .filter(
-                    (item) =>
-                      !item.isAvailable
-                  )
-                  .map(
-                    (item) =>
-                      `${item.ingredientDisplayName}: shortage ${item.shortageBaseQty} ${item.baseUnit}`
-                  )
-                  .join("; ");
-
-              throw new Error(
-                `Not enough raw material stock. ${shortages}`
-              );
-            }
-
-            /*
-             * Consume raw ingredient lots.
-             */
-            for (
-              const allocation of
-              plan.allocations
-            ) {
-              const updated =
-                await tx.ingredientStockLot.updateMany({
-                  where: {
-                    id:
-                      allocation.stockLotId,
-
-                    remainingBaseQty: {
-                      gte:
-                        allocation.consumedBaseQty
-                    }
+                data: {
+                  remainingBaseQty: {
+                    decrement:
+                      allocation.consumedBaseQty,
                   },
-
-                  data: {
-                    remainingBaseQty: {
-                      decrement:
-                        allocation.consumedBaseQty
-                    }
-                  }
-                });
-
-              if (
-                updated.count !==
-                1
-              ) {
-                throw new Error(
-                  "Raw material stock changed while posting production. Please retry."
-                );
-              }
-
-              await tx.productionConsumption.create({
-                data: {
-                  productionBatchId:
-                    batch.id,
-
-                  ingredientId:
-                    allocation.ingredientId,
-
-                  stockLotId:
-                    allocation.stockLotId,
-
-                  consumedBaseQty:
-                    allocation.consumedBaseQty,
-
-                  unitCostBase:
-                    allocation.unitCostBase,
-
-                  costAmount:
-                    allocation.costAmount
-                }
+                },
               });
 
-              await tx.stockMovement.create({
-                data: {
-                  ingredientId:
-                    allocation.ingredientId,
-
-                  stockLotId:
-                    allocation.stockLotId,
-
-                  movementType:
-                    "PRODUCTION",
-
-                  refType:
-                    "PRODUCTION_BATCH",
-
-                  refId:
-                    batch.id,
-
-                  qtyDelta:
-                    -allocation.consumedBaseQty,
-
-                  unitCostBase:
-                    allocation.unitCostBase,
-
-                  costAmount:
-                    allocation.costAmount,
-
-                  note:
-                    `Consumed by ${batch.batchNo}`
-                }
-              });
+            if (updated.count !== 1) {
+              throw new Error(
+                "Raw material stock changed while posting production. Please retry.",
+              );
             }
 
-            /*
-             * The entire attempted production cost is absorbed
-             * by the successful/sellable output.
-             *
-             * Example:
-             * ingredient cost for 10 attempts = Rs 1,000
-             * good output = 9
-             * unit finished-goods cost = 1000 / 9
-             */
-            const ingredientCostTotal =
-              round2(
-                plan.totalEstimatedCost
-              );
-
-            const unitCost =
-              round6(
-                ingredientCostTotal /
-                  producedQty
-              );
-
-            /*
-             * Create one finished-goods lot for this production batch.
-             */
-            const finishedGoodsLot =
-              await tx.finishedGoodsLot.create({
-                data: {
-                  productionBatchId:
-                    batch.id,
-
-                  productId:
-                    batch.productId,
-
-                  producedQty,
-
-                  remainingQty:
-                    producedQty,
-
-                  unitCost,
-
-                  producedAt:
-                    batch.productionDate,
-
-                  expiryDate:
-                    batch.expiryDate
-                }
-              });
-
-            /*
-             * Finished stock movement.
-             */
-            await tx.finishedGoodsMovement.create({
+            await tx.productionConsumption.create({
               data: {
-                productId:
-                  batch.productId,
+                productionBatchId: batch.id,
+
+                ingredientId:
+                  allocation.ingredientId,
 
                 stockLotId:
-                  finishedGoodsLot.id,
+                  allocation.stockLotId,
 
-                movementType:
-                  "PRODUCTION",
+                consumedBaseQty:
+                  allocation.consumedBaseQty,
 
-                refType:
-                  "PRODUCTION_BATCH",
+                unitCostBase:
+                  allocation.unitCostBase,
 
-                refId:
-                  batch.id,
+                costAmount:
+                  allocation.costAmount,
+              },
+            });
+
+            await tx.stockMovement.create({
+              data: {
+                ingredientId:
+                  allocation.ingredientId,
+
+                stockLotId:
+                  allocation.stockLotId,
+
+                movementType: "PRODUCTION",
+
+                refType: "PRODUCTION_BATCH",
+
+                refId: batch.id,
 
                 qtyDelta:
-                  producedQty,
+                  -allocation.consumedBaseQty,
+
+                unitCostBase:
+                  allocation.unitCostBase,
+
+                costAmount:
+                  allocation.costAmount,
+
+                note: `Consumed by ${batch.batchNo}`,
+              },
+            });
+          }
+
+          /*
+           * Rejected production has already consumed ingredients.
+           *
+           * Therefore the entire attempted-production cost is
+           * absorbed by the successful finished output.
+           *
+           * Example:
+           *
+           * Total ingredients consumed = Rs. 1,000
+           * Attempted units = 10
+           * Good units = 9
+           *
+           * Finished unit cost = 1000 / 9
+           */
+          const ingredientCostTotal = round2(
+            plan.totalEstimatedCost,
+          );
+
+          const unitCost = round6(
+            ingredientCostTotal / producedQty,
+          );
+
+          /*
+           * Create the finished-goods stock lot.
+           */
+          const finishedGoodsLot =
+            await tx.finishedGoodsLot.create({
+              data: {
+                productionBatchId: batch.id,
+
+                productId: batch.productId,
+
+                producedQty,
+
+                remainingQty: producedQty,
 
                 unitCost,
 
-                costAmount:
-                  ingredientCostTotal,
+                producedAt:
+                  batch.productionDate,
 
-                note:
-                  `Produced by ${batch.batchNo}`,
-
-                occurredAt:
-                  batch.productionDate
-              }
+                expiryDate:
+                  batch.expiryDate,
+              },
             });
 
-            /*
-             * Mark production batch as POSTED only after
-             * all stock operations succeeded.
-             */
-            const updatedBatch =
-              await tx.productionBatch.update({
-                where: {
-                  id:
-                    batch.id
-                },
+          /*
+           * Record finished-goods stock movement.
+           */
+          await tx.finishedGoodsMovement.create({
+            data: {
+              productId: batch.productId,
 
-                data: {
-                  status:
-                    "POSTED",
+              stockLotId:
+                finishedGoodsLot.id,
 
-                  ingredientCostTotal,
+              movementType: "PRODUCTION",
 
-                  unitCost,
+              refType: "PRODUCTION_BATCH",
 
-                  postedById:
-                    req.user!.id,
+              refId: batch.id,
 
-                  postedAt:
-                    new Date()
-                },
+              qtyDelta: producedQty,
 
-                include: {
-                  product:
-                    true,
+              unitCost,
 
-                  finishedGoodsLot:
-                    true
-                }
-              });
+              costAmount:
+                ingredientCostTotal,
 
-            await tx.auditLog.create({
+              note: `Produced by ${batch.batchNo}`,
+
+              occurredAt:
+                batch.productionDate,
+            },
+          });
+
+          /*
+           * Mark the batch POSTED only after all raw-stock and
+           * finished-stock operations have succeeded.
+           */
+          const updatedBatch =
+            await tx.productionBatch.update({
+              where: {
+                id: batch.id,
+              },
+
               data: {
-                userId:
-                  req.user!.id,
+                status: "POSTED",
 
-                action:
-                  "POST",
+                ingredientCostTotal,
 
-                entityType:
-                  "ProductionBatch",
+                unitCost,
 
-                entityId:
-                  batch.id,
+                postedById: req.user!.id,
 
-                afterJson: {
-                  batchNo:
-                    batch.batchNo,
+                postedAt: new Date(),
+              },
 
-                  productId:
-                    batch.productId,
+              include: {
+                product: true,
 
-                  attemptedQty,
-
-                  producedQty,
-
-                  rejectedQty,
-
-                  ingredientCostTotal,
-
-                  unitCost,
-
-                  finishedGoodsLotId:
-                    finishedGoodsLot.id
-                }
-              }
+                finishedGoodsLot: true,
+              },
             });
 
-            return updatedBatch;
-          }
-        );
+          await tx.auditLog.create({
+            data: {
+              userId: req.user!.id,
 
-      /*
-       * postedBatch.product is safe here because the update
-       * explicitly used include: { product: true }.
-       */
+              action: "POST",
+
+              entityType: "ProductionBatch",
+
+              entityId: batch.id,
+
+              afterJson: {
+                batchNo: batch.batchNo,
+
+                productId: batch.productId,
+
+                officialSiteProductId:
+                  batch.product
+                    .officialSiteProductId,
+
+                attemptedQty,
+
+                producedQty,
+
+                rejectedQty,
+
+                ingredientCostTotal,
+
+                unitCost,
+
+                finishedGoodsLotId:
+                  finishedGoodsLot.id,
+              },
+            },
+          });
+
+          return updatedBatch;
+        },
+      );
+
       return res.json({
         message:
           "Production posted and bakery stock updated",
@@ -1620,23 +1325,28 @@ router.post(
         batch: {
           ...postedBatch,
 
+          officialSiteProductId:
+            postedBatch.product
+              .officialSiteProductId,
+
           productDisplayName:
             getProductDisplayName(
-              postedBatch.product
-            )
-        }
+              postedBatch.product,
+            ),
+
+          productImageUrl:
+            postedBatch.product.imageUrl,
+        },
       });
     } catch (error) {
-      return res
-        .status(400)
-        .json({
-          message:
-            error instanceof Error
-              ? error.message
-              : "Failed to post production"
-        });
+      return res.status(400).json({
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to post production",
+      });
     }
-  }
+  },
 );
 
 /*
@@ -1648,126 +1358,93 @@ router.post(
 router.delete(
   "/:id",
 
-  requireRoles(
-    "ADMIN",
-    "MANAGER",
-    "PRODUCTION_STAFF"
-  ),
+  requirePermission("erp.production.delete"),
 
   async (req, res) => {
     if (!req.user) {
-      return res
-        .status(401)
-        .json({
-          message:
-            "Authentication required"
-        });
+      return res.status(401).json({
+        message: "Authentication required",
+      });
     }
 
     try {
-      const batchId =
-        getRouteParam(
-          req.params.id,
-          "Production batch id"
-        );
+      const batchId = getRouteParam(
+        req.params.id,
+        "Production batch id",
+      );
 
       const batch =
         await prisma.productionBatch.findUnique({
           where: {
-            id:
-              batchId
-          }
+            id: batchId,
+          },
         });
 
       if (!batch) {
-        return res
-          .status(404)
-          .json({
-            message:
-              "Production batch not found"
-          });
+        return res.status(404).json({
+          message: "Production batch not found",
+        });
       }
 
-      if (
-        batch.status !==
-        "DRAFT"
-      ) {
-        return res
-          .status(400)
-          .json({
-            message:
-              "Only draft production batches can be deleted"
-          });
+      if (batch.status !== "DRAFT") {
+        return res.status(400).json({
+          message:
+            "Only draft production batches can be deleted",
+        });
       }
 
-      await prisma.$transaction(
-        async (tx) => {
-          await tx.auditLog.create({
-            data: {
-              userId:
-                req.user!.id,
+      await prisma.$transaction(async (tx) => {
+        await tx.auditLog.create({
+          data: {
+            userId: req.user!.id,
 
-              action:
-                "DELETE_DRAFT",
+            action: "DELETE_DRAFT",
 
-              entityType:
-                "ProductionBatch",
+            entityType: "ProductionBatch",
 
-              entityId:
-                batch.id,
+            entityId: batch.id,
 
-              beforeJson: {
-                batchNo:
-                  batch.batchNo,
+            beforeJson: {
+              batchNo: batch.batchNo,
 
-                productId:
-                  batch.productId,
+              productId: batch.productId,
 
-                plannedQty:
-                  String(
-                    batch.plannedQty
-                  ),
+              plannedQty: String(
+                batch.plannedQty,
+              ),
 
-                producedQty:
-                  String(
-                    batch.producedQty
-                  ),
+              producedQty: String(
+                batch.producedQty,
+              ),
 
-                rejectedQty:
-                  String(
-                    batch.rejectedQty
-                  ),
+              rejectedQty: String(
+                batch.rejectedQty,
+              ),
 
-                status:
-                  batch.status
-              }
-            }
-          });
+              status: batch.status,
+            },
+          },
+        });
 
-          await tx.productionBatch.delete({
-            where: {
-              id:
-                batch.id
-            }
-          });
-        }
-      );
+        await tx.productionBatch.delete({
+          where: {
+            id: batch.id,
+          },
+        });
+      });
 
       return res.json({
-        message:
-          "Production draft deleted"
+        message: "Production draft deleted",
       });
     } catch (error) {
-      return res
-        .status(400)
-        .json({
-          message:
-            error instanceof Error
-              ? error.message
-              : "Failed to delete production draft"
-        });
+      return res.status(400).json({
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to delete production draft",
+      });
     }
-  }
+  },
 );
 
 export default router;

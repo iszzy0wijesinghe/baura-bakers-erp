@@ -1,39 +1,39 @@
 import {
-  Prisma
+  Prisma,
 } from "@prisma/client";
 import {
-  Router
+  Router,
 } from "express";
 import {
-  z
+  z,
 } from "zod";
+
 import {
-  getRouteParam
+  getRouteParam,
 } from "../../lib/http";
 import {
-  prisma
+  prisma,
 } from "../../lib/prisma";
 import {
-  authMiddleware
+  authMiddleware,
 } from "../../middleware/auth.middleware";
+import {
+  syncOfficialSiteProducts,
+} from "./productSync.service";
 
 const router =
   Router();
 
 router.use(
-  authMiddleware
+  authMiddleware,
 );
 
 const optionalImageUrl =
   z.preprocess(
-    (
-      value
-    ) => {
+    (value) => {
       if (
-        value ===
-          "" ||
-        value ===
-          undefined
+        value === "" ||
+        value === undefined
       ) {
         return null;
       }
@@ -43,44 +43,14 @@ const optionalImageUrl =
     z
       .string()
       .url(
-        "Image URL must be valid"
+        "Image URL must be valid",
       )
       .max(
         1200,
-        "Image URL is too long"
+        "Image URL is too long",
       )
-      .nullable()
+      .nullable(),
   );
-
-const productSchema =
-  z.object({
-    name:
-      z
-        .string()
-        .trim()
-        .min(
-          1,
-          "Product name is required"
-        ),
-
-    variantName:
-      z
-        .string()
-        .trim()
-        .optional()
-        .nullable(),
-
-    imageUrl:
-      optionalImageUrl,
-
-    sellPrice:
-      z.coerce
-        .number()
-        .min(
-          0,
-          "Sell price cannot be negative"
-        )
-  });
 
 const recipeItemSchema =
   z.object({
@@ -88,25 +58,25 @@ const recipeItemSchema =
       z
         .string()
         .uuid(
-          "Valid ingredient is required"
+          "Valid ingredient is required",
         ),
 
     requiredBaseQty:
       z.coerce
         .number()
         .positive(
-          "Required quantity must be positive"
+          "Required quantity must be positive",
         ),
 
     baseUnit:
       z.enum([
         "G",
         "ML",
-        "UNIT"
+        "UNIT",
       ]),
 
     imageUrl:
-      optionalImageUrl
+      optionalImageUrl,
   });
 
 function getIngredientDisplayName(
@@ -119,7 +89,7 @@ function getIngredientDisplayName(
       unknown;
     packageUnit:
       string;
-  }
+  },
 ) {
   const brand =
     ingredient.brand
@@ -135,7 +105,7 @@ function getProductDisplayName(
     variantName:
       | string
       | null;
-  }
+  },
 ) {
   return product.variantName
     ? `${product.name} - ${product.variantName}`
@@ -145,27 +115,55 @@ function getProductDisplayName(
 function mapProduct(
   product: {
     id: string;
+
+    officialSiteProductId:
+      | number
+      | null;
+
+    officialSiteSyncedAt:
+      | Date
+      | null;
+
     name: string;
+
     variantName:
       | string
       | null;
+
     imageUrl:
       | string
       | null;
+
     sellPrice:
       unknown;
+
     isActive: boolean;
-    createdAt: Date;
-    updatedAt: Date;
+
+    createdAt:
+      Date;
+
+    updatedAt:
+      Date;
+
     _count?: {
       recipeItems:
         number;
     };
-  }
+  },
 ) {
   return {
     id:
       product.id,
+
+    officialSiteProductId:
+      product.officialSiteProductId,
+
+    officialSiteSyncedAt:
+      product.officialSiteSyncedAt,
+
+    isOfficialSiteProduct:
+      product.officialSiteProductId !==
+      null,
 
     name:
       product.name,
@@ -178,7 +176,7 @@ function mapProduct(
 
     displayName:
       getProductDisplayName(
-        product
+        product,
       ),
 
     sellPrice:
@@ -189,30 +187,37 @@ function mapProduct(
 
     recipeItemCount:
       product._count
-        ?.recipeItems ||
+        ?.recipeItems ??
       0,
 
     createdAt:
       product.createdAt,
 
     updatedAt:
-      product.updatedAt
+      product.updatedAt,
   };
 }
 
 function mapRecipeItem(
   recipeItem: {
     id: string;
-    productId: string;
+
+    productId:
+      string;
+
     ingredientId:
       string;
+
     imageUrl:
       | string
       | null;
+
     requiredBaseQty:
       unknown;
+
     baseUnit:
       string;
+
     createdAt:
       Date;
 
@@ -220,20 +225,27 @@ function mapRecipeItem(
       brand:
         | string
         | null;
-      name: string;
+
+      name:
+        string;
+
       imageUrl:
         | string
         | null;
+
       packageQty:
         unknown;
+
       packageUnit:
         string;
+
       baseQty:
         unknown;
+
       baseUnit:
         string;
     };
-  }
+  },
 ) {
   return {
     id:
@@ -260,7 +272,7 @@ function mapRecipeItem(
 
     ingredientDisplayName:
       getIngredientDisplayName(
-        recipeItem.ingredient
+        recipeItem.ingredient,
       ),
 
     requiredBaseQty:
@@ -296,82 +308,136 @@ function mapRecipeItem(
 
       baseUnit:
         recipeItem.ingredient
-          .baseUnit
+          .baseUnit,
     },
 
     createdAt:
-      recipeItem.createdAt
+      recipeItem.createdAt,
   };
 }
 
-function isPrismaNotFoundError(
-  error: unknown
+function isPrismaUniqueError(
+  error: unknown,
 ) {
   return (
     error instanceof
       Prisma.PrismaClientKnownRequestError &&
     error.code ===
-      "P2025"
+      "P2002"
   );
 }
 
-async function findDuplicateProduct(
-  name: string,
-  variantName:
-    | string
-    | null,
-  excludeId?:
-    string
-) {
-  return prisma.product.findFirst({
-    where: {
-      name,
+/* ======================================================
+   OFFICIAL PRODUCT CATALOGUE
 
-      variantName:
-        variantName ||
-        null,
+   Product master data is owned by the official Baura
+   website.
 
-      ...(excludeId
-        ? {
-            id: {
-              not:
-                excludeId
-            }
-          }
-        : {})
+   ERP is read-only for:
+   - product name
+   - variant / size
+   - product image
+   - selling price
+   - active status
+
+   ERP remains responsible for:
+   - recipes
+   - costing
+   - production
+   - stock
+   - POS
+====================================================== */
+
+/*
+ * Synchronize this BEFORE /:id routes because otherwise
+ * Express can interpret "sync-official-site" as an id.
+ */
+router.post(
+  "/sync-official-site",
+  async (
+    _req,
+    res,
+  ) => {
+    try {
+      const sync =
+        await syncOfficialSiteProducts();
+
+      return res.json({
+        message:
+          "Official Baura product catalogue synchronized successfully.",
+
+        sync,
+      });
+    } catch (error) {
+      console.error(
+        "Official product synchronization failed:",
+        error,
+      );
+
+      return res
+        .status(502)
+        .json({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to synchronize official products",
+        });
     }
-  });
-}
+  },
+);
 
+/*
+ * ERP product listing.
+ *
+ * Only official-site products are returned.
+ * Legacy ERP-created products are intentionally excluded.
+ */
 router.get(
   "/",
   async (
     _req,
-    res
+    res,
   ) => {
     try {
       const products =
         await prisma.product.findMany({
-          orderBy: {
-            createdAt:
-              "desc"
+          where: {
+            officialSiteProductId: {
+              not:
+                null,
+            },
           },
+
+          orderBy: [
+            {
+              isActive:
+                "desc",
+            },
+            {
+              name:
+                "asc",
+            },
+            {
+              variantName:
+                "asc",
+            },
+          ],
 
           include: {
             _count: {
               select: {
                 recipeItems:
-                  true
-              }
-            }
-          }
+                  true,
+              },
+            },
+          },
         });
 
       return res.json({
         products:
           products.map(
-            mapProduct
-          )
+            mapProduct,
+          ),
       });
     } catch (error) {
       return res
@@ -380,148 +446,62 @@ router.get(
           message:
             error instanceof Error
               ? error.message
-              : "Failed to load products"
+              : "Failed to load products",
         });
     }
-  }
+  },
 );
 
-router.post(
-  "/",
-  async (
-    req,
-    res
-  ) => {
-    const parsed =
-      productSchema.safeParse(
-        req.body
-      );
-
-    if (
-      !parsed.success
-    ) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "Invalid product data",
-
-          errors:
-            parsed.error.flatten()
-        });
-    }
-
-    try {
-      const name =
-        parsed.data.name;
-
-      const variantName =
-        parsed.data.variantName
-          ?.trim() ||
-        null;
-
-      const duplicate =
-        await findDuplicateProduct(
-          name,
-          variantName
-        );
-
-      if (
-        duplicate
-      ) {
-        return res
-          .status(409)
-          .json({
-            message:
-              "Product already exists"
-          });
-      }
-
-      const product =
-        await prisma.product.create({
-          data: {
-            name,
-
-            variantName,
-
-            imageUrl:
-              parsed.data.imageUrl ||
-              null,
-
-            sellPrice:
-              parsed.data.sellPrice
-          },
-
-          include: {
-            _count: {
-              select: {
-                recipeItems:
-                  true
-              }
-            }
-          }
-        });
-
-      return res
-        .status(201)
-        .json({
-          product:
-            mapProduct(
-              product
-            )
-        });
-    } catch (error) {
-      return res
-        .status(400)
-        .json({
-          message:
-            error instanceof Error
-              ? error.message
-              : "Failed to create product"
-        });
-    }
-  }
-);
-
+/*
+ * ERP product detail.
+ *
+ * Only synchronized official products can be addressed
+ * through the ERP product API.
+ */
 router.get(
   "/:id",
   async (
     req,
-    res
+    res,
   ) => {
     try {
       const id =
         getRouteParam(
           req.params.id,
-          "Product id"
+          "Product id",
         );
 
       const product =
-        await prisma.product.findUnique({
+        await prisma.product.findFirst({
           where: {
-            id
+            id,
+
+            officialSiteProductId: {
+              not:
+                null,
+            },
           },
 
           include: {
             _count: {
               select: {
                 recipeItems:
-                  true
-              }
+                  true,
+              },
             },
 
             recipeItems: {
               include: {
                 ingredient:
-                  true
+                  true,
               },
 
               orderBy: {
                 createdAt:
-                  "desc"
-              }
-            }
-          }
+                  "desc",
+              },
+            },
+          },
         });
 
       if (
@@ -531,21 +511,21 @@ router.get(
           .status(404)
           .json({
             message:
-              "Product not found"
+              "Official product not found",
           });
       }
 
       return res.json({
         product: {
           ...mapProduct(
-            product
+            product,
           ),
 
           recipeItems:
             product.recipeItems.map(
-              mapRecipeItem
-            )
-        }
+              mapRecipeItem,
+            ),
+        },
       });
     } catch (error) {
       return res
@@ -554,298 +534,86 @@ router.get(
           message:
             error instanceof Error
               ? error.message
-              : "Failed to load product"
+              : "Failed to load product",
         });
     }
-  }
+  },
 );
 
-router.put(
-  "/:id",
-  async (
-    req,
-    res
-  ) => {
-    const parsed =
-      productSchema.safeParse(
-        req.body
-      );
+/* ======================================================
+   RECIPES
 
-    if (
-      !parsed.success
-    ) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "Invalid product data",
+   Recipes belong to ERP.
 
-          errors:
-            parsed.error.flatten()
-        });
-    }
-
-    try {
-      const id =
-        getRouteParam(
-          req.params.id,
-          "Product id"
-        );
-
-      const name =
-        parsed.data.name;
-
-      const variantName =
-        parsed.data.variantName
-          ?.trim() ||
-        null;
-
-      const duplicate =
-        await findDuplicateProduct(
-          name,
-          variantName,
-          id
-        );
-
-      if (
-        duplicate
-      ) {
-        return res
-          .status(409)
-          .json({
-            message:
-              "Product already exists"
-          });
-      }
-
-      const product =
-        await prisma.product.update({
-          where: {
-            id
-          },
-
-          data: {
-            name,
-
-            variantName,
-
-            imageUrl:
-              parsed.data.imageUrl ||
-              null,
-
-            sellPrice:
-              parsed.data.sellPrice
-          },
-
-          include: {
-            _count: {
-              select: {
-                recipeItems:
-                  true
-              }
-            }
-          }
-        });
-
-      return res.json({
-        product:
-          mapProduct(
-            product
-          )
-      });
-    } catch (error) {
-      if (
-        isPrismaNotFoundError(
-          error
-        )
-      ) {
-        return res
-          .status(404)
-          .json({
-            message:
-              "Product not found"
-          });
-      }
-
-      return res
-        .status(400)
-        .json({
-          message:
-            error instanceof Error
-              ? error.message
-              : "Failed to update product"
-        });
-    }
-  }
-);
-
-router.patch(
-  "/:id/activate",
-  async (
-    req,
-    res
-  ) => {
-    try {
-      const id =
-        getRouteParam(
-          req.params.id,
-          "Product id"
-        );
-
-      const product =
-        await prisma.product.update({
-          where: {
-            id
-          },
-
-          data: {
-            isActive:
-              true
-          },
-
-          include: {
-            _count: {
-              select: {
-                recipeItems:
-                  true
-              }
-            }
-          }
-        });
-
-      return res.json({
-        product:
-          mapProduct(
-            product
-          )
-      });
-    } catch (error) {
-      if (
-        isPrismaNotFoundError(
-          error
-        )
-      ) {
-        return res
-          .status(404)
-          .json({
-            message:
-              "Product not found"
-          });
-      }
-
-      return res
-        .status(400)
-        .json({
-          message:
-            error instanceof Error
-              ? error.message
-              : "Failed to activate product"
-        });
-    }
-  }
-);
-
-router.patch(
-  "/:id/deactivate",
-  async (
-    req,
-    res
-  ) => {
-    try {
-      const id =
-        getRouteParam(
-          req.params.id,
-          "Product id"
-        );
-
-      const product =
-        await prisma.product.update({
-          where: {
-            id
-          },
-
-          data: {
-            isActive:
-              false
-          },
-
-          include: {
-            _count: {
-              select: {
-                recipeItems:
-                  true
-              }
-            }
-          }
-        });
-
-      return res.json({
-        product:
-          mapProduct(
-            product
-          )
-      });
-    } catch (error) {
-      if (
-        isPrismaNotFoundError(
-          error
-        )
-      ) {
-        return res
-          .status(404)
-          .json({
-            message:
-              "Product not found"
-          });
-      }
-
-      return res
-        .status(400)
-        .json({
-          message:
-            error instanceof Error
-              ? error.message
-              : "Failed to deactivate product"
-        });
-    }
-  }
-);
+   They can only be attached to products synchronized
+   from the official website.
+====================================================== */
 
 router.get(
   "/:id/recipe",
   async (
     req,
-    res
+    res,
   ) => {
     try {
       const productId =
         getRouteParam(
           req.params.id,
-          "Product id"
+          "Product id",
         );
+
+      const product =
+        await prisma.product.findFirst({
+          where: {
+            id:
+              productId,
+
+            officialSiteProductId: {
+              not:
+                null,
+            },
+          },
+
+          select: {
+            id:
+              true,
+          },
+        });
+
+      if (
+        !product
+      ) {
+        return res
+          .status(404)
+          .json({
+            message:
+              "Official product not found",
+          });
+      }
 
       const recipeItems =
         await prisma.productRecipeItem.findMany({
           where: {
-            productId
+            productId:
+              product.id,
           },
 
           include: {
             ingredient:
-              true
+              true,
           },
 
           orderBy: {
             createdAt:
-              "desc"
-          }
+              "desc",
+          },
         });
 
       return res.json({
         recipeItems:
           recipeItems.map(
-            mapRecipeItem
-          )
+            mapRecipeItem,
+          ),
       });
     } catch (error) {
       return res
@@ -854,21 +622,21 @@ router.get(
           message:
             error instanceof Error
               ? error.message
-              : "Failed to load recipe"
+              : "Failed to load recipe",
         });
     }
-  }
+  },
 );
 
 router.post(
   "/:id/recipe-items",
   async (
     req,
-    res
+    res,
   ) => {
     const parsed =
       recipeItemSchema.safeParse(
-        req.body
+        req.body,
       );
 
     if (
@@ -881,7 +649,7 @@ router.post(
             "Invalid recipe item data",
 
           errors:
-            parsed.error.flatten()
+            parsed.error.flatten(),
         });
     }
 
@@ -889,15 +657,28 @@ router.post(
       const productId =
         getRouteParam(
           req.params.id,
-          "Product id"
+          "Product id",
         );
 
       const product =
-        await prisma.product.findUnique({
+        await prisma.product.findFirst({
           where: {
             id:
-              productId
-          }
+              productId,
+
+            officialSiteProductId: {
+              not:
+                null,
+            },
+          },
+
+          select: {
+            id:
+              true,
+
+            isActive:
+              true,
+          },
         });
 
       if (
@@ -907,7 +688,18 @@ router.post(
           .status(404)
           .json({
             message:
-              "Product not found"
+              "Official product not found",
+          });
+      }
+
+      if (
+        !product.isActive
+      ) {
+        return res
+          .status(409)
+          .json({
+            message:
+              "Cannot modify the recipe of an inactive official product",
           });
       }
 
@@ -915,8 +707,8 @@ router.post(
         await prisma.ingredient.findUnique({
           where: {
             id:
-              parsed.data.ingredientId
-          }
+              parsed.data.ingredientId,
+          },
         });
 
       if (
@@ -927,7 +719,7 @@ router.post(
           .status(404)
           .json({
             message:
-              "Active ingredient not found"
+              "Active ingredient not found",
           });
       }
 
@@ -939,7 +731,7 @@ router.post(
           .status(400)
           .json({
             message:
-              `Unit mismatch. This ingredient uses ${ingredient.baseUnit}.`
+              `Unit mismatch. This ingredient uses ${ingredient.baseUnit}.`,
           });
       }
 
@@ -960,13 +752,13 @@ router.post(
               parsed.data.requiredBaseQty,
 
             baseUnit:
-              parsed.data.baseUnit
+              parsed.data.baseUnit,
           },
 
           include: {
             ingredient:
-              true
-          }
+              true,
+          },
         });
 
       return res
@@ -974,21 +766,20 @@ router.post(
         .json({
           recipeItem:
             mapRecipeItem(
-              recipeItem
-            )
+              recipeItem,
+            ),
         });
     } catch (error) {
       if (
-        error instanceof
-          Prisma.PrismaClientKnownRequestError &&
-        error.code ===
-          "P2002"
+        isPrismaUniqueError(
+          error,
+        )
       ) {
         return res
           .status(409)
           .json({
             message:
-              "This ingredient is already added to the recipe"
+              "This ingredient is already added to the recipe",
           });
       }
 
@@ -998,21 +789,21 @@ router.post(
           message:
             error instanceof Error
               ? error.message
-              : "Failed to add recipe item"
+              : "Failed to add recipe item",
         });
     }
-  }
+  },
 );
 
 router.put(
   "/:id/recipe-items/:recipeItemId",
   async (
     req,
-    res
+    res,
   ) => {
     const parsed =
       recipeItemSchema.safeParse(
-        req.body
+        req.body,
       );
 
     if (
@@ -1025,7 +816,7 @@ router.put(
             "Invalid recipe item data",
 
           errors:
-            parsed.error.flatten()
+            parsed.error.flatten(),
         });
     }
 
@@ -1033,21 +824,64 @@ router.put(
       const productId =
         getRouteParam(
           req.params.id,
-          "Product id"
+          "Product id",
         );
 
       const recipeItemId =
         getRouteParam(
           req.params.recipeItemId,
-          "Recipe item id"
+          "Recipe item id",
         );
+
+      const product =
+        await prisma.product.findFirst({
+          where: {
+            id:
+              productId,
+
+            officialSiteProductId: {
+              not:
+                null,
+            },
+          },
+
+          select: {
+            id:
+              true,
+
+            isActive:
+              true,
+          },
+        });
+
+      if (
+        !product
+      ) {
+        return res
+          .status(404)
+          .json({
+            message:
+              "Official product not found",
+          });
+      }
+
+      if (
+        !product.isActive
+      ) {
+        return res
+          .status(409)
+          .json({
+            message:
+              "Cannot modify the recipe of an inactive official product",
+          });
+      }
 
       const ingredient =
         await prisma.ingredient.findUnique({
           where: {
             id:
-              parsed.data.ingredientId
-          }
+              parsed.data.ingredientId,
+          },
         });
 
       if (
@@ -1058,7 +892,7 @@ router.put(
           .status(404)
           .json({
             message:
-              "Active ingredient not found"
+              "Active ingredient not found",
           });
       }
 
@@ -1070,7 +904,7 @@ router.put(
           .status(400)
           .json({
             message:
-              `Unit mismatch. This ingredient uses ${ingredient.baseUnit}.`
+              `Unit mismatch. This ingredient uses ${ingredient.baseUnit}.`,
           });
       }
 
@@ -1080,8 +914,9 @@ router.put(
             id:
               recipeItemId,
 
-            productId
-          }
+            productId:
+              product.id,
+          },
         });
 
       if (
@@ -1091,7 +926,7 @@ router.put(
           .status(404)
           .json({
             message:
-              "Recipe item not found"
+              "Recipe item not found",
           });
       }
 
@@ -1099,7 +934,7 @@ router.put(
         await prisma.productRecipeItem.update({
           where: {
             id:
-              existing.id
+              existing.id,
           },
 
           data: {
@@ -1114,33 +949,32 @@ router.put(
               parsed.data.requiredBaseQty,
 
             baseUnit:
-              parsed.data.baseUnit
+              parsed.data.baseUnit,
           },
 
           include: {
             ingredient:
-              true
-          }
+              true,
+          },
         });
 
       return res.json({
         recipeItem:
           mapRecipeItem(
-            recipeItem
-          )
+            recipeItem,
+          ),
       });
     } catch (error) {
       if (
-        error instanceof
-          Prisma.PrismaClientKnownRequestError &&
-        error.code ===
-          "P2002"
+        isPrismaUniqueError(
+          error,
+        )
       ) {
         return res
           .status(409)
           .json({
             message:
-              "This ingredient is already added to the recipe"
+              "This ingredient is already added to the recipe",
           });
       }
 
@@ -1150,30 +984,73 @@ router.put(
           message:
             error instanceof Error
               ? error.message
-              : "Failed to update recipe item"
+              : "Failed to update recipe item",
         });
     }
-  }
+  },
 );
 
 router.delete(
   "/:id/recipe-items/:recipeItemId",
   async (
     req,
-    res
+    res,
   ) => {
     try {
       const productId =
         getRouteParam(
           req.params.id,
-          "Product id"
+          "Product id",
         );
 
       const recipeItemId =
         getRouteParam(
           req.params.recipeItemId,
-          "Recipe item id"
+          "Recipe item id",
         );
+
+      const product =
+        await prisma.product.findFirst({
+          where: {
+            id:
+              productId,
+
+            officialSiteProductId: {
+              not:
+                null,
+            },
+          },
+
+          select: {
+            id:
+              true,
+
+            isActive:
+              true,
+          },
+        });
+
+      if (
+        !product
+      ) {
+        return res
+          .status(404)
+          .json({
+            message:
+              "Official product not found",
+          });
+      }
+
+      if (
+        !product.isActive
+      ) {
+        return res
+          .status(409)
+          .json({
+            message:
+              "Cannot modify the recipe of an inactive official product",
+          });
+      }
 
       const deleted =
         await prisma.productRecipeItem.deleteMany({
@@ -1181,8 +1058,9 @@ router.delete(
             id:
               recipeItemId,
 
-            productId
-          }
+            productId:
+              product.id,
+          },
         });
 
       if (
@@ -1193,13 +1071,13 @@ router.delete(
           .status(404)
           .json({
             message:
-              "Recipe item not found"
+              "Recipe item not found",
           });
       }
 
       return res.json({
         message:
-          "Recipe item removed"
+          "Recipe item removed",
       });
     } catch (error) {
       return res
@@ -1208,33 +1086,42 @@ router.delete(
           message:
             error instanceof Error
               ? error.message
-              : "Failed to remove recipe item"
+              : "Failed to remove recipe item",
         });
     }
-  }
+  },
 );
+
+/* ======================================================
+   COST PREVIEW
+====================================================== */
 
 router.get(
   "/:id/cost-preview",
   async (
     req,
-    res
+    res,
   ) => {
     try {
       const productId =
         getRouteParam(
           req.params.id,
-          "Product id"
+          "Product id",
         );
 
       const now =
         new Date();
 
       const product =
-        await prisma.product.findUnique({
+        await prisma.product.findFirst({
           where: {
             id:
-              productId
+              productId,
+
+            officialSiteProductId: {
+              not:
+                null,
+            },
           },
 
           include: {
@@ -1245,20 +1132,21 @@ router.get(
                     stockLots: {
                       where: {
                         remainingBaseQty: {
-                          gt: 0
-                        }
-                      }
-                    }
-                  }
-                }
+                          gt:
+                            0,
+                        },
+                      },
+                    },
+                  },
+                },
               },
 
               orderBy: {
                 createdAt:
-                  "asc"
-              }
-            }
-          }
+                  "asc",
+              },
+            },
+          },
         });
 
       if (
@@ -1268,7 +1156,7 @@ router.get(
           .status(404)
           .json({
             message:
-              "Product not found"
+              "Official product not found",
           });
       }
 
@@ -1278,11 +1166,11 @@ router.get(
       const lines =
         product.recipeItems.map(
           (
-            recipeItem
+            recipeItem,
           ) => {
             const requiredQty =
               Number(
-                recipeItem.requiredBaseQty
+                recipeItem.requiredBaseQty,
               );
 
             let remainingNeed =
@@ -1294,17 +1182,15 @@ router.get(
             const eligibleLots =
               recipeItem.ingredient.stockLots
                 .filter(
-                  (
-                    lot
-                  ) =>
+                  (lot) =>
                     !lot.expiryDate ||
                     lot.expiryDate.getTime() >=
-                      now.getTime()
+                      now.getTime(),
                 )
                 .sort(
                   (
                     first,
-                    second
+                    second,
                   ) => {
                     if (
                       first.expiryDate &&
@@ -1334,12 +1220,12 @@ router.get(
                       first.receivedAt.getTime() -
                       second.receivedAt.getTime()
                     );
-                  }
+                  },
                 );
 
             for (
-              const lot of
-              eligibleLots
+              const lot
+              of eligibleLots
             ) {
               if (
                 remainingNeed <=
@@ -1350,18 +1236,18 @@ router.get(
 
               const availableQty =
                 Number(
-                  lot.remainingBaseQty
+                  lot.remainingBaseQty,
                 );
 
               const takeQty =
                 Math.min(
                   remainingNeed,
-                  availableQty
+                  availableQty,
                 );
 
               const unitCostBase =
                 Number(
-                  lot.unitCostBase
+                  lot.unitCostBase,
                 );
 
               ingredientCost +=
@@ -1384,7 +1270,7 @@ router.get(
 
               ingredientDisplayName:
                 getIngredientDisplayName(
-                  recipeItem.ingredient
+                  recipeItem.ingredient,
                 ),
 
               imageUrl:
@@ -1409,8 +1295,8 @@ router.get(
               estimatedCost:
                 Number(
                   ingredientCost.toFixed(
-                    2
-                  )
+                    2,
+                  ),
                 ),
 
               availableBaseQty:
@@ -1419,40 +1305,40 @@ router.get(
                     requiredQty -
                     Math.max(
                       remainingNeed,
-                      0
+                      0,
                     )
                   ).toFixed(
-                    3
-                  )
+                    3,
+                  ),
                 ),
 
               shortageBaseQty:
                 Number(
                   Math.max(
                     remainingNeed,
-                    0
+                    0,
                   ).toFixed(
-                    3
-                  )
+                    3,
+                  ),
                 ),
 
               isAvailable:
                 remainingNeed <=
-                0
+                0,
             };
-          }
+          },
         );
 
       const sellPrice =
         Number(
-          product.sellPrice
+          product.sellPrice,
         );
 
       const roundedCurrentCost =
         Number(
           currentCost.toFixed(
-            2
-          )
+            2,
+          ),
         );
 
       const estimatedProfit =
@@ -1461,8 +1347,8 @@ router.get(
             sellPrice -
             roundedCurrentCost
           ).toFixed(
-            2
-          )
+            2,
+          ),
         );
 
       return res.json({
@@ -1488,8 +1374,8 @@ router.get(
                     ) *
                     100
                   ).toFixed(
-                    2
-                  )
+                    2,
+                  ),
                 )
               : 0,
 
@@ -1498,14 +1384,12 @@ router.get(
               .length >
               0 &&
             lines.every(
-              (
-                line
-              ) =>
-                line.isAvailable
+              (line) =>
+                line.isAvailable,
             ),
 
-          lines
-        }
+          lines,
+        },
       });
     } catch (error) {
       return res
@@ -1514,10 +1398,10 @@ router.get(
           message:
             error instanceof Error
               ? error.message
-              : "Failed to calculate cost preview"
+              : "Failed to calculate cost preview",
         });
     }
-  }
+  },
 );
 
 export default router;

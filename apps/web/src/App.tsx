@@ -13,42 +13,43 @@ import {
 import {
   AnalyticsPage,
 } from "./pages/AnalyticsPage";
-
 import {
   BakeryStockPage,
 } from "./pages/BakeryStockPage";
-
 import {
   CartersPage,
 } from "./pages/CartersPage";
-
 import {
   DashboardPage,
 } from "./pages/DashboardPage";
-
 import {
   IngredientsPage,
 } from "./pages/IngredientsPage";
-
 import {
   LoginPage,
 } from "./pages/LoginPage";
-
 import {
   PosPage,
 } from "./pages/PosPage";
-
 import {
   ProductionPage,
 } from "./pages/ProductionPage";
-
 import {
   ProductsPage,
 } from "./pages/ProductsPage";
-
 import {
   SettingsPage,
 } from "./pages/SettingsPage";
+
+import {
+  PosLoginPage,
+} from "./pages/pos/PosLoginPage";
+import {
+  PosRegisterPage,
+} from "./pages/pos/PosRegisterPage";
+import {
+  StandalonePosPage,
+} from "./pages/pos/StandalonePosPage";
 
 function App() {
   return (
@@ -63,12 +64,55 @@ function App() {
         }
       />
 
+      {/* ------------------------------------------------ */}
+      {/* AUTH                                             */}
+      {/* ------------------------------------------------ */}
+
       <Route
         path="/login"
         element={
           <LoginPage />
         }
       />
+
+      <Route
+        path="/pos/login"
+        element={
+          <PosLoginPage />
+        }
+      />
+
+      {/* ------------------------------------------------ */}
+      {/* STANDALONE POS                                   */}
+      {/* ------------------------------------------------ */}
+
+      <Route
+        path="/pos/register"
+        element={
+          <ProtectedRoute
+            permission="erp.pos.access"
+            requirePosAccess
+          >
+            <PosRegisterPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/pos"
+        element={
+          <ProtectedRoute
+            permission="erp.pos.access"
+            requirePosAccess
+          >
+            <StandalonePosPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* ------------------------------------------------ */}
+      {/* ERP                                              */}
+      {/* ------------------------------------------------ */}
 
       <Route
         path="/dashboard"
@@ -155,8 +199,15 @@ function App() {
         }
       />
 
+      {/*
+       * ERP-side POS management.
+       *
+       * This is deliberately separate
+       * from /pos, which is the actual
+       * cashier interface.
+       */}
       <Route
-        path="/pos"
+        path="/dashboard/pos"
         element={
           <ProtectedRoute
             permission="erp.pos.access"
@@ -191,6 +242,10 @@ function App() {
           </ProtectedRoute>
         }
       />
+
+      {/* ------------------------------------------------ */}
+      {/* FALLBACK                                         */}
+      {/* ------------------------------------------------ */}
 
       <Route
         path="*"

@@ -102,6 +102,52 @@ enum PosApprovalStatus {
   EXPIRED
 }
 
+enum PosSessionStatus {
+  OPEN
+  CLOSING
+  PENDING_APPROVAL
+  CLOSED
+}
+
+enum PosPaymentStatus {
+  PENDING
+  COMPLETED
+  VOIDED
+  REFUNDED
+}
+
+enum PosCashMovementType {
+  OPENING_FLOAT
+  CASH_IN
+  CASH_OUT
+  REFUND
+  ADJUSTMENT
+}
+
+enum PosCountType {
+  OPENING
+  CLOSING
+}
+
+enum DayEndStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum BusinessCalendarExceptionType {
+  CLOSED
+  SPECIAL_HOURS
+}
+
+enum ReceiptEmailStatus {
+  NOT_REQUESTED
+  PENDING
+  SENT
+  FAILED
+}
+
 model User {
   id                 String   @id @default(uuid()) @db.Char(36)
   officialSiteUserId Int?     @unique
@@ -124,6 +170,14 @@ model User {
 
   posApprovalsRequested PosApproval[] @relation("PosApprovalRequestedBy")
   posApprovalsApproved  PosApproval[] @relation("PosApprovalApprovedBy")
+
+  posSessionsOpened   PosSession[]               @relation("PosSessionOpenedBy")
+  posSessionsClosed   PosSession[]               @relation("PosSessionClosedBy")
+  posCashMovements    PosCashMovement[]
+  posCashCounts       PosCashDenominationCount[]
+  posDayEndsSubmitted PosDayEnd[]                @relation("PosDayEndSubmittedBy")
+  posDayEndsApproved  PosDayEnd[]                @relation("PosDayEndApprovedBy")
+  posPaymentsCreated  PosPayment[]               @relation("PosPaymentCreatedBy")
 
   @@index([isActive])
 }
@@ -195,11 +249,6 @@ model Ingredient {
   @@index([isActive])
 }
 
-/**
- * LEGACY CARTER TABLES
- * These stay temporarily so old data is not destroyed.
- * New purchases will eventually use GoodsReceipt / GRN.
- */
 model PurchaseCarter {
   id           String   @id @default(uuid()) @db.Char(36)
   carterNo     String   @unique
@@ -233,11 +282,6 @@ model PurchaseCarterItem {
   @@index([ingredientId])
 }
 
-/**
- * NEW GRN SYSTEM
- * Draft GRNs do not change stock.
- * Stock will only increase when a GRN is POSTED.
- */
 model GoodsReceipt {
   id                String             @id @default(uuid()) @db.Char(36)
   grnNo             String             @unique
@@ -291,12 +335,6 @@ model GoodsReceiptItem {
   @@index([expiryDate])
 }
 
-/**
- * RAW INGREDIENT STOCK
- * A stock lot can come from:
- * - legacy Carter
- * - new GRN
- */
 model IngredientStockLot {
   id                 String    @id @default(uuid()) @db.Char(36)
   carterItemId       String?   @db.Char(36)
@@ -339,12 +377,6 @@ model StockMovement {
   ingredient Ingredient          @relation(fields: [ingredientId], references: [id])
   stockLot   IngredientStockLot? @relation(fields: [stockLotId], references: [id])
 
-  /**
-   * Do NOT add @@index([stockLotId]) here.
-   * MySQL already created the FK-supporting index and Prisma was
-   * attempting to rename/redefine it, which caused:
-   * Can't DROP INDEX StockMovement_stockLotId_fkey
-   */
   @@index([ingredientId])
   @@index([movementType])
   @@index([occurredAt])
@@ -354,9 +386,6 @@ model StockMovement {
 model Product {
   id String @id @default(uuid()) @db.Char(36)
 
-  // Canonical product identity from the Baura website/Laravel backend.
-  // ERP keeps its UUID as the operational foreign key so existing
-  // recipes, production, stock and sales relationships remain safe.
   officialSiteProductId Int? @unique
 
   name        String
@@ -364,13 +393,10 @@ model Product {
   imageUrl    String? @db.VarChar(1000)
   sellPrice   Decimal @db.Decimal(12, 2)
 
-  // ERP-owned operational setting.
-  // This must not be overwritten by website catalogue synchronization.
   finishedStockAlertQty Decimal? @db.Decimal(12, 3)
 
   isActive Boolean @default(true)
 
-  // Catalogue synchronization metadata.
   officialSiteSyncedAt DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
@@ -404,15 +430,6 @@ model ProductRecipeItem {
   @@index([ingredientId])
 }
 
-/**
- * PRODUCTION
- * This is the new middle layer:
- * Raw Ingredients
- * ↓
- * Production Batch
- * ↓
- * Bakery Stock
- */
 model ProductionBatch {
   id                  String           @id @default(uuid()) @db.Char(36)
   batchNo             String           @unique
@@ -443,9 +460,6 @@ model ProductionBatch {
   @@index([status])
 }
 
-/**
- * Exact raw material lots consumed by a production batch.
- */
 model ProductionConsumption {
   id                String   @id @default(uuid()) @db.Char(36)
   productionBatchId String   @db.Char(36)
@@ -465,10 +479,6 @@ model ProductionConsumption {
   @@index([stockLotId])
 }
 
-/**
- * BAKERY STOCK / FINISHED GOODS
- * This is what POS will sell.
- */
 model FinishedGoodsLot {
   id                String    @id @default(uuid()) @db.Char(36)
   productionBatchId String    @unique @db.Char(36)
@@ -523,26 +533,48 @@ model SalesChannel {
 }
 
 model SalesOrder {
-  id             String        @id @default(uuid()) @db.Char(36)
-  orderNo        String        @unique
-  salesChannelId String?       @db.Char(36)
-  saleType       SaleType      @default(POS)
-  paymentMethod  PaymentMethod @default(CASH)
-  grossTotal     Decimal       @default(0) @db.Decimal(12, 2)
-  discountTotal  Decimal       @default(0) @db.Decimal(12, 2)
-  netTotal       Decimal       @default(0) @db.Decimal(12, 2)
-  cogsTotal      Decimal       @default(0) @db.Decimal(12, 2)
-  profitTotal    Decimal       @default(0) @db.Decimal(12, 2)
-  status         SaleStatus    @default(COMPLETED)
-  createdById    String?       @db.Char(36)
-  soldAt         DateTime      @default(now())
-  createdAt      DateTime      @default(now())
+  id                    String             @id @default(uuid()) @db.Char(36)
+  orderNo               String             @unique
+  salesChannelId        String?            @db.Char(36)
+  posSessionId          String?            @db.Char(36)
+  saleType              SaleType           @default(POS)
+  paymentMethod         PaymentMethod      @default(CASH)
+  grossTotal            Decimal            @default(0) @db.Decimal(12, 2)
+  discountTotal         Decimal            @default(0) @db.Decimal(12, 2)
+  netTotal              Decimal            @default(0) @db.Decimal(12, 2)
+  cogsTotal             Decimal            @default(0) @db.Decimal(12, 2)
+  profitTotal           Decimal            @default(0) @db.Decimal(12, 2)
+  status                SaleStatus         @default(COMPLETED)
+  createdById           String?            @db.Char(36)
+  officialCustomerId    Int?
+  customerNameSnapshot  String?            @db.VarChar(191)
+  customerPhoneSnapshot String?            @db.VarChar(32)
+  customerEmailSnapshot String?            @db.VarChar(191)
+  receiptEmail          String?            @db.VarChar(191)
+  receiptEmailStatus    ReceiptEmailStatus @default(NOT_REQUESTED)
+  receiptEmailSentAt    DateTime?
+  receiptEmailLastError String?            @db.VarChar(1000)
+  idempotencyKey        String?            @unique @db.VarChar(191)
+  originalSaleId        String?            @db.Char(36)
+  reversalReason        String?            @db.VarChar(500)
+  reversedAt            DateTime?
+  soldAt                DateTime           @default(now())
+  createdAt             DateTime           @default(now())
 
   salesChannel SalesChannel? @relation(fields: [salesChannelId], references: [id])
   createdBy    User?         @relation("SaleCreatedBy", fields: [createdById], references: [id])
+  posSession   PosSession?   @relation(fields: [posSessionId], references: [id], onDelete: Restrict)
+
+  originalSale SalesOrder?  @relation("SaleReversal", fields: [originalSaleId], references: [id], onDelete: Restrict)
+  reversals    SalesOrder[] @relation("SaleReversal")
+
   items        SaleItem[]
+  payments     PosPayment[]
   posApprovals PosApproval[]
 
+  @@index([posSessionId])
+  @@index([officialCustomerId])
+  @@index([originalSaleId])
   @@index([soldAt])
   @@index([status])
 }
@@ -569,11 +601,6 @@ model SaleItem {
   @@index([productId])
 }
 
-/**
- * LEGACY POS -> RAW INGREDIENT CONSUMPTION
- * Retained only for historical compatibility.
- * Once Bakery Stock POS is fully live, new sales will stop writing here.
- */
 model SaleItemFifoConsumption {
   id              String   @id @default(uuid()) @db.Char(36)
   saleItemId      String   @db.Char(36)
@@ -593,9 +620,6 @@ model SaleItemFifoConsumption {
   @@index([ingredientId])
 }
 
-/**
- * NEW POS -> BAKERY STOCK CONSUMPTION
- */
 model SaleFinishedGoodsConsumption {
   id                 String   @id @default(uuid()) @db.Char(36)
   saleItemId         String   @db.Char(36)
@@ -616,9 +640,201 @@ model SaleFinishedGoodsConsumption {
 }
 
 /**
- * Atomic number sequences.
- * Replaces count() + 1.
+ * Backend-authoritative normal weekly shop schedule.
+ * weekday uses ISO-8601:
+ * Monday = 1
+ * ...
+ * Sunday = 7
+ * openingTime/closingTime use HH:mm.
  */
+model BusinessWeeklySchedule {
+  id          String   @id @default(uuid()) @db.Char(36)
+  weekday     Int      @unique @db.UnsignedTinyInt
+  isOpen      Boolean  @default(true)
+  openingTime String?  @db.VarChar(5)
+  closingTime String?  @db.VarChar(5)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/**
+ * Date-specific shop-calendar override.
+ * CLOSED ignores opening/closing times.
+ * SPECIAL_HOURS requires opening/closing times at application level.
+ */
+model BusinessCalendarException {
+  id          String                        @id @default(uuid()) @db.Char(36)
+  date        DateTime                      @unique @db.Date
+  type        BusinessCalendarExceptionType
+  openingTime String?                       @db.VarChar(5)
+  closingTime String?                       @db.VarChar(5)
+  reason      String?                       @db.VarChar(500)
+  createdAt   DateTime                      @default(now())
+  updatedAt   DateTime                      @updatedAt
+
+  @@index([type])
+}
+
+/**
+ * POS business session.
+ * Sales are only allowed against an OPEN session.
+ * Calendar date and business date are intentionally separate concepts.
+ */
+model PosSession {
+  id               String           @id @default(uuid()) @db.Char(36)
+  sessionNo        String           @unique
+  businessDate     DateTime         @db.Date
+  status           PosSessionStatus @default(OPEN)
+  openedById       String           @db.Char(36)
+  openedAt         DateTime         @default(now())
+  openingFloat     Decimal          @default(0) @db.Decimal(14, 2)
+  openingNote      String?          @db.VarChar(500)
+  closingStartedAt DateTime?
+  closedById       String?          @db.Char(36)
+  closedAt         DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  openedBy User  @relation("PosSessionOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
+  closedBy User? @relation("PosSessionClosedBy", fields: [closedById], references: [id], onDelete: Restrict)
+
+  salesOrders   SalesOrder[]
+  cashMovements PosCashMovement[]
+  cashCounts    PosCashDenominationCount[]
+  dayEnd        PosDayEnd?
+
+  @@index([businessDate])
+  @@index([status])
+  @@index([openedById, status])
+}
+
+/**
+ * Normalized financial payment ledger.
+ * SalesOrder.paymentMethod remains temporarily for historical/backward
+ * compatibility. New production POS posting will use PosPayment as the
+ * authoritative payment evidence.
+ */
+model PosPayment {
+  id             String           @id @default(uuid()) @db.Char(36)
+  paymentNo      String           @unique
+  salesOrderId   String           @db.Char(36)
+  method         PaymentMethod
+  status         PosPaymentStatus @default(COMPLETED)
+  amount         Decimal          @db.Decimal(14, 2)
+  tenderedAmount Decimal?         @db.Decimal(14, 2)
+  changeAmount   Decimal?         @db.Decimal(14, 2)
+  reference      String?          @db.VarChar(191)
+  idempotencyKey String?          @unique @db.VarChar(191)
+  createdById    String?          @db.Char(36)
+  completedAt    DateTime?
+  voidedAt       DateTime?
+  createdAt      DateTime         @default(now())
+
+  salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Restrict)
+  createdBy  User?      @relation("PosPaymentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([salesOrderId])
+  @@index([method])
+  @@index([status])
+  @@index([createdAt])
+}
+
+/**
+ * Non-sale physical cash movement.
+ * Examples:
+ * - opening float
+ * - authorized cash in
+ * - authorized cash out
+ * - cash refund
+ * - controlled adjustment
+ */
+model PosCashMovement {
+  id           String              @id @default(uuid()) @db.Char(36)
+  posSessionId String              @db.Char(36)
+  type         PosCashMovementType
+  amount       Decimal             @db.Decimal(14, 2)
+  reason       String?             @db.VarChar(500)
+  reference    String?             @db.VarChar(191)
+  createdById  String              @db.Char(36)
+  occurredAt   DateTime            @default(now())
+  createdAt    DateTime            @default(now())
+
+  posSession PosSession @relation(fields: [posSessionId], references: [id], onDelete: Restrict)
+  createdBy  User       @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([posSessionId, occurredAt])
+  @@index([type])
+}
+
+/**
+ * Physical denomination evidence.
+ * We store the denomination value on the historical count itself rather
+ * than depending on a future configuration table. This keeps old day-end
+ * evidence accurate even if accepted denominations change later.
+ */
+model PosCashDenominationCount {
+  id                String       @id @default(uuid()) @db.Char(36)
+  posSessionId      String       @db.Char(36)
+  countType         PosCountType
+  denominationValue Decimal      @db.Decimal(14, 2)
+  quantity          Int          @default(0) @db.UnsignedInt
+  amount            Decimal      @db.Decimal(14, 2)
+  countedById       String       @db.Char(36)
+  countedAt         DateTime     @default(now())
+  createdAt         DateTime     @default(now())
+
+  posSession PosSession @relation(fields: [posSessionId], references: [id], onDelete: Restrict)
+  countedBy  User       @relation(fields: [countedById], references: [id], onDelete: Restrict)
+
+  @@unique([posSessionId, countType, denominationValue])
+  @@index([posSessionId, countType])
+}
+
+/**
+ * Immutable-style day-end financial snapshot.
+ * Totals are calculated by the backend from authoritative sale/payment/
+ * cash-movement records when the day end is submitted.
+ */
+model PosDayEnd {
+  id                String       @id @default(uuid()) @db.Char(36)
+  posSessionId      String       @unique @db.Char(36)
+  status            DayEndStatus @default(DRAFT)
+  grossSalesTotal   Decimal      @default(0) @db.Decimal(14, 2)
+  discountTotal     Decimal      @default(0) @db.Decimal(14, 2)
+  netSalesTotal     Decimal      @default(0) @db.Decimal(14, 2)
+  cashSalesTotal    Decimal      @default(0) @db.Decimal(14, 2)
+  cardSalesTotal    Decimal      @default(0) @db.Decimal(14, 2)
+  bankTransferTotal Decimal      @default(0) @db.Decimal(14, 2)
+  otherPaymentTotal Decimal      @default(0) @db.Decimal(14, 2)
+  refundTotal       Decimal      @default(0) @db.Decimal(14, 2)
+  voidTotal         Decimal      @default(0) @db.Decimal(14, 2)
+  cashInTotal       Decimal      @default(0) @db.Decimal(14, 2)
+  cashOutTotal      Decimal      @default(0) @db.Decimal(14, 2)
+  expectedCash      Decimal      @default(0) @db.Decimal(14, 2)
+  countedCash       Decimal      @default(0) @db.Decimal(14, 2)
+  variance          Decimal      @default(0) @db.Decimal(14, 2)
+  invoiceCount      Int          @default(0) @db.UnsignedInt
+  varianceReason    String?      @db.VarChar(500)
+  cashierNote       String?      @db.VarChar(500)
+  managerNote       String?      @db.VarChar(500)
+  submittedById     String?      @db.Char(36)
+  submittedAt       DateTime?
+  approvedById      String?      @db.Char(36)
+  approvedAt        DateTime?
+  rejectedAt        DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  posSession PosSession @relation(fields: [posSessionId], references: [id], onDelete: Restrict)
+
+  submittedBy User? @relation("PosDayEndSubmittedBy", fields: [submittedById], references: [id], onDelete: Restrict)
+  approvedBy  User? @relation("PosDayEndApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+
+  @@index([status])
+  @@index([submittedAt])
+  @@index([approvedAt])
+}
+
 model DocumentSequence {
   key       String   @id
   prefix    String
@@ -626,9 +842,6 @@ model DocumentSequence {
   updatedAt DateTime @updatedAt
 }
 
-/**
- * ERP audit trail.
- */
 model AuditLog {
   id         String   @id @default(uuid()) @db.Char(36)
   userId     String?  @db.Char(36)
@@ -679,10 +892,6 @@ model PosApproval {
   @@index([expiresAt])
 }
 
-/**
- * Keep IDs as default MySQL String/VARCHAR because these tables already
- * exist in the current database with that representation.
- */
 model BackupSetting {
   id                      String          @id @default(uuid())
   frequency               BackupFrequency @default(MANUAL)

@@ -1,33 +1,19 @@
-import {
-  Router,
-} from "express";
+import { Router } from "express";
+import { Prisma } from "@prisma/client";
+import { z } from "zod";
 
-import {
-  z,
-} from "zod";
-
-import {
-  Prisma,
-} from "@prisma/client";
-
-import {
-  prisma,
-} from "../../lib/prisma";
-
+import { prisma } from "../../lib/prisma";
 import {
   authMiddleware,
-  requireRoles,
+  hasPermission,
+  requirePermission,
 } from "../../middleware/auth.middleware";
 
-const router =
-  Router();
+const router = Router();
 
-router.use(
-  authMiddleware,
-);
+router.use(authMiddleware);
 
-const APPROVAL_EXPIRY_MINUTES =
-  5;
+const APPROVAL_EXPIRY_MINUTES = 5;
 
 const approvalTypes = [
   "MANUAL_DISCOUNT",
@@ -36,57 +22,49 @@ const approvalTypes = [
   "RETURN",
 ] as const;
 
-type ApprovalContext =
-  Record<
-    string,
-    unknown
-  >;
+type ApprovalContext = Record<string, unknown>;
 
-const requestApprovalSchema =
-  z.object({
-    type: z.enum(
-      approvalTypes,
-    ),
+const approvalIdSchema = z.string().uuid();
 
-    saleId: z
-      .string()
-      .uuid()
-      .optional()
-      .nullable(),
+const requestApprovalSchema = z.object({
+  type: z.enum(approvalTypes),
 
-    amount: z.coerce
-      .number()
-      .finite()
-      .nonnegative()
-      .optional()
-      .nullable(),
+  saleId: z
+    .string()
+    .uuid()
+    .optional()
+    .nullable(),
 
-    reason: z
-      .string()
-      .trim()
-      .max(500)
-      .optional()
-      .nullable(),
+  amount: z.coerce
+    .number()
+    .finite()
+    .nonnegative()
+    .optional()
+    .nullable(),
 
-    context: z
-      .record(
-        z.unknown(),
-      )
-      .optional()
-      .nullable(),
-  });
+  reason: z
+    .string()
+    .trim()
+    .max(500)
+    .optional()
+    .nullable(),
 
-const rejectApprovalSchema =
-  z.object({
-    reason: z
-      .string()
-      .trim()
-      .min(
-        1,
-        "Rejection reason is required",
-      )
-      .max(500),
-  });
+  context: z
+    .record(z.unknown())
+    .optional()
+    .nullable(),
+});
+
+const rejectApprovalSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .min(
+      1,
+      "Rejection reason is required",
+    )
+    .max(500),
+});
 
 function getExpiryDate() {
   return new Date(
@@ -115,54 +93,58 @@ function toPrismaJson(
   return value as Prisma.InputJsonValue;
 }
 
-async function expireOldApprovals() {
-  const now =
-    new Date();
-
-  await prisma.posApproval.updateMany(
-    {
-      where: {
-        status: {
-          in: [
-            "PENDING",
-            "APPROVED",
-          ],
-        },
-
-        expiresAt: {
-          lte:
-            now,
-        },
-      },
-
-      data: {
-        status:
-          "EXPIRED",
-      },
-    },
+function parseApprovalId(
+  value: unknown,
+) {
+  return approvalIdSchema.safeParse(
+    String(value ?? ""),
   );
 }
 
+async function expireOldApprovals() {
+  const now = new Date();
+
+  await prisma.posApproval.updateMany({
+    where: {
+      status: {
+        in: [
+          "PENDING",
+          "APPROVED",
+        ],
+      },
+
+      expiresAt: {
+        lte: now,
+      },
+
+      usedAt: null,
+    },
+
+    data: {
+      status: "EXPIRED",
+    },
+  });
+}
+
 /*
- * CREATE APPROVAL REQUEST
- *
- * Used by POS users when an action
- * requires manager authorization.
- */
+|--------------------------------------------------------------------------
+| Request manager approval
+|--------------------------------------------------------------------------
+|
+| Any authenticated POS user with POS access may REQUEST an approval.
+|
+| Requesting an approval does not grant the privileged action.
+| The protected action still has to consume a valid APPROVED approval
+| server-side.
+|
+*/
+
 router.post(
   "/",
-
-  requireRoles(
-    "ADMIN",
-    "MANAGER",
-    "CASHIER",
-    "SALES_STAFF",
+  requirePermission(
+    "erp.pos.access",
   ),
-
-  async (
-    req,
-    res,
-  ) => {
+  async (req, res) => {
     if (!req.user) {
       return res
         .status(401)
@@ -177,15 +159,12 @@ router.post(
         req.body,
       );
 
-    if (
-      !parsed.success
-    ) {
+    if (!parsed.success) {
       return res
         .status(400)
         .json({
           message:
             "Invalid approval request",
-
           errors:
             parsed.error.flatten(),
         });
@@ -199,20 +178,13 @@ router.post(
       context,
     } = parsed.data;
 
-    /*
-     * A manual discount approval is
-     * meaningless without a positive
-     * discount amount.
-     */
     if (
       type ===
       "MANUAL_DISCOUNT"
     ) {
       if (
-        amount ===
-          undefined ||
-        amount ===
-          null ||
+        amount === undefined ||
+        amount === null ||
         amount <= 0
       ) {
         return res
@@ -224,10 +196,6 @@ router.post(
       }
     }
 
-    /*
-     * These operations act against
-     * an already-created sale.
-     */
     if (
       (
         type ===
@@ -247,25 +215,18 @@ router.post(
         });
     }
 
-    /*
-     * Validate any sale referenced by
-     * the request.
-     */
     if (saleId) {
       const sale =
-        await prisma.salesOrder.findUnique(
-          {
-            where: {
-              id:
-                saleId,
-            },
-
-            select: {
-              id: true,
-              status: true,
-            },
+        await prisma.salesOrder.findUnique({
+          where: {
+            id: saleId,
           },
-        );
+
+          select: {
+            id: true,
+            status: true,
+          },
+        });
 
       if (!sale) {
         return res
@@ -278,75 +239,80 @@ router.post(
 
       if (
         (
-          type ===
-            "REFUND" ||
-          type ===
-            "RETURN"
+          type === "REFUND" ||
+          type === "RETURN"
         ) &&
         sale.status !==
           "COMPLETED"
       ) {
         return res
-          .status(400)
+          .status(409)
           .json({
             message:
               "Only completed sales can be refunded or returned.",
+          });
+      }
+
+      if (
+        type ===
+          "CANCEL_SALE" &&
+        (
+          sale.status ===
+            "CANCELLED" ||
+          sale.status ===
+            "REFUNDED"
+        )
+      ) {
+        return res
+          .status(409)
+          .json({
+            message:
+              "This sale is already cancelled or refunded.",
           });
       }
     }
 
     await expireOldApprovals();
 
+    const now = new Date();
+
     /*
-     * Prevent duplicate pending
-     * requests caused by repeated
-     * button presses.
+     * Protect against repeated clicks creating many equivalent pending
+     * approval requests.
      */
     const existingRequest =
-      await prisma.posApproval.findFirst(
-        {
-          where: {
-            requestedById:
-              req.user.id,
+      await prisma.posApproval.findFirst({
+        where: {
+          requestedById:
+            req.user.id,
 
-            type,
+          type,
 
-            saleId:
-              saleId ??
-              null,
+          saleId:
+            saleId ?? null,
 
-            status:
-              "PENDING",
+          status:
+            "PENDING",
 
-            expiresAt: {
-              gt:
-                new Date(),
-            },
-          },
-
-          orderBy: {
-            createdAt:
-              "desc",
+          expiresAt: {
+            gt: now,
           },
         },
-      );
 
-    if (
-      existingRequest
-    ) {
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+    if (existingRequest) {
       const sameAmount =
         type !==
           "MANUAL_DISCOUNT" ||
         Number(
           existingRequest.amount,
-        ) ===
-          Number(
-            amount,
-          );
+        ) === Number(amount);
 
-      if (
-        sameAmount
-      ) {
+      if (sameAmount) {
         return res
           .status(200)
           .json({
@@ -383,120 +349,114 @@ router.post(
     }
 
     const approval =
-      await prisma.posApproval.create(
-        {
-          data: {
-            type,
+      await prisma.$transaction(
+        async (tx) => {
+          const created =
+            await tx.posApproval.create({
+              data: {
+                type,
 
-            status:
-              "PENDING",
+                status:
+                  "PENDING",
 
-            requestedById:
-              req.user.id,
+                requestedById:
+                  req.user!.id,
 
-            saleId:
-              saleId ??
-              null,
+                saleId:
+                  saleId ?? null,
 
-            amount:
-              amount ??
-              null,
+                amount:
+                  amount ?? null,
 
-            reason:
-              reason ||
-              null,
+                reason:
+                  reason || null,
 
-            contextJson:
-              toPrismaJson(
-                context,
-              ),
+                contextJson:
+                  toPrismaJson(
+                    context,
+                  ),
 
-            expiresAt:
-              getExpiryDate(),
-          },
+                expiresAt:
+                  getExpiryDate(),
+              },
 
-          select: {
-            id: true,
-            type: true,
-            status: true,
-            saleId: true,
-            amount: true,
-            reason: true,
-            expiresAt: true,
-            createdAt: true,
-          },
+              select: {
+                id: true,
+                type: true,
+                status: true,
+                saleId: true,
+                amount: true,
+                reason: true,
+                expiresAt: true,
+                createdAt: true,
+              },
+            });
+
+          await tx.auditLog.create({
+            data: {
+              userId:
+                req.user!.id,
+
+              action:
+                "REQUEST",
+
+              entityType:
+                "PosApproval",
+
+              entityId:
+                created.id,
+
+              afterJson: {
+                type:
+                  created.type,
+
+                saleId:
+                  created.saleId,
+
+                amount:
+                  created.amount,
+
+                reason:
+                  created.reason,
+
+                expiresAt:
+                  created.expiresAt,
+              },
+            },
+          });
+
+          return created;
         },
       );
-
-    await prisma.auditLog.create(
-      {
-        data: {
-          userId:
-            req.user.id,
-
-          action:
-            "REQUEST",
-
-          entityType:
-            "PosApproval",
-
-          entityId:
-            approval.id,
-
-          afterJson: {
-            type:
-              approval.type,
-
-            saleId:
-              approval.saleId,
-
-            amount:
-              approval.amount,
-
-            reason:
-              approval.reason,
-
-            expiresAt:
-              approval.expiresAt,
-          },
-        },
-      },
-    );
 
     return res
       .status(201)
       .json({
         message:
           "Manager approval requested.",
-
         approval,
       });
   },
 );
 
 /*
- * GET APPROVAL STATUS
- *
- * Cashiers may only inspect approval
- * requests they created.
- *
- * ADMIN and MANAGER may inspect any
- * approval request.
- */
+|--------------------------------------------------------------------------
+| Get approval status
+|--------------------------------------------------------------------------
+|
+| Requester can read their own approval.
+|
+| Users with erp.pos.approvals.read may inspect other users' approval
+| requests.
+|
+*/
+
 router.get(
   "/:id/status",
-
-  requireRoles(
-    "ADMIN",
-    "MANAGER",
-    "CASHIER",
-    "SALES_STAFF",
+  requirePermission(
+    "erp.pos.access",
   ),
-
-  async (
-    req,
-    res,
-  ) => {
+  async (req, res) => {
     if (!req.user) {
       return res
         .status(401)
@@ -506,42 +466,48 @@ router.get(
         });
     }
 
-    const approvalId =
-      String(
+    const parsedId =
+      parseApprovalId(
         req.params.id,
       );
+
+    if (!parsedId.success) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "Invalid approval ID.",
+        });
+    }
 
     await expireOldApprovals();
 
     const approval =
-      await prisma.posApproval.findUnique(
-        {
-          where: {
-            id:
-              approvalId,
-          },
-
-          select: {
-            id: true,
-            type: true,
-            status: true,
-
-            requestedById:
-              true,
-
-            approvedById:
-              true,
-
-            saleId: true,
-            amount: true,
-            reason: true,
-            expiresAt: true,
-            approvedAt: true,
-            usedAt: true,
-            createdAt: true,
-          },
+      await prisma.posApproval.findUnique({
+        where: {
+          id: parsedId.data,
         },
-      );
+
+        select: {
+          id: true,
+          type: true,
+          status: true,
+
+          requestedById:
+            true,
+
+          approvedById:
+            true,
+
+          saleId: true,
+          amount: true,
+          reason: true,
+          expiresAt: true,
+          approvedAt: true,
+          usedAt: true,
+          createdAt: true,
+        },
+      });
 
     if (!approval) {
       return res
@@ -552,21 +518,16 @@ router.get(
         });
     }
 
-    const isManager =
-      req.user.roles.some(
-        (
-          role,
-        ) =>
-          role ===
-            "ADMIN" ||
-          role ===
-            "MANAGER",
+    const canReadAll =
+      hasPermission(
+        req,
+        "erp.pos.approvals.read",
       );
 
     if (
-      !isManager &&
       approval.requestedById !==
-        req.user.id
+        req.user.id &&
+      !canReadAll
     ) {
       return res
         .status(403)
@@ -613,88 +574,61 @@ router.get(
 );
 
 /*
- * LIST PENDING APPROVALS
- *
- * Used by the manager/admin POS
- * approval interface.
- */
+|--------------------------------------------------------------------------
+| List pending approvals
+|--------------------------------------------------------------------------
+*/
+
 router.get(
   "/pending",
-
-  requireRoles(
-    "ADMIN",
-    "MANAGER",
+  requirePermission(
+    "erp.pos.approvals.read",
   ),
-
-  async (
-    _req,
-    res,
-  ) => {
+  async (_req, res) => {
     await expireOldApprovals();
 
+    const now = new Date();
+
     const approvals =
-      await prisma.posApproval.findMany(
-        {
-          where: {
-            status:
-              "PENDING",
+      await prisma.posApproval.findMany({
+        where: {
+          status:
+            "PENDING",
 
-            expiresAt: {
-              gt:
-                new Date(),
+          expiresAt: {
+            gt: now,
+          },
+        },
+
+        orderBy: {
+          createdAt: "asc",
+        },
+
+        take: 100,
+
+        include: {
+          requestedBy: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
             },
           },
 
-          orderBy: {
-            createdAt:
-              "asc",
-          },
-
-          take:
-            100,
-
-          include: {
-            requestedBy: {
-              select: {
-                id: true,
-
-                firstName:
-                  true,
-
-                lastName:
-                  true,
-
-                email:
-                  true,
-              },
-            },
-
-            sale: {
-              select: {
-                id: true,
-
-                orderNo:
-                  true,
-
-                grossTotal:
-                  true,
-
-                discountTotal:
-                  true,
-
-                netTotal:
-                  true,
-
-                status:
-                  true,
-
-                soldAt:
-                  true,
-              },
+          sale: {
+            select: {
+              id: true,
+              orderNo: true,
+              grossTotal: true,
+              discountTotal: true,
+              netTotal: true,
+              status: true,
+              soldAt: true,
             },
           },
         },
-      );
+      });
 
     return res.json({
       approvals,
@@ -703,23 +637,23 @@ router.get(
 );
 
 /*
- * APPROVE REQUEST
- *
- * Only ADMIN and MANAGER may approve
- * privileged POS actions.
- */
+|--------------------------------------------------------------------------
+| Approve request
+|--------------------------------------------------------------------------
+|
+| This endpoint only changes the approval record to APPROVED.
+|
+| The actual privileged operation must separately validate and consume
+| this approval inside the operation's own transaction.
+|
+*/
+
 router.post(
   "/:id/approve",
-
-  requireRoles(
-    "ADMIN",
-    "MANAGER",
+  requirePermission(
+    "erp.pos.approvals.update",
   ),
-
-  async (
-    req,
-    res,
-  ) => {
+  async (req, res) => {
     if (!req.user) {
       return res
         .status(401)
@@ -729,22 +663,28 @@ router.post(
         });
     }
 
-    const approvalId =
-      String(
+    const parsedId =
+      parseApprovalId(
         req.params.id,
       );
+
+    if (!parsedId.success) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "Invalid approval ID.",
+        });
+    }
 
     await expireOldApprovals();
 
     const approval =
-      await prisma.posApproval.findUnique(
-        {
-          where: {
-            id:
-              approvalId,
-          },
+      await prisma.posApproval.findUnique({
+        where: {
+          id: parsedId.data,
         },
-      );
+      });
 
     if (!approval) {
       return res
@@ -756,8 +696,9 @@ router.post(
     }
 
     /*
-     * A user must never authorize
-     * their own privileged action.
+     * Separation of duties:
+     * even a user who possesses approval permission cannot approve
+     * their own request.
      */
     if (
       approval.requestedById ===
@@ -779,21 +720,28 @@ router.post(
     ) {
       if (
         approval.status !==
-        "EXPIRED"
+          "EXPIRED"
       ) {
-        await prisma.posApproval.update(
-          {
-            where: {
-              id:
-                approval.id,
+        await prisma.posApproval.updateMany({
+          where: {
+            id:
+              approval.id,
+
+            status: {
+              in: [
+                "PENDING",
+                "APPROVED",
+              ],
             },
 
-            data: {
-              status:
-                "EXPIRED",
-            },
+            usedAt: null,
           },
-        );
+
+          data: {
+            status:
+              "EXPIRED",
+          },
+        });
       }
 
       return res
@@ -819,43 +767,133 @@ router.post(
     const approvedAt =
       new Date();
 
-    /*
-     * Conditional update prevents
-     * two managers approving the
-     * same request concurrently.
-     */
-    const updated =
-      await prisma.posApproval.updateMany(
-        {
-          where: {
-            id:
-              approval.id,
+    const approved =
+      await prisma.$transaction(
+        async (tx) => {
+          /*
+           * Conditional update makes manager approval race-safe.
+           * Only one manager can transition PENDING -> APPROVED.
+           */
+          const updated =
+            await tx.posApproval.updateMany({
+              where: {
+                id:
+                  approval.id,
 
-            status:
-              "PENDING",
+                status:
+                  "PENDING",
 
-            expiresAt: {
-              gt:
+                expiresAt: {
+                  gt:
+                    approvedAt,
+                },
+
+                usedAt:
+                  null,
+              },
+
+              data: {
+                status:
+                  "APPROVED",
+
+                approvedById:
+                  req.user!.id,
+
                 approvedAt,
+              },
+            });
+
+          if (
+            updated.count !== 1
+          ) {
+            throw new Error(
+              "APPROVAL_CONFLICT",
+            );
+          }
+
+          const result =
+            await tx.posApproval.findUniqueOrThrow({
+              where: {
+                id:
+                  approval.id,
+              },
+
+              select: {
+                id: true,
+                type: true,
+                status: true,
+                saleId: true,
+                amount: true,
+                reason: true,
+
+                requestedById:
+                  true,
+
+                approvedById:
+                  true,
+
+                approvedAt:
+                  true,
+
+                expiresAt:
+                  true,
+              },
+            });
+
+          await tx.auditLog.create({
+            data: {
+              userId:
+                req.user!.id,
+
+              action:
+                "APPROVE",
+
+              entityType:
+                "PosApproval",
+
+              entityId:
+                result.id,
+
+              afterJson: {
+                type:
+                  result.type,
+
+                requestedById:
+                  result.requestedById,
+
+                approvedById:
+                  result.approvedById,
+
+                saleId:
+                  result.saleId,
+
+                amount:
+                  result.amount,
+
+                approvedAt:
+                  result.approvedAt,
+
+                expiresAt:
+                  result.expiresAt,
+              },
             },
-          },
+          });
 
-          data: {
-            status:
-              "APPROVED",
-
-            approvedById:
-              req.user.id,
-
-            approvedAt,
-          },
+          return result;
         },
-      );
+      ).catch((error) => {
+        if (
+          error instanceof Error &&
+          error.message ===
+            "APPROVAL_CONFLICT"
+        ) {
+          return null;
+        }
 
-    if (
-      updated.count !==
-      1
-    ) {
+        throw error;
+      });
+
+    if (!approved) {
       return res
         .status(409)
         .json({
@@ -863,78 +901,6 @@ router.post(
             "Approval request changed or expired. Refresh and try again.",
         });
     }
-
-    const approved =
-      await prisma.posApproval.findUniqueOrThrow(
-        {
-          where: {
-            id:
-              approval.id,
-          },
-
-          select: {
-            id: true,
-            type: true,
-            status: true,
-            saleId: true,
-            amount: true,
-            reason: true,
-
-            requestedById:
-              true,
-
-            approvedById:
-              true,
-
-            approvedAt:
-              true,
-
-            expiresAt:
-              true,
-          },
-        },
-      );
-
-    await prisma.auditLog.create(
-      {
-        data: {
-          userId:
-            req.user.id,
-
-          action:
-            "APPROVE",
-
-          entityType:
-            "PosApproval",
-
-          entityId:
-            approved.id,
-
-          afterJson: {
-            type:
-              approved.type,
-
-            requestedById:
-              approved.requestedById,
-
-            approvedById:
-              approved.approvedById,
-
-            saleId:
-              approved.saleId,
-
-            amount:
-              approved.amount,
-
-            approvedAt:
-              approved.approvedAt,
-
-            expiresAt:
-              approved.expiresAt,
-          },
-        },
-      },
-    );
 
     return res.json({
       message:
@@ -967,23 +933,17 @@ router.post(
 );
 
 /*
- * REJECT REQUEST
- *
- * Only ADMIN and MANAGER may reject
- * pending POS approval requests.
- */
+|--------------------------------------------------------------------------
+| Reject request
+|--------------------------------------------------------------------------
+*/
+
 router.post(
   "/:id/reject",
-
-  requireRoles(
-    "ADMIN",
-    "MANAGER",
+  requirePermission(
+    "erp.pos.approvals.update",
   ),
-
-  async (
-    req,
-    res,
-  ) => {
+  async (req, res) => {
     if (!req.user) {
       return res
         .status(401)
@@ -993,25 +953,31 @@ router.post(
         });
     }
 
-    const approvalId =
-      String(
+    const parsedId =
+      parseApprovalId(
         req.params.id,
       );
+
+    if (!parsedId.success) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "Invalid approval ID.",
+        });
+    }
 
     const parsed =
       rejectApprovalSchema.safeParse(
         req.body,
       );
 
-    if (
-      !parsed.success
-    ) {
+    if (!parsed.success) {
       return res
         .status(400)
         .json({
           message:
             "Invalid rejection data",
-
           errors:
             parsed.error.flatten(),
         });
@@ -1020,14 +986,12 @@ router.post(
     await expireOldApprovals();
 
     const approval =
-      await prisma.posApproval.findUnique(
-        {
-          where: {
-            id:
-              approvalId,
-          },
+      await prisma.posApproval.findUnique({
+        where: {
+          id:
+            parsedId.data,
         },
-      );
+      });
 
     if (!approval) {
       return res
@@ -1038,11 +1002,6 @@ router.post(
         });
     }
 
-    /*
-     * Do not permit self-rejection
-     * through a manager-capable
-     * account.
-     */
     if (
       approval.requestedById ===
       req.user.id
@@ -1071,38 +1030,105 @@ router.post(
       new Date();
 
     const rejected =
-      await prisma.posApproval.updateMany(
-        {
-          where: {
-            id:
-              approval.id,
+      await prisma.$transaction(
+        async (tx) => {
+          const result =
+            await tx.posApproval.updateMany({
+              where: {
+                id:
+                  approval.id,
 
-            status:
-              "PENDING",
+                status:
+                  "PENDING",
 
-            expiresAt: {
-              gt:
+                expiresAt: {
+                  gt:
+                    rejectedAt,
+                },
+
+                usedAt:
+                  null,
+              },
+
+              data: {
+                status:
+                  "REJECTED",
+
+                approvedById:
+                  req.user!.id,
+
+                /*
+                 * Existing schema has one reason field.
+                 * Until the schema migration introduces dedicated
+                 * decision/request reason fields, the manager rejection
+                 * reason is retained here.
+                 */
+                reason:
+                  parsed.data.reason,
+              },
+            });
+
+          if (
+            result.count !== 1
+          ) {
+            throw new Error(
+              "APPROVAL_CONFLICT",
+            );
+          }
+
+          await tx.auditLog.create({
+            data: {
+              userId:
+                req.user!.id,
+
+              action:
+                "REJECT",
+
+              entityType:
+                "PosApproval",
+
+              entityId:
+                approval.id,
+
+              afterJson: {
+                type:
+                  approval.type,
+
+                requestedById:
+                  approval.requestedById,
+
+                rejectedById:
+                  req.user!.id,
+
+                saleId:
+                  approval.saleId,
+
+                amount:
+                  approval.amount,
+
+                reason:
+                  parsed.data.reason,
+
                 rejectedAt,
+              },
             },
-          },
+          });
 
-          data: {
-            status:
-              "REJECTED",
-
-            approvedById:
-              req.user.id,
-
-            reason:
-              parsed.data.reason,
-          },
+          return true;
         },
-      );
+      ).catch((error) => {
+        if (
+          error instanceof Error &&
+          error.message ===
+            "APPROVAL_CONFLICT"
+        ) {
+          return false;
+        }
 
-    if (
-      rejected.count !==
-      1
-    ) {
+        throw error;
+      });
+
+    if (!rejected) {
       return res
         .status(409)
         .json({
@@ -1110,46 +1136,6 @@ router.post(
             "Approval request changed or expired. Refresh and try again.",
         });
     }
-
-    await prisma.auditLog.create(
-      {
-        data: {
-          userId:
-            req.user.id,
-
-          action:
-            "REJECT",
-
-          entityType:
-            "PosApproval",
-
-          entityId:
-            approval.id,
-
-          afterJson: {
-            type:
-              approval.type,
-
-            requestedById:
-              approval.requestedById,
-
-            rejectedById:
-              req.user.id,
-
-            saleId:
-              approval.saleId,
-
-            amount:
-              approval.amount,
-
-            reason:
-              parsed.data.reason,
-
-            rejectedAt,
-          },
-        },
-      },
-    );
 
     return res.json({
       message:

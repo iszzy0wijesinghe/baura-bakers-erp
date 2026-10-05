@@ -19,10 +19,20 @@ import {
 } from "../../lib/transaction";
 
 import {
+  getOfficialSiteCustomer,
+  type OfficialSiteCustomer,
+} from "../../lib/officialSite";
+
+import {
   authMiddleware,
   hasAnyRole,
+  requirePermission,
   requireRoles,
 } from "../../middleware/auth.middleware";
+
+import {
+  getSriLankaDateParts,
+} from "../business-calendar/businessCalendar.routes";
 
 const router =
   Router();
@@ -39,55 +49,110 @@ const paymentMethods = [
   "OTHER",
 ] as const;
 
+const paymentSchema =
+  z.object({
+    method:
+      z.enum(
+        paymentMethods,
+      ),
+
+    tenderedAmount:
+      z.coerce
+        .number()
+        .finite()
+        .min(0)
+        .optional()
+        .nullable(),
+
+    reference:
+      z.string()
+        .trim()
+        .max(191)
+        .optional()
+        .nullable(),
+  });
+
 const createSaleSchema =
   z.object({
-    salesChannelId: z
-      .string()
-      .uuid()
-      .optional()
-      .nullable(),
+    salesChannelId:
+      z.string()
+        .uuid()
+        .optional()
+        .nullable(),
 
-    paymentMethod: z
-      .enum(
-        paymentMethods,
-      )
-      .default(
-        "CASH",
-      ),
+    officialCustomerId:
+      z.coerce
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .nullable(),
 
-    discountTotal: z.coerce
-      .number()
-      .finite()
-      .min(0)
-      .default(0),
+    receiptEmail:
+      z.union([
+        z.string()
+          .trim()
+          .email(
+            "Enter a valid receipt email address",
+          )
+          .max(191),
 
-    approvalId: z
-      .string()
-      .uuid()
-      .optional()
-      .nullable(),
+        z.literal(""),
 
-    items: z
-      .array(
+        z.null(),
+      ])
+        .optional(),
+
+    discountTotal:
+      z.coerce
+        .number()
+        .finite()
+        .min(0)
+        .default(0),
+
+    approvalId:
+      z.string()
+        .uuid()
+        .optional()
+        .nullable(),
+
+    idempotencyKey:
+      z.string()
+        .trim()
+        .min(8)
+        .max(191)
+        .optional()
+        .nullable(),
+
+    payment:
+      paymentSchema,
+
+    items:
+      z.array(
         z.object({
-          productId: z
-            .string()
-            .uuid(
-              "Valid product is required",
-            ),
+          productId:
+            z.string()
+              .uuid(
+                "Valid product is required",
+              ),
 
-          qty: z.coerce
-            .number()
-            .finite()
-            .positive(
-              "Quantity must be greater than 0",
-            ),
+          qty:
+            z.coerce
+              .number()
+              .finite()
+              .positive(
+                "Quantity must be greater than 0",
+              ),
         }),
       )
-      .min(
-        1,
-        "At least one sale item is required",
-      ),
+        .min(
+          1,
+          "At least one sale item is required",
+        )
+        .max(
+          500,
+          "Too many sale items",
+        ),
   });
 
 function round2(
@@ -181,190 +246,379 @@ function sortFinishedLots<
   );
 }
 
+function normalizeNullableText(
+  value:
+    | string
+    | null
+    | undefined,
+) {
+  return (
+    value?.trim() ||
+    null
+  );
+}
+
+function normalizeCustomerSnapshot(
+  customer:
+    OfficialSiteCustomer,
+) {
+  return {
+    officialCustomerId:
+      customer.id,
+
+    customerNameSnapshot:
+      customer.name
+        .trim()
+        .slice(
+          0,
+          191,
+        ),
+
+    customerPhoneSnapshot:
+      (
+        customer.phone_normalized ||
+        customer.phone ||
+        ""
+      )
+        .trim()
+        .slice(
+          0,
+          32,
+        ) ||
+      null,
+
+    customerEmailSnapshot:
+      customer.email
+        ?.trim()
+        .slice(
+          0,
+          191,
+        ) ||
+      null,
+  };
+}
+
+function getPaymentReference(
+  value:
+    | string
+    | null
+    | undefined,
+) {
+  return (
+    normalizeNullableText(
+      value,
+    )
+      ?.slice(
+        0,
+        191,
+      ) ||
+    null
+  );
+}
+
+function getReceiptEmail(
+  requestedEmail:
+    | string
+    | null
+    | undefined,
+
+  customer:
+    | OfficialSiteCustomer
+    | null,
+) {
+  const explicitEmail =
+    normalizeNullableText(
+      requestedEmail,
+    );
+
+  if (
+    explicitEmail
+  ) {
+    return explicitEmail;
+  }
+
+  return (
+    customer?.email
+      ?.trim() ||
+    null
+  );
+}
+
+function assertPaymentInput(
+  payment:
+    z.infer<
+      typeof paymentSchema
+    >,
+) {
+  const reference =
+    getPaymentReference(
+      payment.reference,
+    );
+
+  if (
+    payment.method ===
+      "CASH" &&
+    reference
+  ) {
+    throw new Error(
+      "Cash payment cannot contain a payment reference.",
+    );
+  }
+
+  if (
+    payment.method !==
+      "CASH" &&
+    payment.tenderedAmount !==
+      undefined &&
+    payment.tenderedAmount !==
+      null
+  ) {
+    throw new Error(
+      "Tendered amount is only valid for cash payments.",
+    );
+  }
+
+  if (
+    (
+      payment.method ===
+        "CARD" ||
+      payment.method ===
+        "BANK_TRANSFER"
+    ) &&
+    !reference
+  ) {
+    throw new Error(
+      payment.method ===
+        "CARD"
+        ? "Card payment reference is required."
+        : "Bank transfer reference is required.",
+    );
+  }
+}
+
+function getDateOnlyKey(
+  value: Date,
+) {
+  return value
+    .toISOString()
+    .slice(
+      0,
+      10,
+    );
+}
+
 /*
- * POS SALES CHANNELS
- */
+|--------------------------------------------------------------------------
+| POS SALES CHANNELS
+|--------------------------------------------------------------------------
+*/
+
 router.get(
   "/channels",
 
-  requireRoles(
-    "ADMIN",
-    "MANAGER",
-    "CASHIER",
-    "SALES_STAFF",
+  requirePermission(
+    "erp.pos.access",
   ),
 
   async (
     _req,
     res,
   ) => {
-    const channels =
-      await prisma.salesChannel.findMany(
-        {
-          where: {
-            isActive:
-              true,
-          },
+    try {
+      const channels =
+        await prisma.salesChannel.findMany(
+          {
+            where: {
+              isActive:
+                true,
+            },
 
-          orderBy: {
-            name:
-              "asc",
+            orderBy: {
+              name:
+                "asc",
+            },
           },
-        },
-      );
+        );
 
-    return res.json({
-      channels,
-    });
+      return res.json({
+        channels,
+      });
+    } catch (
+      error
+    ) {
+      return res
+        .status(500)
+        .json({
+          message:
+            error instanceof
+            Error
+              ? error.message
+              : "Failed to load sales channels",
+        });
+    }
   },
 );
 
 /*
- * POS PRODUCT CATALOGUE
- *
- * COGS and profit are intentionally
- * not exposed to the POS catalogue.
- */
+|--------------------------------------------------------------------------
+| POS PRODUCT CATALOGUE
+|--------------------------------------------------------------------------
+|
+| COGS and profit are intentionally not
+| exposed to ordinary POS users.
+|--------------------------------------------------------------------------
+*/
+
 router.get(
   "/products",
 
-  requireRoles(
-    "ADMIN",
-    "MANAGER",
-    "CASHIER",
-    "SALES_STAFF",
+  requirePermission(
+    "erp.pos.access",
   ),
 
   async (
     _req,
     res,
   ) => {
-    const now =
-      new Date();
+    try {
+      const now =
+        new Date();
 
-    const products =
-      await prisma.product.findMany(
-        {
-          where: {
-            isActive:
-              true,
-          },
-
-          orderBy: [
-            {
-              name:
-                "asc",
+      const products =
+        await prisma.product.findMany(
+          {
+            where: {
+              isActive:
+                true,
             },
-            {
-              variantName:
-                "asc",
-            },
-          ],
 
-          include: {
-            finishedGoodsLots:
+            orderBy: [
               {
-                where: {
-                  remainingQty:
-                    {
-                      gt: 0,
-                    },
-                },
+                name:
+                  "asc",
               },
-          },
-        },
-      );
+              {
+                variantName:
+                  "asc",
+              },
+            ],
 
-    return res.json({
-      products:
-        products.map(
-          (
-            product,
-          ) => {
-            const availableQty =
-              round3(
-                product.finishedGoodsLots
-                  .filter(
-                    (
-                      lot,
-                    ) =>
-                      !isExpired(
-                        lot.expiryDate,
-                        now,
-                      ),
-                  )
-                  .reduce(
-                    (
-                      sum,
-                      lot,
-                    ) =>
-                      sum +
-                      Number(
-                        lot.remainingQty,
-                      ),
-                    0,
+            include: {
+              finishedGoodsLots:
+                {
+                  where: {
+                    remainingQty:
+                      {
+                        gt: 0,
+                      },
+                  },
+                },
+            },
+          },
+        );
+
+      return res.json({
+        products:
+          products.map(
+            (
+              product,
+            ) => {
+              const availableQty =
+                round3(
+                  product.finishedGoodsLots
+                    .filter(
+                      (
+                        lot,
+                      ) =>
+                        !isExpired(
+                          lot.expiryDate,
+                          now,
+                        ),
+                    )
+                    .reduce(
+                      (
+                        sum,
+                        lot,
+                      ) =>
+                        sum +
+                        Number(
+                          lot.remainingQty,
+                        ),
+                      0,
+                    ),
+                );
+
+              const threshold =
+                product.finishedStockAlertQty !==
+                null
+                  ? Number(
+                      product.finishedStockAlertQty,
+                    )
+                  : null;
+
+              return {
+                id:
+                  product.id,
+
+                name:
+                  product.name,
+
+                variantName:
+                  product.variantName,
+
+                displayName:
+                  getProductDisplayName(
+                    product,
                   ),
-              );
 
-            const threshold =
-              product.finishedStockAlertQty !==
-              null
-                ? Number(
-                    product.finishedStockAlertQty,
-                  )
-                : null;
+                imageUrl:
+                  product.imageUrl,
 
-            return {
-              id:
-                product.id,
+                sellPrice:
+                  product.sellPrice,
 
-              name:
-                product.name,
+                availableQty,
 
-              variantName:
-                product.variantName,
+                isInStock:
+                  availableQty >
+                  0,
 
-              displayName:
-                getProductDisplayName(
-                  product,
-                ),
+                isLowStock:
+                  threshold !==
+                    null &&
+                  availableQty >
+                    0 &&
+                  availableQty <=
+                    threshold,
 
-              imageUrl:
-                product.imageUrl,
-
-              sellPrice:
-                product.sellPrice,
-
-              availableQty,
-
-              isInStock:
-                availableQty >
-                0,
-
-              isLowStock:
-                threshold !==
-                  null &&
-                availableQty >
-                  0 &&
-                availableQty <=
-                  threshold,
-
-              finishedStockAlertQty:
-                product.finishedStockAlertQty,
-            };
-          },
-        ),
-    });
+                finishedStockAlertQty:
+                  product.finishedStockAlertQty,
+              };
+            },
+          ),
+      });
+    } catch (
+      error
+    ) {
+      return res
+        .status(500)
+        .json({
+          message:
+            error instanceof
+            Error
+              ? error.message
+              : "Failed to load POS products",
+        });
+    }
   },
 );
 
 /*
- * MANAGEMENT SALES HISTORY
- *
- * This endpoint contains financial
- * information and is therefore not
- * available to ordinary POS users.
- */
+|--------------------------------------------------------------------------
+| MANAGEMENT SALES HISTORY
+|--------------------------------------------------------------------------
+*/
+
 router.get(
   "/",
 
@@ -378,122 +632,170 @@ router.get(
     _req,
     res,
   ) => {
-    const sales =
-      await prisma.salesOrder.findMany(
-        {
-          orderBy: {
-            soldAt:
-              "desc",
-          },
+    try {
+      const sales =
+        await prisma.salesOrder.findMany(
+          {
+            orderBy: {
+              soldAt:
+                "desc",
+            },
 
-          take:
-            100,
+            take:
+              100,
 
-          include: {
-            salesChannel:
-              true,
+            include: {
+              salesChannel:
+                true,
 
-            items: {
-              include: {
-                product:
-                  true,
+              payments: {
+                orderBy: {
+                  createdAt:
+                    "asc",
+                },
+              },
+
+              items: {
+                include: {
+                  product:
+                    true,
+                },
               },
             },
           },
-        },
-      );
+        );
 
-    return res.json({
-      sales:
-        sales.map(
-          (
-            sale,
-          ) => ({
-            id:
-              sale.id,
+      return res.json({
+        sales:
+          sales.map(
+            (
+              sale,
+            ) => ({
+              id:
+                sale.id,
 
-            orderNo:
-              sale.orderNo,
+              orderNo:
+                sale.orderNo,
 
-            salesChannel:
-              sale.salesChannel
-                ?.name ||
-              "Direct",
+              posSessionId:
+                sale.posSessionId,
 
-            paymentMethod:
-              sale.paymentMethod,
+              salesChannel:
+                sale.salesChannel
+                  ?.name ||
+                "Direct",
 
-            grossTotal:
-              sale.grossTotal,
+              paymentMethod:
+                sale.paymentMethod,
 
-            discountTotal:
-              sale.discountTotal,
+              payments:
+                sale.payments,
 
-            netTotal:
-              sale.netTotal,
+              officialCustomerId:
+                sale.officialCustomerId,
 
-            cogsTotal:
-              sale.cogsTotal,
+              customerName:
+                sale.customerNameSnapshot,
 
-            profitTotal:
-              sale.profitTotal,
+              customerPhone:
+                sale.customerPhoneSnapshot,
 
-            status:
-              sale.status,
+              customerEmail:
+                sale.customerEmailSnapshot,
 
-            soldAt:
-              sale.soldAt,
+              receiptEmail:
+                sale.receiptEmail,
 
-            itemCount:
-              sale.items.length,
+              receiptEmailStatus:
+                sale.receiptEmailStatus,
 
-            items:
-              sale.items.map(
-                (
-                  item,
-                ) => ({
-                  id:
-                    item.id,
+              grossTotal:
+                sale.grossTotal,
 
-                  productId:
-                    item.productId,
+              discountTotal:
+                sale.discountTotal,
 
-                  productDisplayName:
-                    getProductDisplayName(
-                      item.product,
-                    ),
+              netTotal:
+                sale.netTotal,
 
-                  qty:
-                    item.qty,
+              cogsTotal:
+                sale.cogsTotal,
 
-                  unitSellPrice:
-                    item.unitSellPrice,
+              profitTotal:
+                sale.profitTotal,
 
-                  lineTotal:
-                    item.lineTotal,
+              status:
+                sale.status,
 
-                  discountTotal:
-                    item.discountTotal,
+              soldAt:
+                sale.soldAt,
 
-                  netTotal:
-                    item.netTotal,
+              itemCount:
+                sale.items.length,
 
-                  cogsTotal:
-                    item.cogsTotal,
+              items:
+                sale.items.map(
+                  (
+                    item,
+                  ) => ({
+                    id:
+                      item.id,
 
-                  profitTotal:
-                    item.profitTotal,
-                }),
-              ),
-          }),
-        ),
-    });
+                    productId:
+                      item.productId,
+
+                    productDisplayName:
+                      getProductDisplayName(
+                        item.product,
+                      ),
+
+                    qty:
+                      item.qty,
+
+                    unitSellPrice:
+                      item.unitSellPrice,
+
+                    lineTotal:
+                      item.lineTotal,
+
+                    discountTotal:
+                      item.discountTotal,
+
+                    netTotal:
+                      item.netTotal,
+
+                    cogsTotal:
+                      item.cogsTotal,
+
+                    profitTotal:
+                      item.profitTotal,
+                  }),
+                ),
+            }),
+          ),
+      });
+    } catch (
+      error
+    ) {
+      return res
+        .status(500)
+        .json({
+          message:
+            error instanceof
+            Error
+              ? error.message
+              : "Failed to load sales",
+        });
+    }
   },
 );
 
 /*
- * MANAGEMENT SALE DETAIL
- */
+|--------------------------------------------------------------------------
+| MANAGEMENT SALE DETAIL
+|--------------------------------------------------------------------------
+*/
+
 router.get(
   "/:id",
 
@@ -514,7 +816,9 @@ router.get(
         ? req.params.id[0]
         : req.params.id;
 
-    if (!saleId) {
+    if (
+      !saleId
+    ) {
       return res
         .status(400)
         .json({
@@ -523,201 +827,238 @@ router.get(
         });
     }
 
-    const sale =
-      await prisma.salesOrder.findUnique(
-        {
-          where: {
-            id:
-              saleId,
-          },
+    try {
+      const sale =
+        await prisma.salesOrder.findUnique(
+          {
+            where: {
+              id:
+                saleId,
+            },
 
-          include: {
-            salesChannel:
-              true,
+            include: {
+              salesChannel:
+                true,
 
-            items: {
-              include: {
-                product:
-                  true,
-
-                finishedGoodsConsumptions:
-                  {
-                    include:
-                      {
-                        finishedGoodsLot:
-                          {
-                            include:
-                              {
-                                productionBatch:
-                                  {
-                                    select:
-                                      {
-                                        batchNo:
-                                          true,
-                                      },
-                                  },
-                              },
-                          },
-                      },
-
-                    orderBy:
-                      {
-                        createdAt:
-                          "asc",
-                      },
-                  },
+              payments: {
+                orderBy: {
+                  createdAt:
+                    "asc",
+                },
               },
 
-              orderBy: {
-                createdAt:
-                  "asc",
+              items: {
+                include: {
+                  product:
+                    true,
+
+                  finishedGoodsConsumptions:
+                    {
+                      include:
+                        {
+                          finishedGoodsLot:
+                            {
+                              include:
+                                {
+                                  productionBatch:
+                                    {
+                                      select:
+                                        {
+                                          batchNo:
+                                            true,
+                                        },
+                                    },
+                                },
+                            },
+                        },
+
+                      orderBy:
+                        {
+                          createdAt:
+                            "asc",
+                        },
+                    },
+                },
+
+                orderBy: {
+                  createdAt:
+                    "asc",
+                },
               },
             },
           },
-        },
-      );
+        );
 
-    if (!sale) {
+      if (
+        !sale
+      ) {
+        return res
+          .status(404)
+          .json({
+            message:
+              "Sale not found",
+          });
+      }
+
+      return res.json({
+        sale: {
+          id:
+            sale.id,
+
+          orderNo:
+            sale.orderNo,
+
+          posSessionId:
+            sale.posSessionId,
+
+          salesChannel:
+            sale.salesChannel
+              ?.name ||
+            "Direct",
+
+          paymentMethod:
+            sale.paymentMethod,
+
+          payments:
+            sale.payments,
+
+          officialCustomerId:
+            sale.officialCustomerId,
+
+          customerName:
+            sale.customerNameSnapshot,
+
+          customerPhone:
+            sale.customerPhoneSnapshot,
+
+          customerEmail:
+            sale.customerEmailSnapshot,
+
+          receiptEmail:
+            sale.receiptEmail,
+
+          receiptEmailStatus:
+            sale.receiptEmailStatus,
+
+          receiptEmailSentAt:
+            sale.receiptEmailSentAt,
+
+          grossTotal:
+            sale.grossTotal,
+
+          discountTotal:
+            sale.discountTotal,
+
+          netTotal:
+            sale.netTotal,
+
+          cogsTotal:
+            sale.cogsTotal,
+
+          profitTotal:
+            sale.profitTotal,
+
+          status:
+            sale.status,
+
+          soldAt:
+            sale.soldAt,
+
+          items:
+            sale.items.map(
+              (
+                item,
+              ) => ({
+                id:
+                  item.id,
+
+                productId:
+                  item.productId,
+
+                productDisplayName:
+                  getProductDisplayName(
+                    item.product,
+                  ),
+
+                qty:
+                  item.qty,
+
+                unitSellPrice:
+                  item.unitSellPrice,
+
+                lineTotal:
+                  item.lineTotal,
+
+                discountTotal:
+                  item.discountTotal,
+
+                netTotal:
+                  item.netTotal,
+
+                cogsTotal:
+                  item.cogsTotal,
+
+                profitTotal:
+                  item.profitTotal,
+
+                finishedGoodsConsumptions:
+                  item.finishedGoodsConsumptions.map(
+                    (
+                      consumption,
+                    ) => ({
+                      id:
+                        consumption.id,
+
+                      finishedGoodsLotId:
+                        consumption.finishedGoodsLotId,
+
+                      batchNo:
+                        consumption
+                          .finishedGoodsLot
+                          .productionBatch
+                          .batchNo,
+
+                      consumedQty:
+                        consumption.consumedQty,
+
+                      unitCost:
+                        consumption.unitCost,
+
+                      costAmount:
+                        consumption.costAmount,
+                    }),
+                  ),
+              }),
+            ),
+        },
+      });
+    } catch (
+      error
+    ) {
       return res
-        .status(404)
+        .status(500)
         .json({
           message:
-            "Sale not found",
+            error instanceof
+            Error
+              ? error.message
+              : "Failed to load sale",
         });
     }
-
-    return res.json({
-      sale: {
-        id:
-          sale.id,
-
-        orderNo:
-          sale.orderNo,
-
-        salesChannel:
-          sale.salesChannel
-            ?.name ||
-          "Direct",
-
-        paymentMethod:
-          sale.paymentMethod,
-
-        grossTotal:
-          sale.grossTotal,
-
-        discountTotal:
-          sale.discountTotal,
-
-        netTotal:
-          sale.netTotal,
-
-        cogsTotal:
-          sale.cogsTotal,
-
-        profitTotal:
-          sale.profitTotal,
-
-        status:
-          sale.status,
-
-        soldAt:
-          sale.soldAt,
-
-        items:
-          sale.items.map(
-            (
-              item,
-            ) => ({
-              id:
-                item.id,
-
-              productId:
-                item.productId,
-
-              productDisplayName:
-                getProductDisplayName(
-                  item.product,
-                ),
-
-              qty:
-                item.qty,
-
-              unitSellPrice:
-                item.unitSellPrice,
-
-              lineTotal:
-                item.lineTotal,
-
-              discountTotal:
-                item.discountTotal,
-
-              netTotal:
-                item.netTotal,
-
-              cogsTotal:
-                item.cogsTotal,
-
-              profitTotal:
-                item.profitTotal,
-
-              finishedGoodsConsumptions:
-                item.finishedGoodsConsumptions.map(
-                  (
-                    consumption,
-                  ) => ({
-                    id:
-                      consumption.id,
-
-                    finishedGoodsLotId:
-                      consumption.finishedGoodsLotId,
-
-                    batchNo:
-                      consumption
-                        .finishedGoodsLot
-                        .productionBatch
-                        .batchNo,
-
-                    consumedQty:
-                      consumption.consumedQty,
-
-                    unitCost:
-                      consumption.unitCost,
-
-                    costAmount:
-                      consumption.costAmount,
-                  }),
-                ),
-            }),
-          ),
-      },
-    });
   },
 );
 
 /*
- * COMPLETE POS SALE
- *
- * ADMIN / MANAGER:
- * May directly apply manual
- * discounts.
- *
- * CASHIER / SALES_STAFF:
- * A manual discount requires a
- * manager-approved authorization.
- *
- * Approval validation, inventory
- * consumption, approval consumption
- * and sale creation all occur inside
- * the same serializable transaction.
- */
+|--------------------------------------------------------------------------
+| COMPLETE POS SALE
+|--------------------------------------------------------------------------
+*/
+
 router.post(
   "/",
 
-  requireRoles(
-    "ADMIN",
-    "MANAGER",
-    "CASHIER",
-    "SALES_STAFF",
+  requirePermission(
+    "erp.pos.access",
   ),
 
   async (
@@ -743,12 +1084,35 @@ router.post(
         });
     }
 
-    if (!req.user) {
+    if (
+      !req.user
+    ) {
       return res
         .status(401)
         .json({
           message:
             "Authentication required",
+        });
+    }
+
+    try {
+      assertPaymentInput(
+        parsed.data.payment,
+      );
+    } catch (
+      error
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            error instanceof
+            Error
+              ? error.message
+              : "Invalid payment data",
+
+          code:
+            "INVALID_PAYMENT_DATA",
         });
     }
 
@@ -764,6 +1128,19 @@ router.post(
         .approvalId ??
       null;
 
+    const idempotencyKey =
+      normalizeNullableText(
+        parsed.data
+          .idempotencyKey,
+      );
+
+    const paymentReference =
+      getPaymentReference(
+        parsed.data
+          .payment
+          .reference,
+      );
+
     const canApplyManualDiscount =
       hasAnyRole(
         req,
@@ -771,10 +1148,6 @@ router.post(
         "MANAGER",
       );
 
-    /*
-     * Cashier / sales staff must
-     * provide a manager approval ID.
-     */
     if (
       requestedDiscount >
         0 &&
@@ -795,11 +1168,6 @@ router.post(
         });
     }
 
-    /*
-     * An approval must not be attached
-     * to a sale that has no manual
-     * discount.
-     */
     if (
       requestedDiscount <=
         0 &&
@@ -817,8 +1185,131 @@ router.post(
     }
 
     try {
+      /*
+       * Idempotency is checked before
+       * calling the official site.
+       */
+      if (
+        idempotencyKey
+      ) {
+        const existingSale =
+          await prisma.salesOrder.findUnique(
+            {
+              where: {
+                idempotencyKey,
+              },
+
+              include: {
+                salesChannel:
+                  true,
+
+                payments:
+                  true,
+
+                items: {
+                  include: {
+                    product:
+                      true,
+                  },
+                },
+              },
+            },
+          );
+
+        if (
+          existingSale
+        ) {
+          return res
+            .status(200)
+            .json({
+              message:
+                "Sale was already completed",
+
+              idempotentReplay:
+                true,
+
+              sale:
+                existingSale,
+            });
+        }
+      }
+
+      /*
+       * Customer information is loaded
+       * from the authoritative official
+       * website before the ERP transaction.
+       *
+       * We never make an external HTTP
+       * request while holding the database
+       * transaction open.
+       */
+      let officialCustomer:
+        | OfficialSiteCustomer
+        | null =
+          null;
+
+      if (
+        parsed.data
+          .officialCustomerId
+      ) {
+        officialCustomer =
+          await getOfficialSiteCustomer(
+            parsed.data
+              .officialCustomerId,
+          );
+
+        if (
+          !officialCustomer
+        ) {
+          return res
+            .status(404)
+            .json({
+              message:
+                "Customer was not found on the official website.",
+
+              code:
+                "CUSTOMER_NOT_FOUND",
+            });
+        }
+
+        if (
+          !officialCustomer
+            .is_active
+        ) {
+          return res
+            .status(409)
+            .json({
+              message:
+                "This customer account is inactive.",
+
+              code:
+                "CUSTOMER_INACTIVE",
+            });
+        }
+      }
+
+      const customerSnapshot =
+        officialCustomer
+          ? normalizeCustomerSnapshot(
+              officialCustomer,
+            )
+          : null;
+
+      const receiptEmail =
+        getReceiptEmail(
+          parsed.data
+            .receiptEmail,
+
+          officialCustomer,
+        );
+
       const soldAt =
         new Date();
+
+      const sriLankaDate =
+        getSriLankaDateParts(
+          soldAt,
+        );
 
       /*
        * Merge duplicate products.
@@ -866,6 +1357,94 @@ router.post(
           async (
             tx,
           ) => {
+            /*
+             * Recheck idempotency inside
+             * the transaction.
+             */
+            if (
+              idempotencyKey
+            ) {
+              const duplicate =
+                await tx.salesOrder.findUnique(
+                  {
+                    where: {
+                      idempotencyKey,
+                    },
+
+                    select: {
+                      id:
+                        true,
+                    },
+                  },
+                );
+
+              if (
+                duplicate
+              ) {
+                throw new Error(
+                  "IDEMPOTENT_SALE_ALREADY_EXISTS",
+                );
+              }
+            }
+
+            /*
+             * Every POS sale must belong
+             * to the cashier's OPEN session.
+             */
+            const posSession =
+              await tx.posSession.findFirst(
+                {
+                  where: {
+                    openedById:
+                      req.user!.id,
+
+                    status:
+                      "OPEN",
+                  },
+
+                  orderBy: {
+                    openedAt:
+                      "desc",
+                  },
+
+                  select: {
+                    id:
+                      true,
+
+                    sessionNo:
+                      true,
+
+                    businessDate:
+                      true,
+
+                    openedAt:
+                      true,
+                  },
+                },
+              );
+
+            if (
+              !posSession
+            ) {
+              throw new Error(
+                "NO_OPEN_POS_SESSION",
+              );
+            }
+
+            const sessionBusinessDate =
+              getDateOnlyKey(
+                posSession.businessDate,
+              );
+
+            if (
+              sessionBusinessDate !==
+              sriLankaDate.date
+            ) {
+              throw new Error(
+                "POS_SESSION_BUSINESS_DATE_MISMATCH",
+              );
+            }
+
             let validatedApprovalId:
               | string
               | null =
@@ -930,7 +1509,9 @@ router.post(
                   },
                 );
 
-              if (!approval) {
+              if (
+                !approval
+              ) {
                 throw new Error(
                   "Manager approval request was not found.",
                 );
@@ -1045,7 +1626,7 @@ router.post(
 
               if (
                 approvedAmount ===
-                null ||
+                  null ||
                 approvedAmount !==
                   requestedDiscount
               ) {
@@ -1084,7 +1665,9 @@ router.post(
                   },
                 );
 
-              if (!channel) {
+              if (
+                !channel
+              ) {
                 throw new Error(
                   "Active sales channel not found",
                 );
@@ -1099,10 +1682,6 @@ router.post(
                   item.productId,
               );
 
-            /*
-             * Load authoritative prices
-             * and stock from database.
-             */
             const products =
               await tx.product.findMany(
                 {
@@ -1233,8 +1812,7 @@ router.post(
                 [];
 
             /*
-             * Plan FEFO inventory
-             * consumption.
+             * FEFO inventory planning.
              */
             for (
               const requestedItem of
@@ -1245,7 +1823,9 @@ router.post(
                   requestedItem.productId,
                 );
 
-              if (!product) {
+              if (
+                !product
+              ) {
                 throw new Error(
                   "Product not found",
                 );
@@ -1429,13 +2009,6 @@ router.post(
                 ),
               );
 
-            /*
-             * Never silently clamp a
-             * manager-approved discount.
-             *
-             * Approval is tied to the
-             * exact requested amount.
-             */
             if (
               requestedDiscount >
               grossTotal
@@ -1448,10 +2021,6 @@ router.post(
             const discountTotal =
               requestedDiscount;
 
-            /*
-             * Distribute order discount
-             * proportionally.
-             */
             let allocatedDiscount =
               0;
 
@@ -1547,6 +2116,58 @@ router.post(
                   cogsTotal,
               );
 
+            /*
+             * Validate payment only after
+             * authoritative total exists.
+             */
+            let tenderedAmount:
+              | number
+              | null =
+                null;
+
+            let changeAmount:
+              | number
+              | null =
+                null;
+
+            if (
+              parsed.data
+                .payment
+                .method ===
+              "CASH"
+            ) {
+              tenderedAmount =
+                parsed.data
+                  .payment
+                  .tenderedAmount ===
+                  undefined ||
+                parsed.data
+                  .payment
+                  .tenderedAmount ===
+                  null
+                  ? netTotal
+                  : round2(
+                      parsed.data
+                        .payment
+                        .tenderedAmount,
+                    );
+
+              if (
+                tenderedAmount <
+                netTotal
+              ) {
+                throw new Error(
+                  "Cash tendered amount is less than the sale total.",
+                );
+              }
+
+              changeAmount =
+                round2(
+                  tenderedAmount -
+                    netTotal,
+                );
+            }
+
             const orderNo =
               await nextDocumentNumber(
                 tx,
@@ -1556,7 +2177,7 @@ router.post(
               );
 
             /*
-             * Create sale header.
+             * Create sale.
              */
             const sale =
               await tx.salesOrder.create(
@@ -1569,9 +2190,13 @@ router.post(
                         .salesChannelId ??
                       null,
 
+                    posSessionId:
+                      posSession.id,
+
                     paymentMethod:
                       parsed.data
-                        .paymentMethod,
+                        .payment
+                        .method,
 
                     saleType:
                       "POS",
@@ -1592,15 +2217,96 @@ router.post(
                     createdById:
                       req.user!.id,
 
+                    officialCustomerId:
+                      customerSnapshot
+                        ?.officialCustomerId ??
+                      null,
+
+                    customerNameSnapshot:
+                      customerSnapshot
+                        ?.customerNameSnapshot ??
+                      null,
+
+                    customerPhoneSnapshot:
+                      customerSnapshot
+                        ?.customerPhoneSnapshot ??
+                      null,
+
+                    customerEmailSnapshot:
+                      customerSnapshot
+                        ?.customerEmailSnapshot ??
+                      null,
+
+                    receiptEmail,
+
+                    receiptEmailStatus:
+                      receiptEmail
+                        ? "PENDING"
+                        : "NOT_REQUESTED",
+
+                    idempotencyKey,
+
                     soldAt,
                   },
                 },
               );
 
             /*
-             * Create sale items and
-             * consume finished-goods
-             * lots.
+             * Create authoritative payment
+             * ledger entry.
+             */
+            const paymentNo =
+              await nextDocumentNumber(
+                tx,
+                "POS_PAYMENT",
+                "PAY",
+                soldAt,
+              );
+
+            const payment =
+              await tx.posPayment.create(
+                {
+                  data: {
+                    paymentNo,
+
+                    salesOrderId:
+                      sale.id,
+
+                    method:
+                      parsed.data
+                        .payment
+                        .method,
+
+                    status:
+                      "COMPLETED",
+
+                    amount:
+                      netTotal,
+
+                    tenderedAmount,
+
+                    changeAmount,
+
+                    reference:
+                      paymentReference,
+
+                    idempotencyKey:
+                      idempotencyKey
+                        ? `${idempotencyKey}:payment`
+                        : null,
+
+                    createdById:
+                      req.user!.id,
+
+                    completedAt:
+                      soldAt,
+                  },
+                },
+              );
+
+            /*
+             * Create items and consume
+             * finished-goods lots.
              */
             for (
               const plannedItem of
@@ -1644,12 +2350,6 @@ router.post(
                 const allocation of
                 plannedItem.allocations
               ) {
-                /*
-                 * Conditional decrement
-                 * prevents negative stock
-                 * if another terminal
-                 * consumes this lot.
-                 */
                 const updated =
                   await tx.finishedGoodsLot.updateMany(
                     {
@@ -1747,15 +2447,6 @@ router.post(
 
             /*
              * Consume manager approval.
-             *
-             * This remains inside the
-             * same transaction as stock
-             * and sale creation.
-             *
-             * updateMany provides the
-             * compare-and-set protection
-             * needed against concurrent
-             * reuse.
              */
             if (
               validatedApprovalId
@@ -1848,7 +2539,57 @@ router.post(
             }
 
             /*
-             * Audit completed sale.
+             * Audit payment.
+             */
+            await tx.auditLog.create(
+              {
+                data: {
+                  userId:
+                    req.user!.id,
+
+                  action:
+                    "CREATE",
+
+                  entityType:
+                    "PosPayment",
+
+                  entityId:
+                    payment.id,
+
+                  afterJson: {
+                    paymentNo:
+                      payment.paymentNo,
+
+                    saleId:
+                      sale.id,
+
+                    orderNo,
+
+                    posSessionId:
+                      posSession.id,
+
+                    method:
+                      payment.method,
+
+                    amount:
+                      netTotal,
+
+                    tenderedAmount,
+
+                    changeAmount,
+
+                    reference:
+                      paymentReference,
+
+                    status:
+                      "COMPLETED",
+                  },
+                },
+              },
+            );
+
+            /*
+             * Audit sale.
              */
             await tx.auditLog.create(
               {
@@ -1868,6 +2609,12 @@ router.post(
                   afterJson: {
                     orderNo,
 
+                    posSessionId:
+                      posSession.id,
+
+                    sessionNo:
+                      posSession.sessionNo,
+
                     grossTotal,
 
                     discountTotal,
@@ -1880,7 +2627,14 @@ router.post(
 
                     paymentMethod:
                       parsed.data
-                        .paymentMethod,
+                        .payment
+                        .method,
+
+                    paymentId:
+                      payment.id,
+
+                    paymentNo:
+                      payment.paymentNo,
 
                     manualDiscount:
                       discountTotal >
@@ -1891,6 +2645,20 @@ router.post(
 
                     cashierUserId:
                       req.user!.id,
+
+                    officialCustomerId:
+                      customerSnapshot
+                        ?.officialCustomerId ??
+                      null,
+
+                    receiptEmail,
+
+                    receiptEmailRequested:
+                      Boolean(
+                        receiptEmail,
+                      ),
+
+                    idempotencyKey,
                   },
                 },
               },
@@ -1901,8 +2669,7 @@ router.post(
         );
 
       /*
-       * Load receipt information after
-       * the transaction has committed.
+       * Load committed receipt.
        */
       const saleWithDetails =
         await prisma.salesOrder.findUnique(
@@ -1916,17 +2683,44 @@ router.post(
               salesChannel:
                 true,
 
+              posSession: {
+                select: {
+                  id:
+                    true,
+
+                  sessionNo:
+                    true,
+
+                  businessDate:
+                    true,
+                },
+              },
+
+              payments: {
+                orderBy: {
+                  createdAt:
+                    "asc",
+                },
+              },
+
               items: {
                 include: {
                   product:
                     true,
+                },
+
+                orderBy: {
+                  createdAt:
+                    "asc",
                 },
               },
             },
           },
         );
 
-      if (!saleWithDetails) {
+      if (
+        !saleWithDetails
+      ) {
         return res
           .status(500)
           .json({
@@ -1935,10 +2729,6 @@ router.post(
           });
       }
 
-      /*
-       * Ordinary cashier accounts must
-       * not receive COGS/profit data.
-       */
       const canViewFinancialData =
         hasAnyRole(
           req,
@@ -1963,6 +2753,9 @@ router.post(
               orderNo:
                 saleWithDetails.orderNo,
 
+              posSession:
+                saleWithDetails.posSession,
+
               salesChannel:
                 saleWithDetails.salesChannel
                   ?.name ||
@@ -1970,6 +2763,60 @@ router.post(
 
               paymentMethod:
                 saleWithDetails.paymentMethod,
+
+              payments:
+                saleWithDetails.payments.map(
+                  (
+                    payment,
+                  ) => ({
+                    id:
+                      payment.id,
+
+                    paymentNo:
+                      payment.paymentNo,
+
+                    method:
+                      payment.method,
+
+                    status:
+                      payment.status,
+
+                    amount:
+                      payment.amount,
+
+                    tenderedAmount:
+                      payment.tenderedAmount,
+
+                    changeAmount:
+                      payment.changeAmount,
+
+                    reference:
+                      payment.reference,
+
+                    completedAt:
+                      payment.completedAt,
+                  }),
+                ),
+
+              customer: {
+                officialCustomerId:
+                  saleWithDetails.officialCustomerId,
+
+                name:
+                  saleWithDetails.customerNameSnapshot,
+
+                phone:
+                  saleWithDetails.customerPhoneSnapshot,
+
+                email:
+                  saleWithDetails.customerEmailSnapshot,
+              },
+
+              receiptEmail:
+                saleWithDetails.receiptEmail,
+
+              receiptEmailStatus:
+                saleWithDetails.receiptEmailStatus,
 
               grossTotal:
                 saleWithDetails.grossTotal,
@@ -2022,10 +2869,6 @@ router.post(
           });
       }
 
-      /*
-       * Management response may contain
-       * the complete financial data.
-       */
       return res
         .status(201)
         .json({
@@ -2038,14 +2881,105 @@ router.post(
     } catch (
       error
     ) {
+      const message =
+        error instanceof
+        Error
+          ? error.message
+          : "Failed to complete sale";
+
+      /*
+       * A concurrent duplicate request
+       * may have won the idempotency race.
+       */
+      if (
+        idempotencyKey &&
+        (
+          message ===
+            "IDEMPOTENT_SALE_ALREADY_EXISTS" ||
+          message.includes(
+            "Unique constraint",
+          )
+        )
+      ) {
+        const existingSale =
+          await prisma.salesOrder.findUnique(
+            {
+              where: {
+                idempotencyKey,
+              },
+
+              include: {
+                salesChannel:
+                  true,
+
+                posSession:
+                  true,
+
+                payments:
+                  true,
+
+                items: {
+                  include: {
+                    product:
+                      true,
+                  },
+                },
+              },
+            },
+          );
+
+        if (
+          existingSale
+        ) {
+          return res
+            .status(200)
+            .json({
+              message:
+                "Sale was already completed",
+
+              idempotentReplay:
+                true,
+
+              sale:
+                existingSale,
+            });
+        }
+      }
+
+      if (
+        message ===
+        "NO_OPEN_POS_SESSION"
+      ) {
+        return res
+          .status(409)
+          .json({
+            message:
+              "You must open a POS session before completing a sale.",
+
+            code:
+              "NO_OPEN_POS_SESSION",
+          });
+      }
+
+      if (
+        message ===
+        "POS_SESSION_BUSINESS_DATE_MISMATCH"
+      ) {
+        return res
+          .status(409)
+          .json({
+            message:
+              "Your POS session belongs to a different business date. Complete day end and open a new session.",
+
+            code:
+              "POS_SESSION_BUSINESS_DATE_MISMATCH",
+          });
+      }
+
       return res
         .status(400)
         .json({
-          message:
-            error instanceof
-            Error
-              ? error.message
-              : "Failed to complete sale",
+          message,
         });
     }
   },

@@ -12,17 +12,26 @@ import productRoutes from "./modules/products/products.routes";
 import productionRoutes from "./modules/production/production.routes";
 import bakeryStockRoutes from "./modules/bakery-stock/bakeryStock.routes";
 import salesRoutes from "./modules/sales/sales.routes";
+import posApprovalRoutes from "./modules/pos-approvals/posApprovals.routes";
 import analyticsRoutes from "./modules/analytics/analytics.routes";
 import settingsRoutes from "./modules/settings/settings.routes";
+import posCatalogueRoutes from "./modules/pos-catalogue/posCatalogue.routes";
+import posCustomerRoutes from "./modules/pos-customers/posCustomers.routes";
+import businessCalendarRoutes from "./modules/business-calendar/businessCalendar.routes";
+import posSessionRoutes from "./modules/pos-sessions/posSessions.routes";
+import posCashMovementRoutes from "./modules/pos-cash-movements/posCashMovements.routes";
 
 dotenv.config();
 
 const app = express();
 
-const PORT = Number(process.env.PORT || 4000);
+const PORT = Number(
+  process.env.PORT || 4000,
+);
 
 const isProduction =
-  process.env.NODE_ENV === "production";
+  process.env.NODE_ENV ===
+  "production";
 
 /*
 |--------------------------------------------------------------------------
@@ -30,17 +39,15 @@ const isProduction =
 |--------------------------------------------------------------------------
 */
 
-app.disable("x-powered-by");
+app.disable(
+  "x-powered-by",
+);
 
-/*
- * Required when the API is deployed behind a trusted reverse proxy
- * such as Render, Railway, Fly.io, Nginx, etc.
- *
- * This also allows express-rate-limit to identify the real client IP
- * correctly when there is one trusted proxy hop.
- */
 if (isProduction) {
-  app.set("trust proxy", 1);
+  app.set(
+    "trust proxy",
+    1,
+  );
 }
 
 /*
@@ -52,7 +59,8 @@ if (isProduction) {
 app.use(
   helmet({
     crossOriginResourcePolicy: {
-      policy: "cross-origin",
+      policy:
+        "cross-origin",
     },
   }),
 );
@@ -61,21 +69,6 @@ app.use(
 |--------------------------------------------------------------------------
 | CORS
 |--------------------------------------------------------------------------
-|
-| FRONTEND_URL may contain one or more comma-separated origins.
-|
-| Development example:
-|
-| FRONTEND_URL=http://localhost:5173
-|
-| Production example:
-|
-| FRONTEND_URL=https://erp.example.com
-|
-| Multiple:
-|
-| FRONTEND_URL=https://erp.example.com,https://pos.example.com
-|
 */
 
 const configuredOrigins = (
@@ -83,27 +76,44 @@ const configuredOrigins = (
   "http://localhost:5173"
 )
   .split(",")
-  .map((origin) => origin.trim())
+  .map(
+    (origin) =>
+      origin.trim(),
+  )
   .filter(Boolean);
 
 app.use(
   cors({
-    origin(origin, callback) {
-      /*
-       * Requests without Origin include tools/server-to-server calls.
-       */
+    origin(
+      origin,
+      callback,
+    ) {
       if (!origin) {
-        callback(null, true);
+        callback(
+          null,
+          true,
+        );
+
         return;
       }
 
-      if (configuredOrigins.includes(origin)) {
-        callback(null, true);
+      if (
+        configuredOrigins.includes(
+          origin,
+        )
+      ) {
+        callback(
+          null,
+          true,
+        );
+
         return;
       }
 
       callback(
-        new Error("Origin is not allowed by CORS"),
+        new Error(
+          "Origin is not allowed by CORS",
+        ),
       );
     },
 
@@ -121,9 +131,11 @@ app.use(
       "Authorization",
     ],
 
-    credentials: false,
+    credentials:
+      false,
 
-    maxAge: 86400,
+    maxAge:
+      86400,
   }),
 );
 
@@ -131,23 +143,22 @@ app.use(
 |--------------------------------------------------------------------------
 | Request body limits
 |--------------------------------------------------------------------------
-|
-| Keep JSON requests intentionally small.
-| Product/ingredient images should remain Cloudinary URLs rather than
-| large image payloads sent through the ERP API.
-|
 */
 
 app.use(
   express.json({
-    limit: "1mb",
+    limit:
+      "1mb",
   }),
 );
 
 app.use(
   express.urlencoded({
-    extended: false,
-    limit: "1mb",
+    extended:
+      false,
+
+    limit:
+      "1mb",
   }),
 );
 
@@ -155,26 +166,29 @@ app.use(
 |--------------------------------------------------------------------------
 | General API rate limiter
 |--------------------------------------------------------------------------
-|
-| This protects the API against excessive request bursts while keeping
-| the limit high enough for normal ERP/POS usage.
-|
 */
 
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+const apiLimiter =
+  rateLimit({
+    windowMs:
+      15 *
+      60 *
+      1000,
 
-  limit: 1500,
+    limit:
+      1500,
 
-  standardHeaders: "draft-7",
+    standardHeaders:
+      "draft-7",
 
-  legacyHeaders: false,
+    legacyHeaders:
+      false,
 
-  message: {
-    message:
-      "Too many requests. Please try again shortly.",
-  },
-});
+    message: {
+      message:
+        "Too many requests. Please try again shortly.",
+    },
+  });
 
 app.use(
   "/api",
@@ -185,28 +199,32 @@ app.use(
 |--------------------------------------------------------------------------
 | Authentication rate limiter
 |--------------------------------------------------------------------------
-|
-| Login endpoints need substantially tighter protection than ordinary
-| ERP API endpoints.
-|
 */
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+const authLimiter =
+  rateLimit({
+    windowMs:
+      15 *
+      60 *
+      1000,
 
-  limit: 20,
+    limit:
+      20,
 
-  standardHeaders: "draft-7",
+    standardHeaders:
+      "draft-7",
 
-  legacyHeaders: false,
+    legacyHeaders:
+      false,
 
-  skipSuccessfulRequests: true,
+    skipSuccessfulRequests:
+      true,
 
-  message: {
-    message:
-      "Too many authentication attempts. Please try again later.",
-  },
-});
+    message: {
+      message:
+        "Too many authentication attempts. Please try again later.",
+    },
+  });
 
 app.use(
   "/api/auth",
@@ -217,18 +235,15 @@ app.use(
 |--------------------------------------------------------------------------
 | Health endpoint
 |--------------------------------------------------------------------------
-|
-| Keep this intentionally minimal.
-| Public health checks should not reveal database type, configuration,
-| environment information or other infrastructure details.
-|
 */
 
 app.get(
   "/api/health",
   (_req, res) => {
     res.status(200).json({
-      status: "OK",
+      status:
+        "OK",
+
       timestamp:
         new Date().toISOString(),
     });
@@ -281,6 +296,50 @@ app.use(
   salesRoutes,
 );
 
+
+
+/*
+|--------------------------------------------------------------------------
+| POS
+|--------------------------------------------------------------------------
+|
+| POS remains part of the authoritative ERP backend.
+|
+| The standalone POS frontend will consume these endpoints. It does not
+| directly access the ERP database or official-site database.
+|
+*/
+
+app.use(
+  "/api/pos-approvals",
+  posApprovalRoutes,
+);
+
+app.use(
+  "/api/business-calendar",
+  businessCalendarRoutes,
+);
+
+app.use(
+  "/api/pos-sessions",
+  posSessionRoutes,
+);
+
+app.use(
+  "/api/pos-cash-movements",
+  posCashMovementRoutes,
+);
+
+app.use(
+  "/api/pos-catalogue",
+  posCatalogueRoutes,
+);
+
+app.use(
+  "/api/pos-customers",
+  posCustomerRoutes,
+);
+
 app.use(
   "/api/analytics",
   analyticsRoutes,
@@ -303,8 +362,11 @@ app.use(
     res,
   ) => {
     res.status(404).json({
-      message: "API route not found.",
-      path: req.path,
+      message:
+        "API route not found.",
+
+      path:
+        req.path,
     });
   },
 );
@@ -313,10 +375,6 @@ app.use(
 |--------------------------------------------------------------------------
 | Global error handler
 |--------------------------------------------------------------------------
-|
-| Never expose stack traces or internal exception details to production
-| clients.
-|
 */
 
 app.use(
@@ -326,7 +384,9 @@ app.use(
     res: express.Response,
     _next: express.NextFunction,
   ) => {
-    console.error(error);
+    console.error(
+      error,
+    );
 
     const message =
       error instanceof Error
@@ -338,17 +398,19 @@ app.use(
       "Origin is not allowed by CORS"
     ) {
       res.status(403).json({
-        message: "Origin not allowed.",
+        message:
+          "Origin not allowed.",
       });
 
       return;
     }
 
     res.status(500).json({
-      message: isProduction
-        ? "Internal server error."
-        : message ||
-          "Internal server error.",
+      message:
+        isProduction
+          ? "Internal server error."
+          : message ||
+            "Internal server error.",
     });
   },
 );
@@ -359,31 +421,28 @@ app.use(
 |--------------------------------------------------------------------------
 */
 
-const server = app.listen(
-  PORT,
-  () => {
-    console.log(
-      `Baura Bakery ERP API running on http://localhost:${PORT}`,
-    );
+const server =
+  app.listen(
+    PORT,
+    () => {
+      console.log(
+        `Baura Bakery ERP API running on http://localhost:${PORT}`,
+      );
 
-    console.log(
-      `Environment: ${
-        isProduction
-          ? "production"
-          : "development"
-      }`,
-    );
-  },
-);
+      console.log(
+        `Environment: ${
+          isProduction
+            ? "production"
+            : "development"
+        }`,
+      );
+    },
+  );
 
 /*
 |--------------------------------------------------------------------------
 | Graceful shutdown
 |--------------------------------------------------------------------------
-|
-| Allows the server to stop accepting new requests cleanly during
-| deployment/restart.
-|
 */
 
 function shutdown(
@@ -393,26 +452,38 @@ function shutdown(
     `${signal} received. Shutting down...`,
   );
 
-  server.close((error) => {
-    if (error) {
-      console.error(
-        "Server shutdown failed:",
-        error,
+  server.close(
+    (error) => {
+      if (error) {
+        console.error(
+          "Server shutdown failed:",
+          error,
+        );
+
+        process.exit(
+          1,
+        );
+      }
+
+      process.exit(
+        0,
       );
-
-      process.exit(1);
-    }
-
-    process.exit(0);
-  });
+    },
+  );
 }
 
 process.on(
   "SIGTERM",
-  () => shutdown("SIGTERM"),
+  () =>
+    shutdown(
+      "SIGTERM",
+    ),
 );
 
 process.on(
   "SIGINT",
-  () => shutdown("SIGINT"),
+  () =>
+    shutdown(
+      "SIGINT",
+    ),
 );

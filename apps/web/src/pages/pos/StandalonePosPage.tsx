@@ -8,9 +8,11 @@ import {
 
 import {
   AlertTriangle,
+  CheckCircle2,
   Clock3,
   LogOut,
   RefreshCw,
+  ShieldCheck,
 } from "lucide-react";
 
 import {
@@ -20,6 +22,10 @@ import {
 import {
   PosSellingWorkspace,
 } from "../../components/pos/PosSellingWorkspace";
+
+import {
+  PosDayEnd,
+} from "../../components/pos/PosDayEnd";
 
 import {
   getCurrentPosSession,
@@ -35,6 +41,10 @@ import {
 import {
   useToast,
 } from "../../ui/ToastProvider";
+
+type PosView =
+  | "SELLING"
+  | "DAY_END";
 
 export function StandalonePosPage() {
   const toast =
@@ -65,20 +75,26 @@ export function StandalonePosPage() {
     );
 
   const [
+    view,
+    setView,
+  ] =
+    useState<PosView>(
+      "SELLING",
+    );
+
+  const [
     isLoading,
     setIsLoading,
-  ] =
-    useState(true);
+  ] = useState(true);
 
   const [
     loadingProducts,
     setLoadingProducts,
-  ] =
-    useState(false);
+  ] = useState(false);
 
   /*
   |--------------------------------------------------------------------------
-  | LOAD CURRENT POS SESSION
+  | SESSION
   |--------------------------------------------------------------------------
   */
 
@@ -105,6 +121,16 @@ export function StandalonePosPage() {
           );
 
           if (
+            response.session
+              ?.status ===
+            "CLOSING"
+          ) {
+            setView(
+              "DAY_END",
+            );
+          }
+
+          if (
             showSuccessToast
           ) {
             toast.success(
@@ -112,13 +138,10 @@ export function StandalonePosPage() {
               "Register status is up to date.",
             );
           }
-        } catch (
-          error
-        ) {
+        } catch (error) {
           toast.error(
             "Unable to load POS",
-            error instanceof
-              Error
+            error instanceof Error
               ? error.message
               : "Could not load the POS register.",
           );
@@ -135,7 +158,7 @@ export function StandalonePosPage() {
 
   /*
   |--------------------------------------------------------------------------
-  | LOAD POS PRODUCTS
+  | PRODUCTS
   |--------------------------------------------------------------------------
   */
 
@@ -161,17 +184,14 @@ export function StandalonePosPage() {
             showSuccessToast
           ) {
             toast.success(
-              "Products refreshed",
-              "POS catalogue and stock are up to date.",
+              "Catalogue refreshed",
+              "Products and stock are up to date.",
             );
           }
-        } catch (
-          error
-        ) {
+        } catch (error) {
           toast.error(
             "Products unavailable",
-            error instanceof
-              Error
+            error instanceof Error
               ? error.message
               : "Could not load POS products.",
           );
@@ -186,50 +206,26 @@ export function StandalonePosPage() {
       ],
     );
 
-  /*
-  |--------------------------------------------------------------------------
-  | INITIAL LOAD
-  |--------------------------------------------------------------------------
-  */
+  useEffect(() => {
+    void loadSession();
+  }, [
+    loadSession,
+  ]);
 
-  useEffect(
-    () => {
-      void loadSession();
-    },
-    [
-      loadSession,
-    ],
-  );
+  useEffect(() => {
+    if (
+      session?.status !==
+      "OPEN"
+    ) {
+      return;
+    }
 
-  /*
-  |--------------------------------------------------------------------------
-  | LOAD PRODUCTS WHEN REGISTER IS OPEN
-  |--------------------------------------------------------------------------
-  */
-
-  useEffect(
-    () => {
-      if (
-        session?.status !==
-        "OPEN"
-      ) {
-        return;
-      }
-
-      void loadProducts();
-    },
-    [
-      session?.id,
-      session?.status,
-      loadProducts,
-    ],
-  );
-
-  /*
-  |--------------------------------------------------------------------------
-  | LOGOUT
-  |--------------------------------------------------------------------------
-  */
+    void loadProducts();
+  }, [
+    session?.id,
+    session?.status,
+    loadProducts,
+  ]);
 
   function logout() {
     localStorage.removeItem(
@@ -242,7 +238,7 @@ export function StandalonePosPage() {
 
   /*
   |--------------------------------------------------------------------------
-  | INITIAL LOADING
+  | LOADING
   |--------------------------------------------------------------------------
   */
 
@@ -255,15 +251,7 @@ export function StandalonePosPage() {
     );
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | FAILED TO LOAD BUSINESS STATUS
-  |--------------------------------------------------------------------------
-  */
-
-  if (
-    !business
-  ) {
+  if (!business) {
     return (
       <PosLoadError
         onRetry={() =>
@@ -278,17 +266,11 @@ export function StandalonePosPage() {
 
   /*
   |--------------------------------------------------------------------------
-  | NO ACTIVE SESSION
-  |--------------------------------------------------------------------------
-  |
-  | Cashier must count opening cash and
-  | open the register before billing.
+  | REGISTER NOT OPEN
   |--------------------------------------------------------------------------
   */
 
-  if (
-    !session
-  ) {
+  if (!session) {
     return (
       <PosRegisterOpening
         business={
@@ -300,6 +282,10 @@ export function StandalonePosPage() {
           setSession(
             openedSession,
           );
+
+          setView(
+            "SELLING",
+          );
         }}
       />
     );
@@ -307,19 +293,94 @@ export function StandalonePosPage() {
 
   /*
   |--------------------------------------------------------------------------
-  | OPEN SESSION
+  | PENDING DAY END APPROVAL
   |--------------------------------------------------------------------------
-  |
-  | This is the actual POS.
-  |
-  | Products
-  | Cart
-  | Quantities
-  | Customer
-  | Payments
-  | Sale completion
-  | Receipt
-  | Printing
+  */
+
+  if (
+    session.status ===
+    "PENDING_APPROVAL"
+  ) {
+    return (
+      <PosPendingApprovalState
+        session={
+          session
+        }
+        onRefresh={() =>
+          void loadSession()
+        }
+        onLogout={
+          logout
+        }
+      />
+    );
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | CLOSED
+  |--------------------------------------------------------------------------
+  */
+
+  if (
+    session.status ===
+    "CLOSED"
+  ) {
+    return (
+      <PosClosedState
+        session={
+          session
+        }
+        onRefresh={() =>
+          void loadSession()
+        }
+        onLogout={
+          logout
+        }
+      />
+    );
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | DAY END
+  |--------------------------------------------------------------------------
+  */
+
+  if (
+    session.status ===
+      "CLOSING" ||
+    view ===
+      "DAY_END"
+  ) {
+    return (
+      <PosDayEnd
+        session={
+          session
+        }
+        alreadyClosing={
+          session.status ===
+          "CLOSING"
+        }
+        onBack={
+          session.status ===
+          "OPEN"
+            ? () =>
+                setView(
+                  "SELLING",
+                )
+            : undefined
+        }
+        onSubmitted={() =>
+          void loadSession()
+        }
+      />
+    );
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | SELLING
   |--------------------------------------------------------------------------
   */
 
@@ -346,102 +407,21 @@ export function StandalonePosPage() {
         onLogout={
           logout
         }
-        onDayEnd={() => {
-          /*
-           * Day End UI will replace
-           * this handler.
-           *
-           * Do NOT change session status
-           * from the frontend.
-           *
-           * The backend day-end/start
-           * endpoint must do that.
-           */
-          toast.info(
-            "Day End",
-            "Day End reconciliation is the next POS screen to connect.",
-          );
-        }}
+        onDayEnd={() =>
+          setView(
+            "DAY_END",
+          )
+        }
         onSaleCompleted={() => {
-          /*
-           * Stock changed after the sale.
-           * Refresh the catalogue so the
-           * cashier immediately sees the
-           * new available quantities.
-           */
           void loadProducts();
         }}
       />
     );
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | CLOSING SESSION
-  |--------------------------------------------------------------------------
-  |
-  | Once Day End starts, selling is locked.
-  |--------------------------------------------------------------------------
-  */
-
-  if (
-    session.status ===
-    "CLOSING"
-  ) {
-    return (
-      <PosClosingState
-        session={
-          session
-        }
-        onRefresh={() =>
-          void loadSession(
-            true,
-          )
-        }
-        onLogout={
-          logout
-        }
-      />
-    );
-  }
-
-  /*
-  |--------------------------------------------------------------------------
-  | PENDING MANAGER APPROVAL
-  |--------------------------------------------------------------------------
-  */
-
-  if (
-    session.status ===
-    "PENDING_APPROVAL"
-  ) {
-    return (
-      <PosPendingApprovalState
-        session={
-          session
-        }
-        onRefresh={() =>
-          void loadSession()
-        }
-        onLogout={
-          logout
-        }
-      />
-    );
-  }
-
-  /*
-  |--------------------------------------------------------------------------
-  | CLOSED / UNKNOWN SESSION STATE
-  |--------------------------------------------------------------------------
-  */
-
   return (
-    <PosClosedState
-      session={
-        session
-      }
-      onRefresh={() =>
+    <PosLoadError
+      onRetry={() =>
         void loadSession()
       }
       onLogout={
@@ -453,30 +433,27 @@ export function StandalonePosPage() {
 
 /*
 |--------------------------------------------------------------------------
-| LOADING SCREEN
+| LOADING
 |--------------------------------------------------------------------------
 */
 
 function PosLoadingScreen() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f6f7f8]">
+    <div className="flex min-h-screen items-center justify-center bg-[#f4f4f1]">
       <div className="text-center">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm">
           <RefreshCw
-            size={
-              18
-            }
+            size={18}
             className="animate-spin text-bauraPrimary"
           />
         </div>
 
-        <p className="mt-4 text-[11px] font-bold text-bauraInk">
+        <p className="mt-4 text-[11px] font-extrabold text-bauraInk">
           Loading POS
         </p>
 
-        <p className="mt-1 text-[9px] text-bauraMuted">
-          Checking register
-          status...
+        <p className="mt-1 text-[8px] text-bauraMuted">
+          Checking register status...
         </p>
       </div>
     </div>
@@ -485,111 +462,7 @@ function PosLoadingScreen() {
 
 /*
 |--------------------------------------------------------------------------
-| CLOSING STATE
-|--------------------------------------------------------------------------
-*/
-
-function PosClosingState({
-  session,
-  onRefresh,
-  onLogout,
-}: {
-  session:
-    PosSession;
-
-  onRefresh:
-    () => void;
-
-  onLogout:
-    () => void;
-}) {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f6f7f8] p-6">
-      <div className="w-full max-w-lg rounded-[22px] border border-black/[0.07] bg-white p-7 shadow-[0_20px_70px_rgba(0,0,0,0.07)]">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-          <AlertTriangle
-            size={
-              19
-            }
-          />
-        </div>
-
-        <p className="mt-5 text-[8px] font-bold uppercase tracking-[0.12em] text-bauraMuted">
-          {
-            session.sessionNo
-          }
-        </p>
-
-        <h1 className="mt-1 text-[22px] font-bold tracking-[-0.04em] text-bauraInk">
-          Day End in
-          progress
-        </h1>
-
-        <p className="mt-2 text-[10px] leading-5 text-bauraMuted">
-          Sales are
-          locked because
-          the register has
-          entered Day End.
-          Complete the cash
-          reconciliation
-          before continuing.
-        </p>
-
-        <div className="mt-6 rounded-xl border border-amber-100 bg-amber-50 p-4">
-          <p className="text-[9px] font-bold text-amber-800">
-            Billing is
-            disabled
-          </p>
-
-          <p className="mt-1 text-[8px] leading-4 text-amber-700">
-            No new invoice
-            can be created
-            while this
-            register is in
-            the closing
-            process.
-          </p>
-        </div>
-
-        <div className="mt-5 grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={
-              onLogout
-            }
-            className="flex h-10 items-center justify-center gap-2 rounded-xl border border-black/[0.08] text-[9px] font-bold text-bauraMuted transition hover:bg-[#fafafa] hover:text-bauraInk">
-            <LogOut
-              size={
-                13
-              }
-            />
-
-            Sign Out
-          </button>
-
-          <button
-            type="button"
-            onClick={
-              onRefresh
-            }
-            className="flex h-10 items-center justify-center gap-2 rounded-xl bg-bauraPrimary text-[9px] font-bold text-white transition hover:bg-bauraPrimaryDark">
-            <RefreshCw
-              size={
-                13
-              }
-            />
-
-            Refresh
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/*
-|--------------------------------------------------------------------------
-| PENDING APPROVAL STATE
+| PENDING APPROVAL
 |--------------------------------------------------------------------------
 */
 
@@ -598,74 +471,87 @@ function PosPendingApprovalState({
   onRefresh,
   onLogout,
 }: {
-  session:
-    PosSession;
-
-  onRefresh:
-    () => void;
-
-  onLogout:
-    () => void;
+  session: PosSession;
+  onRefresh: () => void;
+  onLogout: () => void;
 }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f6f7f8] p-6">
-      <div className="w-full max-w-lg rounded-[22px] border border-black/[0.07] bg-white p-7 text-center shadow-[0_20px_70px_rgba(0,0,0,0.07)]">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
-          <Clock3
-            size={
-              22
-            }
-          />
+    <div className="flex min-h-screen items-center justify-center bg-[#f4f4f1] p-6">
+      <div className="w-full max-w-[470px] rounded-[24px] border border-black/[0.07] bg-white p-7 shadow-[0_24px_80px_rgba(0,0,0,0.08)]">
+        <div className="flex items-start">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+            <Clock3
+              size={20}
+            />
+          </div>
+
+          <div className="ml-auto rounded-xl bg-[#f5f5f2] px-3 py-2 text-right">
+            <p className="text-[7px] font-bold uppercase tracking-[0.08em] text-bauraMuted">
+              Session
+            </p>
+
+            <p className="mt-0.5 text-[8px] font-black">
+              {
+                session.sessionNo
+              }
+            </p>
+          </div>
         </div>
 
-        <p className="mt-5 text-[8px] font-bold uppercase tracking-[0.12em] text-bauraMuted">
-          {
-            session.sessionNo
-          }
+        <p className="mt-6 text-[8px] font-bold uppercase tracking-[0.12em] text-amber-600">
+          Day End submitted
         </p>
 
-        <h1 className="mt-2 text-[23px] font-bold tracking-[-0.04em] text-bauraInk">
-          Awaiting manager
-          approval
+        <h1 className="mt-1 text-[24px] font-extrabold tracking-[-0.045em] text-bauraInk">
+          Waiting for manager approval
         </h1>
 
-        <p className="mx-auto mt-2 max-w-sm text-[10px] leading-5 text-bauraMuted">
-          Day End has been
-          submitted. This
-          register is locked
-          until a manager
-          approves or rejects
-          the closing
-          reconciliation.
+        <p className="mt-2 text-[9px] leading-5 text-bauraMuted">
+          The drawer reconciliation has been submitted successfully. This register stays locked until a manager approves or rejects the Day End.
         </p>
 
-        <div className="mt-6 rounded-xl border border-amber-100 bg-amber-50 p-4 text-left">
-          <p className="text-[9px] font-bold text-amber-800">
-            Sales are
-            disabled
-          </p>
+        <div className="mt-6 rounded-2xl border border-amber-100 bg-amber-50 p-4">
+          <div className="flex items-center gap-2">
+            <ShieldCheck
+              size={14}
+              className="text-amber-600"
+            />
 
-          <p className="mt-1 text-[8px] leading-4 text-amber-700">
-            A new invoice
-            cannot be created
-            while this
-            session is
-            waiting for
-            approval.
+            <p className="text-[9px] font-extrabold text-amber-800">
+              Billing disabled
+            </p>
+          </div>
+
+          <p className="mt-2 text-[8px] leading-4 text-amber-700">
+            No new invoice can be created from this register while Day End approval is pending.
           </p>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-2">
+        {session.dayEnd
+          ?.managerNote && (
+          <div className="mt-3 rounded-xl bg-[#f5f5f2] p-3">
+            <p className="text-[7px] font-bold uppercase tracking-[0.08em] text-bauraMuted">
+              Manager note
+            </p>
+
+            <p className="mt-1 text-[8px] leading-4">
+              {
+                session.dayEnd
+                  .managerNote
+              }
+            </p>
+          </div>
+        )}
+
+        <div className="mt-6 grid grid-cols-2 gap-2">
           <button
             type="button"
             onClick={
               onLogout
             }
-            className="flex h-11 items-center justify-center gap-2 rounded-xl border border-black/[0.08] text-[9px] font-bold text-bauraMuted transition hover:bg-[#fafafa] hover:text-bauraInk">
+            className="flex h-11 items-center justify-center gap-2 rounded-xl border border-black/[0.08] text-[8px] font-extrabold text-bauraMuted transition hover:bg-[#fafafa] hover:text-bauraInk">
             <LogOut
-              size={
-                13
-              }
+              size={13}
             />
 
             Sign Out
@@ -676,11 +562,9 @@ function PosPendingApprovalState({
             onClick={
               onRefresh
             }
-            className="flex h-11 items-center justify-center gap-2 rounded-xl bg-bauraPrimary text-[9px] font-bold text-white transition hover:bg-bauraPrimaryDark">
+            className="flex h-11 items-center justify-center gap-2 rounded-xl bg-bauraPrimary text-[8px] font-extrabold text-white">
             <RefreshCw
-              size={
-                13
-              }
+              size={13}
             />
 
             Check Status
@@ -693,7 +577,7 @@ function PosPendingApprovalState({
 
 /*
 |--------------------------------------------------------------------------
-| CLOSED STATE
+| CLOSED
 |--------------------------------------------------------------------------
 */
 
@@ -702,43 +586,31 @@ function PosClosedState({
   onRefresh,
   onLogout,
 }: {
-  session:
-    PosSession;
-
-  onRefresh:
-    () => void;
-
-  onLogout:
-    () => void;
+  session: PosSession;
+  onRefresh: () => void;
+  onLogout: () => void;
 }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f6f7f8] p-6">
-      <div className="w-full max-w-lg rounded-[22px] border border-black/[0.07] bg-white p-7 shadow-[0_20px_70px_rgba(0,0,0,0.07)]">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-bauraGoldSoft text-bauraGoldDark">
-          <Clock3
-            size={
-              19
-            }
+    <div className="flex min-h-screen items-center justify-center bg-[#f4f4f1] p-6">
+      <div className="w-full max-w-[450px] rounded-[24px] border border-black/[0.07] bg-white p-7 text-center shadow-[0_24px_80px_rgba(0,0,0,0.07)]">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+          <CheckCircle2
+            size={23}
           />
         </div>
 
-        <p className="mt-5 text-[8px] font-bold uppercase tracking-[0.12em] text-bauraMuted">
+        <p className="mt-5 text-[8px] font-bold uppercase tracking-[0.12em] text-emerald-600">
           {
             session.sessionNo
           }
         </p>
 
-        <h1 className="mt-1 text-[22px] font-bold tracking-[-0.04em] text-bauraInk">
+        <h1 className="mt-2 text-[23px] font-extrabold tracking-[-0.045em]">
           Register closed
         </h1>
 
-        <p className="mt-2 text-[10px] leading-5 text-bauraMuted">
-          This POS session
-          has been closed.
-          Refresh the POS to
-          check whether a new
-          register session can
-          be opened.
+        <p className="mx-auto mt-2 max-w-sm text-[9px] leading-5 text-bauraMuted">
+          Day End was approved and this POS session has been closed.
         </p>
 
         <div className="mt-6 grid grid-cols-2 gap-2">
@@ -747,11 +619,9 @@ function PosClosedState({
             onClick={
               onLogout
             }
-            className="flex h-10 items-center justify-center gap-2 rounded-xl border border-black/[0.08] text-[9px] font-bold text-bauraMuted transition hover:bg-[#fafafa] hover:text-bauraInk">
+            className="flex h-11 items-center justify-center gap-2 rounded-xl border border-black/[0.08] text-[8px] font-bold">
             <LogOut
-              size={
-                13
-              }
+              size={13}
             />
 
             Sign Out
@@ -762,14 +632,12 @@ function PosClosedState({
             onClick={
               onRefresh
             }
-            className="flex h-10 items-center justify-center gap-2 rounded-xl bg-bauraPrimary text-[9px] font-bold text-white transition hover:bg-bauraPrimaryDark">
+            className="flex h-11 items-center justify-center gap-2 rounded-xl bg-bauraPrimary text-[8px] font-bold text-white">
             <RefreshCw
-              size={
-                13
-              }
+              size={13}
             />
 
-            Refresh
+            Refresh POS
           </button>
         </div>
       </div>
@@ -779,7 +647,7 @@ function PosClosedState({
 
 /*
 |--------------------------------------------------------------------------
-| LOAD ERROR
+| ERROR
 |--------------------------------------------------------------------------
 */
 
@@ -787,31 +655,24 @@ function PosLoadError({
   onRetry,
   onLogout,
 }: {
-  onRetry:
-    () => void;
-
-  onLogout:
-    () => void;
+  onRetry: () => void;
+  onLogout: () => void;
 }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f6f7f8] p-6">
-      <div className="w-full max-w-md rounded-[20px] border border-red-100 bg-white p-6 text-center shadow-sm">
+    <div className="flex min-h-screen items-center justify-center bg-[#f4f4f1] p-6">
+      <div className="w-full max-w-md rounded-[22px] border border-red-100 bg-white p-6 text-center shadow-sm">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-red-50 text-red-600">
           <AlertTriangle
-            size={
-              19
-            }
+            size={19}
           />
         </div>
 
-        <h1 className="mt-4 text-[18px] font-bold tracking-[-0.03em] text-bauraInk">
+        <h1 className="mt-4 text-[18px] font-extrabold tracking-[-0.03em]">
           POS unavailable
         </h1>
 
         <p className="mt-2 text-[9px] leading-5 text-bauraMuted">
-          The register
-          status could not
-          be loaded.
+          The register status could not be loaded.
         </p>
 
         <div className="mt-5 grid grid-cols-2 gap-2">
@@ -820,7 +681,7 @@ function PosLoadError({
             onClick={
               onLogout
             }
-            className="h-10 rounded-xl border border-black/[0.08] text-[9px] font-bold text-bauraInk transition hover:bg-[#fafafa]">
+            className="h-10 rounded-xl border border-black/[0.08] text-[8px] font-bold">
             Sign Out
           </button>
 
@@ -829,7 +690,7 @@ function PosLoadError({
             onClick={
               onRetry
             }
-            className="h-10 rounded-xl bg-bauraPrimary text-[9px] font-bold text-white transition hover:bg-bauraPrimaryDark">
+            className="h-10 rounded-xl bg-bauraPrimary text-[8px] font-bold text-white">
             Try Again
           </button>
         </div>

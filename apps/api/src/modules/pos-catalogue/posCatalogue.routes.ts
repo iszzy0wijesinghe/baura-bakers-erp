@@ -79,6 +79,11 @@ router.get(
             imageUrl: true,
 
             sellPrice: true,
+            sizes: {
+              where: { isActive: true },
+              orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
+              select: { id: true, label: true, serves: true, price: true, officialSiteSizeId: true },
+            },
 
             finishedStockAlertQty:
               true,
@@ -157,6 +162,13 @@ router.get(
                   product.sellPrice,
                 ),
 
+              sizes: product.sizes.map((size) => ({
+                id: size.id,
+                label: size.label,
+                serves: size.serves,
+                price: decimalToNumber(size.price),
+                officialSiteSizeId: size.officialSiteSizeId,
+              })),
               availableQty,
 
               inStock:
@@ -246,6 +258,11 @@ router.get(
             imageUrl: true,
 
             sellPrice: true,
+            sizes: {
+              where: { isActive: true },
+              orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
+              select: { id: true, label: true, serves: true, price: true, officialSiteSizeId: true },
+            },
 
             finishedStockAlertQty:
               true,
@@ -347,6 +364,13 @@ router.get(
               product.sellPrice,
             ),
 
+          sizes: product.sizes.map((size) => ({
+            id: size.id,
+            label: size.label,
+            serves: size.serves,
+            price: decimalToNumber(size.price),
+            officialSiteSizeId: size.officialSiteSizeId,
+          })),
           availableQty,
 
           inStock:

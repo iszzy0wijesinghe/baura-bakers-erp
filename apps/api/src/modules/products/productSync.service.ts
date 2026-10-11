@@ -1,266 +1,305 @@
-import {
-  Prisma,
-} from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 import {
   getOfficialSiteProducts,
-  type OfficialSiteProduct,
+  type OfficialSiteProduct
 } from "../../lib/officialSite";
+import { prisma } from "../../lib/prisma";
 
-import {
-  prisma,
-} from "../../lib/prisma";
-
-/* =======================================================
-   OFFICIAL PRODUCT HELPERS
-======================================================= */
-
-function getPrimarySize(
-  product: OfficialSiteProduct,
-) {
-  const activeSizes =
-    [...product.sizes]
-      .filter(
-        (size) =>
-          size.is_active,
-      )
-      .sort(
-        (
-          first,
-          second,
-        ) =>
-          first.sort_order -
-          second.sort_order,
-      );
-
-  return (
-    activeSizes[0] ??
-    product.sizes[0] ??
-    null
+function getPrimarySize(product: OfficialSiteProduct) {
+  const sortedSizes = [...product.sizes].sort(
+    (first, second) => first.sort_order - second.sort_order
   );
+
+  return sortedSizes.find((size) => size.is_active) ?? sortedSizes[0] ?? null;
 }
 
-function getProductImage(
-  product: OfficialSiteProduct,
-): string | null {
-  const thumbnail =
-    product.thumbnail_url
-      ?.trim();
+function getProductImage(product: OfficialSiteProduct): string | null {
+  const thumbnail = product.thumbnail_url?.trim();
 
   if (thumbnail) {
     return thumbnail;
   }
 
-  const firstImage =
-    [...product.images]
-      .filter(
-        (image) =>
-          Boolean(
-            image.image_url
-              ?.trim(),
-          ),
-      )
-      .sort(
-        (
-          first,
-          second,
-        ) =>
-          first.sort_order -
-          second.sort_order,
-      )[0];
+  const firstImage = [...product.images]
+    .filter((image) => Boolean(image.image_url?.trim()))
+    .sort((first, second) => first.sort_order - second.sort_order)[0];
 
-  return (
-    firstImage
-      ?.image_url
-      ?.trim() ||
-    null
-  );
+  return firstImage?.image_url?.trim() || null;
 }
 
-function getVariantName(
-  product: OfficialSiteProduct,
-): string | null {
-  const size =
-    getPrimarySize(
-      product,
+function parseOfficialDate(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`Invalid official website date: ${value}`);
+  }
+
+  return date;
+}
+
+function validateCatalogue(products: OfficialSiteProduct[]) {
+  if (!Array.isArray(products) || products.length === 0) {
+    throw new Error(
+      "Official website returned an empty or invalid catalogue. Synchronization cancelled."
     );
+  }
 
-  const label =
-    size?.label
-      ?.trim();
+  const productIds = new Set<number>();
+  const sizeIds = new Set<number>();
 
-  return label || null;
+  for (const product of products) {
+    if (!Number.isSafeInteger(product.id) || product.id <= 0) {
+      throw new Error("Official catalogue contains an invalid product ID.");
+    }
+
+    if (productIds.has(product.id)) {
+      throw new Error(`Duplicate official product ID: ${product.id}`);
+    }
+
+    productIds.add(product.id);
+
+    if (!product.name?.trim()) {
+      throw new Error(`Official product ${product.id} has no name.`);
+    }
+
+    if (
+      !Array.isArray(product.sizes) ||
+      !Array.isArray(product.images)
+    ) {
+      throw new Error(
+        `Official product ${product.id} has invalid sizes or images.`
+      );
+    }
+
+    for (const size of product.sizes) {
+      if (!Number.isSafeInteger(size.id) || size.id <= 0) {
+        throw new Error(
+          `Official product ${product.id} contains an invalid size ID.`
+        );
+      }
+
+      if (sizeIds.has(size.id)) {
+        throw new Error(`Duplicate official size ID: ${size.id}`);
+      }
+
+      sizeIds.add(size.id);
+
+      if (!size.label?.trim()) {
+        throw new Error(`Official size ${size.id} has no label.`);
+      }
+
+      const price = Number(size.price_lkr);
+
+      if (!Number.isFinite(price) || price < 0) {
+        throw new Error(`Invalid price for official size ${size.id}.`);
+      }
+
+      if (!Number.isSafeInteger(size.sort_order)) {
+        throw new Error(`Invalid sort order for official size ${size.id}.`);
+      }
+
+      parseOfficialDate(size.updated_at);
+    }
+  }
 }
-
-function getSellPrice(
-  product: OfficialSiteProduct,
-): Prisma.Decimal {
-  const size =
-    getPrimarySize(
-      product,
-    );
-
-  return new Prisma.Decimal(
-    size?.price_lkr ?? 0,
-  );
-}
-
-/* =======================================================
-   SYNC
-======================================================= */
 
 export async function syncOfficialSiteProducts() {
-  const officialProducts =
-    await getOfficialSiteProducts();
+  const officialProducts = await getOfficialSiteProducts();
 
-  const syncedAt =
-    new Date();
+  validateCatalogue(officialProducts);
+
+  const syncedAt = new Date();
+  const officialProductIds = officialProducts.map((product) => product.id);
 
   let created = 0;
   let updated = 0;
   let deactivated = 0;
+  let sizesCreated = 0;
+  let sizesUpdated = 0;
+  let sizesDeactivated = 0;
 
-  const officialProductIds =
-    officialProducts.map(
-      (product) =>
-        product.id,
-    );
+  await prisma.$transaction(
+    async (tx) => {
+      for (const officialProduct of officialProducts) {
+        const primarySize = getPrimarySize(officialProduct);
 
-  /*
-   * Synchronize canonical product information.
-   *
-   * ERP-owned operational data such as:
-   *
-   * - recipes
-   * - stock thresholds
-   * - production history
-   * - finished stock
-   * - sales
-   *
-   * is intentionally not modified here.
-   */
-  for (
-    const officialProduct
-    of officialProducts
-  ) {
-    const existing =
-      await prisma.product.findUnique({
-        where: {
-          officialSiteProductId:
-            officialProduct.id,
-        },
+        const synchronizedData = {
+          name: officialProduct.name.trim(),
+          variantName: primarySize?.label?.trim() || null,
+          imageUrl: getProductImage(officialProduct),
+          sellPrice: new Prisma.Decimal(
+            primarySize?.price_lkr ?? 0
+          ),
+          isActive: officialProduct.is_active,
+          officialSiteSyncedAt: syncedAt
+        };
 
-        select: {
-          id: true,
-        },
-      });
+        const existingProduct = await tx.product.findUnique({
+          where: {
+            officialSiteProductId: officialProduct.id
+          },
+          select: {
+            id: true
+          }
+        });
 
-    const synchronizedData = {
-      name:
-        officialProduct.name
-          .trim(),
+        const product = existingProduct
+          ? await tx.product.update({
+              where: {
+                id: existingProduct.id
+              },
+              data: synchronizedData
+            })
+          : await tx.product.create({
+              data: {
+                officialSiteProductId: officialProduct.id,
+                ...synchronizedData
+              }
+            });
 
-      variantName:
-        getVariantName(
-          officialProduct,
-        ),
+        if (existingProduct) {
+          updated++;
+        } else {
+          created++;
+        }
 
-      imageUrl:
-        getProductImage(
-          officialProduct,
-        ),
+        const officialSizeIds: number[] = [];
 
-      sellPrice:
-        getSellPrice(
-          officialProduct,
-        ),
+        for (const size of officialProduct.sizes) {
+          officialSizeIds.push(size.id);
 
-      isActive:
-        officialProduct
-          .is_active,
+          const existingSize = await tx.productSize.findUnique({
+            where: {
+              officialSiteSizeId: size.id
+            },
+            select: {
+              id: true,
+              productId: true
+            }
+          });
 
-      officialSiteSyncedAt:
-        syncedAt,
-    };
+          if (existingSize && existingSize.productId !== product.id) {
+            throw new Error(
+              `Official size ${size.id} belongs to a different ERP product. Synchronization cancelled.`
+            );
+          }
 
-    if (existing) {
-      await prisma.product.update({
-        where: {
-          id:
-            existing.id,
-        },
+          const sizeData = {
+            label: size.label.trim(),
+            serves: size.serves ?? null,
+            price: new Prisma.Decimal(size.price_lkr),
+            sortOrder: size.sort_order,
+            isActive: officialProduct.is_active && size.is_active,
+            officialSiteUpdatedAt: parseOfficialDate(size.updated_at),
+            syncedAt
+          };
 
-        data:
-          synchronizedData,
-      });
+          if (existingSize) {
+            await tx.productSize.update({
+              where: {
+                id: existingSize.id
+              },
+              data: sizeData
+            });
 
-      updated += 1;
+            sizesUpdated++;
+          } else {
+            await tx.productSize.create({
+              data: {
+                productId: product.id,
+                officialSiteSizeId: size.id,
+                ...sizeData
+              }
+            });
 
-      continue;
-    }
+            sizesCreated++;
+          }
+        }
 
-    await prisma.product.create({
-      data: {
-        officialSiteProductId:
-          officialProduct.id,
+        const removedSizes = await tx.productSize.updateMany({
+          where: {
+            productId: product.id,
+            officialSiteSizeId: {
+              notIn: officialSizeIds
+            },
+            isActive: true
+          },
+          data: {
+            isActive: false,
+            syncedAt
+          }
+        });
 
-        ...synchronizedData,
-      },
-    });
+        sizesDeactivated += removedSizes.count;
+      }
 
-    created += 1;
-  }
-
-  /*
-   * If an already-linked website product no longer appears
-   * in the canonical website response, do NOT delete it.
-   *
-   * Historical ERP records may depend on that Product row.
-   * We only make it unavailable for new operations.
-   *
-   * IMPORTANT:
-   * Only website-linked products are affected.
-   * Existing legacy ERP-only products are untouched while
-   * we complete the migration.
-   */
-  if (
-    officialProductIds.length >
-    0
-  ) {
-    const result =
-      await prisma.product.updateMany({
+      const missingProducts = await tx.product.findMany({
         where: {
           officialSiteProductId: {
             not: null,
-
-            notIn:
-              officialProductIds,
+            notIn: officialProductIds
           },
-
-          isActive:
-            true,
+          isActive: true
         },
-
-        data: {
-          isActive:
-            false,
-        },
+        select: {
+          id: true
+        }
       });
 
-    deactivated =
-      result.count;
-  }
+      if (missingProducts.length > 0) {
+        const missingProductIds = missingProducts.map(
+          (product) => product.id
+        );
+
+        const result = await tx.product.updateMany({
+          where: {
+            id: {
+              in: missingProductIds
+            }
+          },
+          data: {
+            isActive: false,
+            officialSiteSyncedAt: syncedAt
+          }
+        });
+
+        deactivated = result.count;
+
+        const removedSizes = await tx.productSize.updateMany({
+          where: {
+            productId: {
+              in: missingProductIds
+            },
+            isActive: true
+          },
+          data: {
+            isActive: false,
+            syncedAt
+          }
+        });
+
+        sizesDeactivated += removedSizes.count;
+      }
+    },
+    {
+      maxWait: 10000,
+      timeout: 120000
+    }
+  );
 
   return {
-    received:
-      officialProducts.length,
-
+    received: officialProducts.length,
     created,
-
     updated,
-
     deactivated,
-
-    syncedAt,
+    sizesCreated,
+    sizesUpdated,
+    sizesDeactivated,
+    syncedAt
   };
 }

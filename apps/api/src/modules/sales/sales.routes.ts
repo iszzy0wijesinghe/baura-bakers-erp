@@ -130,6 +130,8 @@ const createSaleSchema =
     items:
       z.array(
         z.object({
+          productSizeId: z.string().uuid().nullable().optional(),
+
           productId:
             z.string()
               .uuid(
@@ -1314,43 +1316,18 @@ router.post(
       /*
        * Merge duplicate products.
        */
-      const aggregatedItems =
-        new Map<
-          string,
-          number
-        >();
-
-      for (
-        const item of
-        parsed.data.items
-      ) {
-        aggregatedItems.set(
-          item.productId,
-
-          round3(
-            (
-              aggregatedItems.get(
-                item.productId,
-              ) ||
-              0
-            ) +
-              item.qty,
-          ),
-        );
+      const aggregatedItems = new Map<string, { productId: string; productSizeId: string | null; qty: number }>();
+      for (const item of parsed.data.items) {
+        const sizeId = item.productSizeId ?? null;
+        const key = `${item.productId}:${sizeId ?? "standard"}`;
+        const previous = aggregatedItems.get(key);
+        aggregatedItems.set(key, {
+          productId: item.productId,
+          productSizeId: sizeId,
+          qty: round3((previous?.qty ?? 0) + item.qty),
+        });
       }
-
-      const normalizedItems =
-        [
-          ...aggregatedItems.entries(),
-        ].map(
-          ([
-            productId,
-            qty,
-          ]) => ({
-            productId,
-            qty,
-          }),
-        );
+      const normalizedItems = [...aggregatedItems.values()];
 
       const createdSale =
         await runSerializableTransaction(
@@ -1740,6 +1717,30 @@ router.post(
               );
             }
 
+            // Prices are authoritative on the server; never trust browser prices.
+            const sizeIds = [...new Set(normalizedItems.map((item) => item.productSizeId).filter((id): id is string => Boolean(id)))];
+            const sizes = await tx.productSize.findMany({
+              where: { id: { in: sizeIds }, isActive: true },
+              select: { id: true, productId: true, price: true },
+            });
+            const sizeMap = new Map(sizes.map((size) => [size.id, size]));
+            const productsWithSizes = await tx.productSize.groupBy({
+              by: ["productId"],
+              where: { productId: { in: productIds }, isActive: true },
+            });
+            const requiresSize = new Set(productsWithSizes.map((entry) => entry.productId));
+            for (const item of normalizedItems) {
+              if (requiresSize.has(item.productId) && !item.productSizeId) {
+                throw new Error("Select a product size before checkout.");
+              }
+              if (item.productSizeId) {
+                const size = sizeMap.get(item.productSizeId);
+                if (!size || size.productId !== item.productId) {
+                  throw new Error("Selected product size is invalid or inactive.");
+                }
+              }
+            }
+
             const lotRemainingMap =
               new Map<
                 string,
@@ -1781,6 +1782,8 @@ router.post(
             type PlannedItem = {
               productId:
                 string;
+
+              productSizeId: string | null;
 
               qty:
                 number;
@@ -1941,10 +1944,9 @@ router.post(
                 );
               }
 
-              const unitSellPrice =
-                Number(
-                  product.sellPrice,
-                );
+              const unitSellPrice = requestedItem.productSizeId
+                ? Number(sizeMap.get(requestedItem.productSizeId)!.price)
+                : Number(product.sellPrice);
 
               const lineTotal =
                 round2(
@@ -1969,6 +1971,8 @@ router.post(
                 {
                   productId:
                     product.id,
+
+                  productSizeId: requestedItem.productSizeId,
 
                   qty:
                     requestedItem.qty,
@@ -2321,6 +2325,8 @@ router.post(
 
                       productId:
                         plannedItem.productId,
+
+                      productSizeId: plannedItem.productSizeId,
 
                       qty:
                         plannedItem.qty,

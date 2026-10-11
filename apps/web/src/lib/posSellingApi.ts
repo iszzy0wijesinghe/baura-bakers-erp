@@ -22,6 +22,14 @@ function toNumber(value: unknown): number {
    PRODUCTS
 ========================================================= */
 
+export type PosProductSize = {
+  id: string;
+  label: string;
+  serves?: string | null;
+  price: number;
+  officialSiteSizeId?: number | null;
+};
+
 export type PosProduct = {
   id: string;
   officialSiteProductId?: string | number | null;
@@ -33,6 +41,7 @@ export type PosProduct = {
   imageUrl?: string | null;
 
   sellPrice: number;
+  sizes: PosProductSize[];
   availableQty: number;
 
   inStock: boolean;
@@ -44,6 +53,7 @@ export type PosProduct = {
 };
 
 type RawPosProduct = {
+  sizes?: Array<{ id: string; label: string; serves?: string | null; price: number | string; officialSiteSizeId?: number | null }>;
   id: string;
 
   officialSiteProductId?: string | number | null;
@@ -132,6 +142,13 @@ function normalizeProduct(
         product.sellPrice,
       ),
 
+    sizes: (product.sizes ?? []).map((size) => ({
+      id: size.id,
+      label: size.label,
+      serves: size.serves ?? null,
+      price: toNumber(size.price),
+      officialSiteSizeId: size.officialSiteSizeId ?? null,
+    })),
     availableQty,
 
     inStock:
@@ -251,6 +268,7 @@ export async function registerPosCustomer(
 ========================================================= */
 
 export type PosSaleItemInput = {
+  productSizeId?: string | null;
   productId: string;
   qty: number;
 };
@@ -329,6 +347,7 @@ export type PosReceiptPayment = {
 };
 
 export type PosReceiptItem = {
+  productSizeId?: string | null;
   id?: string;
 
   productId: string;

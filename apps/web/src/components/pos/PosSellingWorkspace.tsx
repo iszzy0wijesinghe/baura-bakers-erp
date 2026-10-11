@@ -63,6 +63,9 @@ import {
 
 type CartItem = {
   product: PosProduct;
+  productSizeId: string | null;
+  sizeLabel: string | null;
+  unitPrice: number;
   qty: number;
 };
 
@@ -345,8 +348,7 @@ export function PosSellingWorkspace({
             item,
           ) =>
             total +
-            item.product
-              .sellPrice *
+            item.unitPrice *
               item.qty,
           0,
         ),
@@ -409,6 +411,15 @@ export function PosSellingWorkspace({
   function addProduct(
     product: PosProduct,
   ) {
+    let selectedSize = product.sizes.length === 1 ? product.sizes[0] : undefined;
+    if (product.sizes.length > 1) {
+      const answer = window.prompt(`Select size (1-${product.sizes.length}) for ${product.displayName}:\n${product.sizes.map((s, i) => `${i + 1}. ${s.label} — Rs. ${s.price}`).join("\n")}`);
+      if (answer === null) return;
+      selectedSize = product.sizes[Number(answer) - 1];
+      if (!selectedSize) { toast.warning("Invalid size", "Choose an available size."); return; }
+    }
+    const productSizeId = selectedSize?.id ?? null;
+    const cartKey = `${product.id}:${productSizeId ?? "standard"}`;
     if (
       !product.inStock ||
       product.availableQty <=
@@ -427,8 +438,7 @@ export function PosSellingWorkspace({
         const existing =
           current.find(
             (item) =>
-              item.product.id ===
-              product.id,
+              `${item.product.id}:${item.productSizeId ?? "standard"}` === cartKey,
           );
 
         if (!existing) {
@@ -436,14 +446,16 @@ export function PosSellingWorkspace({
             ...current,
             {
               product,
+              productSizeId,
+              sizeLabel: selectedSize?.label ?? null,
+              unitPrice: selectedSize?.price ?? product.sellPrice,
               qty: 1,
             },
           ];
         }
 
         if (
-          existing.qty >=
-          product.availableQty
+          current.filter((item) => item.product.id === product.id).reduce((sum, item) => sum + item.qty, 0) >= product.availableQty
         ) {
           toast.warning(
             "Stock limit reached",
@@ -455,8 +467,7 @@ export function PosSellingWorkspace({
 
         return current.map(
           (item) =>
-            item.product.id ===
-            product.id
+            `${item.product.id}:${item.productSizeId ?? "standard"}` === cartKey
               ? {
                   ...item,
                   qty:
@@ -479,8 +490,7 @@ export function PosSellingWorkspace({
           .map(
             (item) => {
               if (
-                item.product.id !==
-                productId
+                `${item.product.id}:${item.productSizeId ?? "standard"}` !== productId
               ) {
                 return item;
               }
@@ -501,8 +511,7 @@ export function PosSellingWorkspace({
                 qty:
                   Math.min(
                     next,
-                    item.product
-                      .availableQty,
+                    Math.max(0, item.product.availableQty - current.filter((other) => other !== item && other.product.id === item.product.id).reduce((sum, other) => sum + other.qty, 0)),
                   ),
               };
             },
@@ -524,8 +533,7 @@ export function PosSellingWorkspace({
       (current) =>
         current.filter(
           (item) =>
-            item.product.id !==
-            productId,
+            `${item.product.id}:${item.productSizeId ?? "standard"}` !== productId,
         ),
     );
   }
@@ -891,6 +899,7 @@ export function PosSellingWorkspace({
                 (item) => ({
                   productId:
                     item.product.id,
+                  productSizeId: item.productSizeId,
 
                   qty:
                     item.qty,
@@ -1318,26 +1327,26 @@ export function PosSellingWorkspace({
                   ) => (
                     <CartRow
                       key={
-                        item.product.id
+                        `${item.product.id}:${item.productSizeId ?? "standard"}`
                       }
                       item={
                         item
                       }
                       onMinus={() =>
                         updateQty(
-                          item.product.id,
+                          `${item.product.id}:${item.productSizeId ?? "standard"}`,
                           -1,
                         )
                       }
                       onPlus={() =>
                         updateQty(
-                          item.product.id,
+                          `${item.product.id}:${item.productSizeId ?? "standard"}`,
                           1,
                         )
                       }
                       onRemove={() =>
                         removeItem(
-                          item.product.id,
+                          `${item.product.id}:${item.productSizeId ?? "standard"}`,
                         )
                       }
                     />
@@ -1865,7 +1874,7 @@ function CartRow({
               {
                 item.product
                   .displayName
-              }
+              }{item.sizeLabel ? ` — ${item.sizeLabel}` : ""}
             </p>
 
             <button
@@ -1883,8 +1892,7 @@ function CartRow({
           <p className="mt-0.5 text-[8px] text-bauraMuted">
             Rs.{" "}
             {money(
-              item.product
-                .sellPrice,
+              item.unitPrice,
             )}{" "}
             each
           </p>
@@ -1924,8 +1932,7 @@ function CartRow({
           Rs.{" "}
           {money(
             item.qty *
-              item.product
-                .sellPrice,
+              item.unitPrice,
           )}
         </p>
       </div>

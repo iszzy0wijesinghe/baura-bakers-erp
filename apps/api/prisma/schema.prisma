@@ -401,6 +401,7 @@ model Product {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
+  sizes                         ProductSize[]
   recipeItems                   ProductRecipeItem[]
   saleItems                     SaleItem[]
   productionBatches             ProductionBatch[]
@@ -411,6 +412,26 @@ model Product {
   @@index([name])
   @@index([isActive])
   @@index([officialSiteProductId])
+}
+
+model ProductSize {
+  id                    String    @id @default(uuid()) @db.Char(36)
+  productId             String    @db.Char(36)
+  officialSiteSizeId    Int       @unique
+  label                 String    @db.VarChar(255)
+  serves                String?   @db.VarChar(255)
+  price                 Decimal   @db.Decimal(12, 2)
+  sortOrder             Int       @default(0)
+  isActive              Boolean   @default(true)
+  officialSiteUpdatedAt DateTime?
+  syncedAt              DateTime  @default(now())
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  product   Product    @relation(fields: [productId], references: [id], onDelete: Restrict)
+  saleItems SaleItem[]
+
+  @@index([productId, isActive, sortOrder])
 }
 
 model ProductRecipeItem {
@@ -583,6 +604,7 @@ model SaleItem {
   id            String   @id @default(uuid()) @db.Char(36)
   salesOrderId  String   @db.Char(36)
   productId     String   @db.Char(36)
+  productSizeId String?  @db.Char(36)
   qty           Decimal  @db.Decimal(12, 3)
   unitSellPrice Decimal  @db.Decimal(12, 2)
   lineTotal     Decimal  @db.Decimal(12, 2)
@@ -594,10 +616,12 @@ model SaleItem {
 
   salesOrder                SalesOrder                     @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
   product                   Product                        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productSize               ProductSize?                   @relation(fields: [productSizeId], references: [id], onDelete: Restrict)
   fifoConsumptions          SaleItemFifoConsumption[]
   finishedGoodsConsumptions SaleFinishedGoodsConsumption[]
 
   @@index([salesOrderId])
+  @@index([productSizeId])
   @@index([productId])
 }
 
@@ -639,14 +663,6 @@ model SaleFinishedGoodsConsumption {
   @@index([productId])
 }
 
-/**
- * Backend-authoritative normal weekly shop schedule.
- * weekday uses ISO-8601:
- * Monday = 1
- * ...
- * Sunday = 7
- * openingTime/closingTime use HH:mm.
- */
 model BusinessWeeklySchedule {
   id          String   @id @default(uuid()) @db.Char(36)
   weekday     Int      @unique @db.UnsignedTinyInt
@@ -657,11 +673,6 @@ model BusinessWeeklySchedule {
   updatedAt   DateTime @updatedAt
 }
 
-/**
- * Date-specific shop-calendar override.
- * CLOSED ignores opening/closing times.
- * SPECIAL_HOURS requires opening/closing times at application level.
- */
 model BusinessCalendarException {
   id          String                        @id @default(uuid()) @db.Char(36)
   date        DateTime                      @unique @db.Date
@@ -675,11 +686,6 @@ model BusinessCalendarException {
   @@index([type])
 }
 
-/**
- * POS business session.
- * Sales are only allowed against an OPEN session.
- * Calendar date and business date are intentionally separate concepts.
- */
 model PosSession {
   id               String           @id @default(uuid()) @db.Char(36)
   sessionNo        String           @unique
@@ -708,12 +714,6 @@ model PosSession {
   @@index([openedById, status])
 }
 
-/**
- * Normalized financial payment ledger.
- * SalesOrder.paymentMethod remains temporarily for historical/backward
- * compatibility. New production POS posting will use PosPayment as the
- * authoritative payment evidence.
- */
 model PosPayment {
   id             String           @id @default(uuid()) @db.Char(36)
   paymentNo      String           @unique
@@ -739,15 +739,6 @@ model PosPayment {
   @@index([createdAt])
 }
 
-/**
- * Non-sale physical cash movement.
- * Examples:
- * - opening float
- * - authorized cash in
- * - authorized cash out
- * - cash refund
- * - controlled adjustment
- */
 model PosCashMovement {
   id           String              @id @default(uuid()) @db.Char(36)
   posSessionId String              @db.Char(36)
@@ -766,12 +757,6 @@ model PosCashMovement {
   @@index([type])
 }
 
-/**
- * Physical denomination evidence.
- * We store the denomination value on the historical count itself rather
- * than depending on a future configuration table. This keeps old day-end
- * evidence accurate even if accepted denominations change later.
- */
 model PosCashDenominationCount {
   id                String       @id @default(uuid()) @db.Char(36)
   posSessionId      String       @db.Char(36)
@@ -790,11 +775,6 @@ model PosCashDenominationCount {
   @@index([posSessionId, countType])
 }
 
-/**
- * Immutable-style day-end financial snapshot.
- * Totals are calculated by the backend from authoritative sale/payment/
- * cash-movement records when the day end is submitted.
- */
 model PosDayEnd {
   id                String       @id @default(uuid()) @db.Char(36)
   posSessionId      String       @unique @db.Char(36)

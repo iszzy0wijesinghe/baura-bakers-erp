@@ -12,6 +12,7 @@ import {
   ChefHat,
   ClipboardCheck,
   Home,
+  Landmark,
   LogOut,
   PackageCheck,
   Search,
@@ -37,7 +38,8 @@ type NavigationGroup =
   | "Operations"
   | "Inventory"
   | "POS Management"
-  | "Management";
+  | "Management"
+  | "Finance";
 
 type NavigationItem = {
   label: string;
@@ -114,6 +116,20 @@ const navigationItems: NavigationItem[] = [
     permissions: ["erp.pos.business-calendar.read"],
   },
   {
+    label: "Finance Management",
+    path: "/dashboard/finance",
+    icon: Landmark,
+    group: "Finance",
+    permissions: ["erp.finance.read"],
+  },
+  {
+    label: "Expenses & Cash/Bank",
+    path: "/dashboard/finance/operations",
+    icon: Landmark,
+    group: "Finance",
+    permissions: ["erp.finance.read"],
+  },
+  {
     label: "Analytics",
     path: "/dashboard/analytics",
     icon: BarChart3,
@@ -134,6 +150,7 @@ const groups: NavigationGroup[] = [
   "Operations",
   "Inventory",
   "POS Management",
+  "Finance",
   "Management",
 ];
 

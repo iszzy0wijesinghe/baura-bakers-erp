@@ -17,6 +17,9 @@ import { ProductionPage } from "./pages/ProductionPage";
 import { ProductsPage } from "./pages/ProductsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
+import { FinanceOperationsPage } from "./pages/finance/FinanceOperationsPage";
+import { FinanceDashboardPage, ChartOfAccountsPage, GeneralLedgerPage, JournalEntriesPage, AccountingPeriodsPage } from "./pages/finance/FinancePages";
+
 import { PosLoginPage } from "./pages/pos/PosLoginPage";
 import { PosRegisterPage } from "./pages/pos/PosRegisterPage";
 import { StandalonePosPage } from "./pages/pos/StandalonePosPage";
@@ -155,6 +158,20 @@ function App() {
           </ProtectedRoute>
         }
       />
+
+      {/* FINANCE MANAGEMENT */}
+      {([
+        ["/dashboard/finance", FinanceDashboardPage],
+        ["/dashboard/finance/accounts", ChartOfAccountsPage],
+        ["/dashboard/finance/ledger", GeneralLedgerPage],
+        ["/dashboard/finance/journals", JournalEntriesPage],
+        ["/dashboard/finance/periods", AccountingPeriodsPage],
+        ["/dashboard/finance/operations", FinanceOperationsPage],
+      ] as const).map(([path, Component]) => (
+        <Route key={path} path={path} element={
+          <ProtectedRoute permission="erp.finance.read"><Component /></ProtectedRoute>
+        } />
+      ))}
 
       {/* ANALYTICS */}
 

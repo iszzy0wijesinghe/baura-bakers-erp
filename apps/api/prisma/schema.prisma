@@ -1035,3 +1035,118 @@ model ProductionExpense {
   @@index([productionBatchId])
   @@index([recipeExpenseId])
 }
+
+// Finance Phase 1A: additive accounting foundation. Amounts are in LKR.
+enum FinanceAccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum FinanceNormalBalance {
+  DEBIT
+  CREDIT
+}
+
+enum FinancePeriodStatus {
+  OPEN
+  CLOSED
+}
+
+enum FinanceJournalStatus {
+  DRAFT
+  POSTED
+  REVERSED
+}
+
+model FinanceFiscalYear {
+  id        String   @id @default(uuid()) @db.Char(36)
+  label     String   @unique @db.VarChar(30)
+  startsOn  DateTime @db.Date
+  endsOn    DateTime @db.Date
+  createdAt DateTime @default(now())
+  periods   FinancePeriod[]
+  journals  FinanceJournal[]
+
+  @@index([startsOn, endsOn])
+}
+
+model FinancePeriod {
+  id           String              @id @default(uuid()) @db.Char(36)
+  fiscalYearId String              @db.Char(36)
+  number       Int
+  startsOn     DateTime            @db.Date
+  endsOn       DateTime            @db.Date
+  status       FinancePeriodStatus @default(OPEN)
+  closedAt     DateTime?
+  closedById   String?             @db.Char(36)
+  fiscalYear   FinanceFiscalYear   @relation(fields: [fiscalYearId], references: [id], onDelete: Restrict)
+  journals     FinanceJournal[]
+
+  @@unique([fiscalYearId, number])
+  @@index([startsOn, endsOn, status])
+}
+
+model FinanceAccount {
+  id            String               @id @default(uuid()) @db.Char(36)
+  code          String               @unique @db.VarChar(30)
+  name          String               @db.VarChar(150)
+  type          FinanceAccountType
+  normalBalance FinanceNormalBalance
+  parentId      String?              @db.Char(36)
+  isActive      Boolean              @default(true)
+  allowPosting  Boolean              @default(true)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  parent        FinanceAccount?      @relation("FinanceAccountHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children      FinanceAccount[]     @relation("FinanceAccountHierarchy")
+  lines         FinanceJournalLine[]
+
+  @@index([type, isActive])
+  @@index([parentId])
+}
+
+model FinanceJournal {
+  id                String               @id @default(uuid()) @db.Char(36)
+  journalNo         String               @unique @db.VarChar(40)
+  fiscalYearId      String               @db.Char(36)
+  periodId          String               @db.Char(36)
+  accountingDate    DateTime             @db.Date
+  description       String               @db.VarChar(500)
+  status            FinanceJournalStatus @default(DRAFT)
+  sourceType        String?              @db.VarChar(60)
+  sourceId          String?              @db.VarChar(100)
+  sourceEvent       String?              @db.VarChar(60)
+  idempotencyKey    String?              @unique @db.VarChar(191)
+  reversalOfId      String?              @unique @db.Char(36)
+  createdById       String?              @db.Char(36)
+  postedById        String?              @db.Char(36)
+  postedAt          DateTime?
+  createdAt         DateTime             @default(now())
+  fiscalYear        FinanceFiscalYear    @relation(fields: [fiscalYearId], references: [id], onDelete: Restrict)
+  period            FinancePeriod        @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  lines             FinanceJournalLine[]
+  reversalOf        FinanceJournal?      @relation("FinanceReversals", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversedBy        FinanceJournal?      @relation("FinanceReversals")
+
+  @@index([accountingDate, status])
+  @@index([periodId, status])
+  @@index([sourceType, sourceId])
+}
+
+model FinanceJournalLine {
+  id          String         @id @default(uuid()) @db.Char(36)
+  journalId   String         @db.Char(36)
+  lineNo      Int
+  accountId   String         @db.Char(36)
+  description String?        @db.VarChar(500)
+  debit       Decimal        @default(0) @db.Decimal(18, 2)
+  credit      Decimal        @default(0) @db.Decimal(18, 2)
+  journal     FinanceJournal @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  account     FinanceAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@unique([journalId, lineNo])
+  @@index([accountId])
+}

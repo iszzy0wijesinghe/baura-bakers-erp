@@ -15,6 +15,7 @@ import bakeryStockRoutes from "./modules/bakery-stock/bakeryStock.routes";
 import salesRoutes from "./modules/sales/sales.routes";
 import posApprovalRoutes from "./modules/pos-approvals/posApprovals.routes";
 import analyticsRoutes from "./modules/analytics/analytics.routes";
+import financeRoutes from "./modules/finance/finance.routes";
 import settingsRoutes from "./modules/settings/settings.routes";
 import posCatalogueRoutes from "./modules/pos-catalogue/posCatalogue.routes";
 import posCustomerRoutes from "./modules/pos-customers/posCustomers.routes";
@@ -225,6 +226,7 @@ app.use("/api/pos-customers", posCustomerRoutes);
 */
 
 app.use("/api/analytics", analyticsRoutes);
+app.use("/api/finance", financeRoutes);
 app.use("/api/settings", settingsRoutes);
 
 /*

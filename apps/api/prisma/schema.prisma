@@ -148,6 +148,22 @@ enum ReceiptEmailStatus {
   FAILED
 }
 
+enum RecipeExpenseCategory {
+  ELECTRICITY
+  GAS
+  LABOUR
+  PACKAGING
+  DECORATION
+  TRANSPORT
+  OTHER
+}
+
+enum RecipeExpenseCalculation {
+  PER_BATCH
+  PER_UNIT
+  QUANTITY_BASED
+}
+
 model User {
   id                 String   @id @default(uuid()) @db.Char(36)
   officialSiteUserId Int?     @unique
@@ -249,6 +265,52 @@ model Ingredient {
   @@index([isActive])
 }
 
+enum CarterExpenseCategory {
+  TRANSPORT
+  DELIVERY
+  PACKAGING
+  HANDLING
+  OTHER
+}
+
+enum CarterExpenseTreatment {
+  INVENTORY
+  OPERATING
+}
+
+model CarterPurchaseExpense {
+  id          String                 @id @default(uuid()) @db.Char(36)
+  carterId    String                 @db.Char(36)
+  itemId      String?                @db.Char(36)
+  category    CarterExpenseCategory
+  treatment   CarterExpenseTreatment @default(INVENTORY)
+  description String?                @db.VarChar(500)
+  amount      Decimal                @db.Decimal(14, 2)
+  createdById String?                @db.Char(36)
+  createdAt   DateTime               @default(now())
+
+  carter      PurchaseCarter            @relation(fields: [carterId], references: [id], onDelete: Restrict)
+  allocations CarterExpenseAllocation[]
+  item        PurchaseCarterItem?       @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@index([carterId])
+  @@index([itemId])
+}
+
+model CarterExpenseAllocation {
+  id        String   @id @default(uuid()) @db.Char(36)
+  expenseId String   @db.Char(36)
+  itemId    String   @db.Char(36)
+  amount    Decimal  @db.Decimal(14, 2)
+  createdAt DateTime @default(now())
+
+  expense CarterPurchaseExpense @relation(fields: [expenseId], references: [id], onDelete: Restrict)
+  item    PurchaseCarterItem    @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@unique([expenseId, itemId])
+  @@index([itemId])
+}
+
 model PurchaseCarter {
   id           String   @id @default(uuid()) @db.Char(36)
   carterNo     String   @unique
@@ -259,24 +321,30 @@ model PurchaseCarter {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  createdBy User?                @relation("CarterCreatedBy", fields: [createdById], references: [id])
+  createdBy User?                   @relation("CarterCreatedBy", fields: [createdById], references: [id])
   items     PurchaseCarterItem[]
+  expenses  CarterPurchaseExpense[]
 }
 
 model PurchaseCarterItem {
-  id              String   @id @default(uuid()) @db.Char(36)
-  carterId        String   @db.Char(36)
-  ingredientId    String   @db.Char(36)
-  loadedQty       Decimal  @db.Decimal(12, 3)
-  pricePerPackage Decimal  @db.Decimal(12, 2)
-  totalBaseQty    Decimal  @db.Decimal(12, 3)
-  totalPrice      Decimal  @db.Decimal(12, 2)
-  unitCostBase    Decimal  @db.Decimal(12, 6)
-  createdAt       DateTime @default(now())
+  id              String    @id @default(uuid()) @db.Char(36)
+  carterId        String    @db.Char(36)
+  ingredientId    String    @db.Char(36)
+  loadedQty       Decimal   @db.Decimal(12, 3)
+  pricePerPackage Decimal   @db.Decimal(12, 2)
+  totalBaseQty    Decimal   @db.Decimal(12, 3)
+  totalPrice      Decimal   @db.Decimal(12, 2)
+  unitCostBase    Decimal   @db.Decimal(12, 6)
+  createdAt       DateTime  @default(now())
+  invalidatedAt   DateTime?
+  invalidReason   String?   @db.VarChar(500)
+  invalidatedById String?   @db.Char(36)
 
-  carter     PurchaseCarter       @relation(fields: [carterId], references: [id], onDelete: Cascade)
-  ingredient Ingredient           @relation(fields: [ingredientId], references: [id])
-  stockLots  IngredientStockLot[]
+  carter             PurchaseCarter            @relation(fields: [carterId], references: [id], onDelete: Cascade)
+  ingredient         Ingredient                @relation(fields: [ingredientId], references: [id])
+  stockLots          IngredientStockLot[]
+  expenses           CarterPurchaseExpense[]
+  expenseAllocations CarterExpenseAllocation[]
 
   @@index([carterId])
   @@index([ingredientId])
@@ -408,6 +476,7 @@ model Product {
   finishedGoodsLots             FinishedGoodsLot[]
   finishedGoodsMovements        FinishedGoodsMovement[]
   saleFinishedGoodsConsumptions SaleFinishedGoodsConsumption[]
+  recipeExpenses                ProductRecipeExpense[]
 
   @@index([name])
   @@index([isActive])
@@ -428,8 +497,13 @@ model ProductSize {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  product   Product    @relation(fields: [productId], references: [id], onDelete: Restrict)
-  saleItems SaleItem[]
+  product                Product                 @relation(fields: [productId], references: [id], onDelete: Restrict)
+  saleItems              SaleItem[]
+  recipeItems            ProductRecipeItem[]
+  recipeExpenses         ProductRecipeExpense[]
+  productionBatches      ProductionBatch[]
+  finishedGoodsLots      FinishedGoodsLot[]
+  finishedGoodsMovements FinishedGoodsMovement[]
 
   @@index([productId, isActive, sortOrder])
 }
@@ -437,17 +511,19 @@ model ProductSize {
 model ProductRecipeItem {
   id              String   @id @default(uuid()) @db.Char(36)
   productId       String   @db.Char(36)
+  productSizeId   String?  @db.Char(36)
   ingredientId    String   @db.Char(36)
   imageUrl        String?  @db.VarChar(1000)
   requiredBaseQty Decimal  @db.Decimal(12, 3)
   baseUnit        BaseUnit
   createdAt       DateTime @default(now())
 
-  product    Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
-  ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+  product     Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productSize ProductSize? @relation(fields: [productSizeId], references: [id], onDelete: Restrict)
+  ingredient  Ingredient   @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
 
-  @@unique([productId, ingredientId])
-  @@index([productId])
+  @@unique([productId, productSizeId, ingredientId])
+  @@index([productId, productSizeId])
   @@index([ingredientId])
 }
 
@@ -455,6 +531,7 @@ model ProductionBatch {
   id                  String           @id @default(uuid()) @db.Char(36)
   batchNo             String           @unique
   productId           String           @db.Char(36)
+  productSizeId       String?          @db.Char(36)
   plannedQty          Decimal          @db.Decimal(12, 3)
   producedQty         Decimal          @default(0) @db.Decimal(12, 3)
   rejectedQty         Decimal          @default(0) @db.Decimal(12, 3)
@@ -462,6 +539,8 @@ model ProductionBatch {
   productionDate      DateTime         @default(now())
   expiryDate          DateTime?
   ingredientCostTotal Decimal          @default(0) @db.Decimal(14, 2)
+  expenseCostTotal    Decimal          @default(0) @db.Decimal(14, 2)
+  totalProductionCost Decimal          @default(0) @db.Decimal(14, 2)
   unitCost            Decimal          @default(0) @db.Decimal(14, 6)
   notes               String?
   createdById         String           @db.Char(36)
@@ -471,12 +550,15 @@ model ProductionBatch {
   updatedAt           DateTime         @updatedAt
 
   product          Product                 @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productSize      ProductSize?            @relation(fields: [productSizeId], references: [id], onDelete: Restrict)
+  expenses         ProductionExpense[]
   createdBy        User                    @relation("ProductionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   postedBy         User?                   @relation("ProductionPostedBy", fields: [postedById], references: [id], onDelete: Restrict)
   consumptions     ProductionConsumption[]
   finishedGoodsLot FinishedGoodsLot?
 
   @@index([productId])
+  @@index([productSizeId])
   @@index([productionDate])
   @@index([status])
 }
@@ -504,6 +586,7 @@ model FinishedGoodsLot {
   id                String    @id @default(uuid()) @db.Char(36)
   productionBatchId String    @unique @db.Char(36)
   productId         String    @db.Char(36)
+  productSizeId     String?   @db.Char(36)
   producedQty       Decimal   @db.Decimal(12, 3)
   remainingQty      Decimal   @db.Decimal(12, 3)
   unitCost          Decimal   @db.Decimal(14, 6)
@@ -513,30 +596,35 @@ model FinishedGoodsLot {
 
   productionBatch  ProductionBatch                @relation(fields: [productionBatchId], references: [id], onDelete: Restrict)
   product          Product                        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productSize      ProductSize?                   @relation(fields: [productSizeId], references: [id], onDelete: Restrict)
   movements        FinishedGoodsMovement[]
   saleConsumptions SaleFinishedGoodsConsumption[]
 
+  @@index([productId, productSizeId, remainingQty])
   @@index([productId, remainingQty])
   @@index([producedAt])
   @@index([expiryDate])
 }
 
 model FinishedGoodsMovement {
-  id           String                    @id @default(uuid()) @db.Char(36)
-  productId    String                    @db.Char(36)
-  stockLotId   String?                   @db.Char(36)
-  movementType FinishedGoodsMovementType
-  refType      String?
-  refId        String?
-  qtyDelta     Decimal                   @db.Decimal(12, 3)
-  unitCost     Decimal?                  @db.Decimal(14, 6)
-  costAmount   Decimal?                  @db.Decimal(14, 2)
-  note         String?
-  occurredAt   DateTime                  @default(now())
+  id            String                    @id @default(uuid()) @db.Char(36)
+  productId     String                    @db.Char(36)
+  productSizeId String?                   @db.Char(36)
+  stockLotId    String?                   @db.Char(36)
+  movementType  FinishedGoodsMovementType
+  refType       String?
+  refId         String?
+  qtyDelta      Decimal                   @db.Decimal(12, 3)
+  unitCost      Decimal?                  @db.Decimal(14, 6)
+  costAmount    Decimal?                  @db.Decimal(14, 2)
+  note          String?
+  occurredAt    DateTime                  @default(now())
 
-  product  Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
-  stockLot FinishedGoodsLot? @relation(fields: [stockLotId], references: [id], onDelete: Restrict)
+  product     Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productSize ProductSize?      @relation(fields: [productSizeId], references: [id], onDelete: Restrict)
+  stockLot    FinishedGoodsLot? @relation(fields: [stockLotId], references: [id], onDelete: Restrict)
 
+  @@index([productId, productSizeId])
   @@index([productId])
   @@index([stockLotId])
   @@index([movementType])
@@ -903,4 +991,47 @@ model BackupHistory {
   completedAt        DateTime?
   errorMessage       String?
   createdAt          DateTime     @default(now())
+}
+
+model ProductRecipeExpense {
+  id                String                   @id @default(uuid()) @db.Char(36)
+  productId         String                   @db.Char(36)
+  productSizeId     String?                  @db.Char(36)
+  name              String                   @db.VarChar(191)
+  category          RecipeExpenseCategory
+  calculationMethod RecipeExpenseCalculation @default(PER_BATCH)
+  quantity          Decimal                  @default(1) @db.Decimal(12, 3)
+  rate              Decimal                  @db.Decimal(14, 2)
+  description       String?                  @db.VarChar(500)
+  isActive          Boolean                  @default(true)
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  product            Product             @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productSize        ProductSize?        @relation(fields: [productSizeId], references: [id], onDelete: Restrict)
+  productionExpenses ProductionExpense[]
+
+  @@index([productId])
+  @@index([productSizeId])
+  @@index([category])
+  @@index([isActive])
+}
+
+model ProductionExpense {
+  id                String                   @id @default(uuid()) @db.Char(36)
+  productionBatchId String                   @db.Char(36)
+  recipeExpenseId   String?                  @db.Char(36)
+  name              String                   @db.VarChar(191)
+  category          RecipeExpenseCategory
+  calculationMethod RecipeExpenseCalculation
+  quantity          Decimal                  @db.Decimal(12, 3)
+  rate              Decimal                  @db.Decimal(14, 2)
+  totalAmount       Decimal                  @db.Decimal(14, 2)
+  createdAt         DateTime                 @default(now())
+
+  productionBatch ProductionBatch       @relation(fields: [productionBatchId], references: [id], onDelete: Restrict)
+  recipeExpense   ProductRecipeExpense? @relation(fields: [recipeExpenseId], references: [id], onDelete: SetNull)
+
+  @@index([productionBatchId])
+  @@index([recipeExpenseId])
 }

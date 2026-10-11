@@ -1,15 +1,16 @@
 /** @format */
 
 import { useMemo, useState } from "react";
-
 import type { KeyboardEvent, ReactNode } from "react";
-
 import type { LucideIcon } from "lucide-react";
 
 import {
   BarChart3,
   Boxes,
+  CalendarDays,
+  CakeSlice,
   ChefHat,
+  ClipboardCheck,
   Home,
   LogOut,
   PackageCheck,
@@ -17,7 +18,6 @@ import {
   Settings,
   ShoppingCart,
   Warehouse,
-  CakeSlice,
 } from "lucide-react";
 
 import { useNavigate } from "react-router-dom";
@@ -32,13 +32,18 @@ type AppLayoutProps = {
   children: ReactNode;
 };
 
+type NavigationGroup =
+  | "Overview"
+  | "Operations"
+  | "Inventory"
+  | "POS Management"
+  | "Management";
+
 type NavigationItem = {
   label: string;
   path: string;
   icon: LucideIcon;
-
-  group: "Overview" | "Operations" | "Inventory" | "Management";
-
+  group: NavigationGroup;
   permissions: string[];
 };
 
@@ -50,84 +55,87 @@ const navigationItems: NavigationItem[] = [
     path: "/dashboard",
     icon: Home,
     group: "Overview",
-
     permissions: ["erp.dashboard.read", "erp.dashboard.view"],
   },
-
   {
     label: "Production",
     path: "/dashboard/production",
     icon: ChefHat,
     group: "Operations",
-
     permissions: ["erp.production.read", "erp.production.view"],
   },
-
   {
     label: "Bakery Stock",
     path: "/dashboard/bakery-stock",
     icon: PackageCheck,
     group: "Operations",
-
     permissions: ["erp.bakery-stock.read", "erp.bakery-stock.view"],
   },
-
   {
     label: "POS Sales",
     path: "/pos",
     icon: ShoppingCart,
     group: "Operations",
-
     permissions: ["erp.pos.access"],
   },
-
   {
     label: "Ingredients",
     path: "/dashboard/ingredients",
     icon: Boxes,
     group: "Inventory",
-
     permissions: ["erp.ingredients.read", "erp.ingredients.view"],
   },
-
   {
     label: "Carter Inventory",
     path: "/dashboard/carters",
     icon: Warehouse,
     group: "Inventory",
-
     permissions: ["erp.carters.read", "erp.carters.view"],
   },
-
   {
     label: "Products & Recipes",
     path: "/dashboard/products",
     icon: CakeSlice,
     group: "Inventory",
-
     permissions: ["erp.products.read", "erp.products.view", "erp.recipes.read"],
   },
-
+  {
+    label: "Day End Approvals",
+    path: "/dashboard/pos-management/day-end-approvals",
+    icon: ClipboardCheck,
+    group: "POS Management",
+    permissions: ["erp.pos.day-end.read"],
+  },
+  {
+    label: "Business Calendar",
+    path: "/dashboard/business-calendar",
+    icon: CalendarDays,
+    group: "POS Management",
+    permissions: ["erp.pos.business-calendar.read"],
+  },
   {
     label: "Analytics",
     path: "/dashboard/analytics",
     icon: BarChart3,
     group: "Management",
-
     permissions: ["erp.analytics.read", "erp.analytics.view"],
   },
-
   {
     label: "Settings",
     path: "/dashboard/settings",
     icon: Settings,
     group: "Management",
-
     permissions: ["erp.settings.read"],
   },
 ];
 
-const groups = ["Overview", "Operations", "Inventory", "Management"] as const;
+const groups: NavigationGroup[] = [
+  "Overview",
+  "Operations",
+  "Inventory",
+  "POS Management",
+  "Management",
+];
 
 export function AppLayout({
   title,
@@ -137,7 +145,6 @@ export function AppLayout({
   children,
 }: AppLayoutProps) {
   const navigate = useNavigate();
-
   const { user, logout, hasAnyPermission } = useAuth();
 
   const visibleNavigationItems = useMemo(
@@ -154,9 +161,7 @@ export function AppLayout({
   const searchResults = useMemo(() => {
     const keyword = search.trim().toLowerCase();
 
-    if (!keyword) {
-      return [];
-    }
+    if (!keyword) return [];
 
     return visibleNavigationItems.filter((item) =>
       item.label.toLowerCase().includes(keyword),
@@ -166,14 +171,12 @@ export function AppLayout({
   function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter" && searchResults.length > 0) {
       navigate(searchResults[0].path);
-
       setSearch("");
     }
   }
 
   function NavigationButton({ item }: { item: NavigationItem }) {
     const Icon = item.icon;
-
     const active = item.label === activeItem;
 
     return (
@@ -207,9 +210,7 @@ export function AppLayout({
   return (
     <main className="h-screen overflow-hidden bg-bauraCanvas text-bauraInk">
       <div className="flex h-full">
-        {/* DESKTOP SIDEBAR */}
         <aside className="hidden h-full w-[255px] shrink-0 border-r border-bauraBorder bg-bauraSidebar lg:flex lg:flex-col">
-          {/* BAURA BRAND */}
           <div className="flex h-[104px] shrink-0 items-center px-5">
             <button
               type="button"
@@ -226,16 +227,13 @@ export function AppLayout({
 
           <div className="mx-4 border-t border-bauraBorder" />
 
-          {/* NAVIGATION */}
           <nav className="baura-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pb-5 pt-5">
             {groups.map((group) => {
               const items = visibleNavigationItems.filter(
                 (item) => item.group === group,
               );
 
-              if (items.length === 0) {
-                return null;
-              }
+              if (items.length === 0) return null;
 
               return (
                 <div key={group} className="mb-5">
@@ -253,7 +251,6 @@ export function AppLayout({
             })}
           </nav>
 
-          {/* USER */}
           <div className="shrink-0 border-t border-bauraBorder p-4">
             <div className="rounded-[16px] border border-bauraBorder bg-white p-3 shadow-[0_6px_22px_rgba(63,46,36,0.05)]">
               <div className="flex items-center gap-3">
@@ -283,9 +280,7 @@ export function AppLayout({
           </div>
         </aside>
 
-        {/* MAIN */}
         <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          {/* DESKTOP HEADER */}
           <header className="hidden h-[86px] shrink-0 items-center border-b border-bauraBorder bg-white/80 px-7 backdrop-blur lg:flex">
             <div className="relative w-full max-w-[620px]">
               <div className="erp-search h-[48px] rounded-[16px]">
@@ -311,7 +306,6 @@ export function AppLayout({
                         type="button"
                         onClick={() => {
                           navigate(item.path);
-
                           setSearch("");
                         }}
                         className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-bauraGoldSoft/50">
@@ -342,7 +336,6 @@ export function AppLayout({
             </div>
           </header>
 
-          {/* MOBILE HEADER */}
           <div className="border-b border-bauraBorder bg-white lg:hidden">
             <div className="flex h-[68px] items-center px-4">
               <button
@@ -379,7 +372,6 @@ export function AppLayout({
             </div>
           </div>
 
-          {/* PAGE TITLE */}
           <div className="shrink-0 px-5 pb-2 pt-5 sm:px-6 lg:px-8 lg:pt-7">
             <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>
@@ -410,7 +402,6 @@ export function AppLayout({
             </div>
           </div>
 
-          {/* PAGE CONTENT */}
           <div className="baura-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pb-7 pt-4 sm:px-6 lg:px-8">
             <div className="mx-auto w-full max-w-[1680px]">{children}</div>
           </div>

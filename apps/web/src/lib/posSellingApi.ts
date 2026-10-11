@@ -14,8 +14,17 @@ export type PosPaymentMethod =
   | "OTHER";
 
 function toNumber(value: unknown): number {
+  if (value === null || value === undefined || value === "") {
+    return 0;
+  }
+
   const parsed = Number(value);
+
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function round3(value: number): number {
+  return Number(value.toFixed(3));
 }
 
 /* =========================================================
@@ -25,35 +34,75 @@ function toNumber(value: unknown): number {
 export type PosProductSize = {
   id: string;
   label: string;
+
   serves?: string | null;
+
   price: number;
+
   officialSiteSizeId?: number | null;
+
+  availableQty: number;
+
+  inStock: boolean;
+
+  isLowStock: boolean;
 };
 
 export type PosProduct = {
   id: string;
+
   officialSiteProductId?: string | number | null;
 
   name: string;
+
   variantName?: string | null;
+
   displayName: string;
 
   imageUrl?: string | null;
 
   sellPrice: number;
+
   sizes: PosProductSize[];
+
   availableQty: number;
 
   inStock: boolean;
 
+  hasSizes?: boolean;
+
   lowStockThreshold?: number | null;
+
   isLowStock?: boolean;
+
+  legacyAvailableQty?: number;
 
   officialSiteSyncedAt?: string | null;
 };
 
+/* =========================================================
+   RAW API TYPES
+========================================================= */
+
+type RawPosProductSize = {
+  id: string;
+
+  label: string;
+
+  serves?: string | null;
+
+  price: number | string;
+
+  officialSiteSizeId?: number | null;
+
+  availableQty?: number | string | null;
+
+  inStock?: boolean;
+
+  isLowStock?: boolean;
+};
+
 type RawPosProduct = {
-  sizes?: Array<{ id: string; label: string; serves?: string | null; price: number | string; officialSiteSizeId?: number | null }>;
   id: string;
 
   officialSiteProductId?: string | number | null;
@@ -66,22 +115,21 @@ type RawPosProduct = {
 
   imageUrl?: string | null;
 
-  sellPrice:
-    | number
-    | string;
+  sellPrice: number | string;
 
-  availableQty:
-    | number
-    | string;
+  sizes?: RawPosProductSize[];
+
+  availableQty?: number | string | null;
 
   inStock?: boolean;
 
-  lowStockThreshold?:
-    | number
-    | string
-    | null;
+  hasSizes?: boolean;
+
+  lowStockThreshold?: number | string | null;
 
   isLowStock?: boolean;
+
+  legacyAvailableQty?: number | string | null;
 
   officialSiteSyncedAt?: string | null;
 };
@@ -89,105 +137,159 @@ type RawPosProduct = {
 export type PosProductListResponse = {
   products: RawPosProduct[];
 
+  count?: number;
+
+  generatedAt?: string;
+
   [key: string]: unknown;
 };
 
-function normalizeProduct(
-  product: RawPosProduct,
-): PosProduct {
-  const availableQty =
-    toNumber(
-      product.availableQty,
-    );
+/* =========================================================
+   NORMALIZE PRODUCT SIZES
+========================================================= */
 
-  const lowStockThreshold =
-    product.lowStockThreshold ===
-      null ||
-    product.lowStockThreshold ===
-      undefined
-      ? null
-      : toNumber(
-          product.lowStockThreshold,
-        );
+function normalizeProductSize(
+  size: RawPosProductSize,
+  lowStockThreshold: number | null
+): PosProductSize {
+  const availableQty = Math.max(
+    0,
+    round3(toNumber(size.availableQty))
+  );
+
+  const inStock = availableQty > 0;
+
+  const isLowStock =
+    size.isLowStock ??
+    (lowStockThreshold !== null &&
+      availableQty > 0 &&
+      availableQty <= lowStockThreshold);
 
   return {
-    id:
-      product.id,
+    id: size.id,
 
-    officialSiteProductId:
-      product.officialSiteProductId ??
-      null,
+    label: size.label,
 
-    name:
-      product.name,
+    serves: size.serves ?? null,
 
-    variantName:
-      product.variantName ??
-      null,
+    price: toNumber(size.price),
 
-    displayName:
-      product.displayName ||
-      (
-        product.variantName
-          ? `${product.name} - ${product.variantName}`
-          : product.name
-      ),
+    officialSiteSizeId: size.officialSiteSizeId ?? null,
 
-    imageUrl:
-      product.imageUrl ??
-      null,
-
-    sellPrice:
-      toNumber(
-        product.sellPrice,
-      ),
-
-    sizes: (product.sizes ?? []).map((size) => ({
-      id: size.id,
-      label: size.label,
-      serves: size.serves ?? null,
-      price: toNumber(size.price),
-      officialSiteSizeId: size.officialSiteSizeId ?? null,
-    })),
     availableQty,
 
-    inStock:
-      product.inStock ??
-      availableQty > 0,
+    inStock,
 
-    lowStockThreshold,
-
-    isLowStock:
-      product.isLowStock ??
-      (
-        lowStockThreshold !==
-          null &&
-        availableQty <=
-          lowStockThreshold
-      ),
-
-    officialSiteSyncedAt:
-      product.officialSiteSyncedAt ??
-      null,
+    isLowStock
   };
 }
 
+/* =========================================================
+   NORMALIZE PRODUCT
+========================================================= */
+
+function normalizeProduct(
+  product: RawPosProduct
+): PosProduct {
+  const lowStockThreshold =
+    product.lowStockThreshold === null ||
+    product.lowStockThreshold === undefined
+      ? null
+      : toNumber(product.lowStockThreshold);
+
+  const sizes = (product.sizes ?? []).map((size) =>
+    normalizeProductSize(size, lowStockThreshold)
+  );
+
+  const hasSizes = sizes.length > 0;
+
+  /*
+   * Products with sizes use the combined stock
+   * of their active sizes.
+   *
+   * Legacy stock without a size must not be
+   * counted as stock for Regular, Large, etc.
+   */
+  const availableQty = hasSizes
+    ? round3(
+        sizes.reduce(
+          (total, size) => total + size.availableQty,
+          0
+        )
+      )
+    : Math.max(
+        0,
+        round3(toNumber(product.availableQty))
+      );
+
+  const inStock = availableQty > 0;
+
+  const isLowStock = hasSizes
+    ? sizes.some((size) => size.isLowStock)
+    : product.isLowStock ??
+      (lowStockThreshold !== null &&
+        availableQty > 0 &&
+        availableQty <= lowStockThreshold);
+
+  const displayName =
+    product.displayName?.trim() ||
+    (product.variantName
+      ? `${product.name} - ${product.variantName}`
+      : product.name);
+
+  return {
+    id: product.id,
+
+    officialSiteProductId:
+      product.officialSiteProductId ?? null,
+
+    name: product.name,
+
+    variantName: product.variantName ?? null,
+
+    displayName,
+
+    imageUrl: product.imageUrl ?? null,
+
+    sellPrice: toNumber(product.sellPrice),
+
+    sizes,
+
+    availableQty,
+
+    inStock,
+
+    hasSizes,
+
+    lowStockThreshold,
+
+    isLowStock,
+
+    legacyAvailableQty: Math.max(
+      0,
+      round3(toNumber(product.legacyAvailableQty))
+    ),
+
+    officialSiteSyncedAt:
+      product.officialSiteSyncedAt ?? null
+  };
+}
+
+/* =========================================================
+   GET POS PRODUCTS
+========================================================= */
+
 export async function getPosProducts() {
-  const response =
-    await apiRequest<PosProductListResponse>(
-      "/pos-catalogue/products",
-    );
+  const response = await apiRequest<PosProductListResponse>(
+    "/pos-catalogue/products"
+  );
 
   return {
     ...response,
 
-    products:
-      (
-        response.products ||
-        []
-      ).map(
-        normalizeProduct,
-      ),
+    products: (response.products ?? []).map(
+      normalizeProduct
+    )
   };
 }
 
@@ -215,178 +317,159 @@ export type PosCustomer = {
 
 export type PosCustomerLookupResponse = {
   found: boolean;
+
   customer: PosCustomer | null;
 };
 
 export async function lookupPosCustomer(
-  phone: string,
+  phone: string
 ) {
   return apiRequest<PosCustomerLookupResponse>(
     `/pos-customers/lookup?phone=${encodeURIComponent(
-      phone.trim(),
-    )}`,
+      phone.trim()
+    )}`
   );
 }
 
+/* =========================================================
+   REGISTER CUSTOMER
+========================================================= */
+
 export type RegisterPosCustomerPayload = {
   name: string;
+
   phone: string;
 
-  email?:
-    | string
-    | null;
+  email?: string | null;
 
-  defaultDeliveryAddress?:
-    | string
-    | null;
+  defaultDeliveryAddress?: string | null;
 };
 
 export type RegisterPosCustomerResponse = {
   message: string;
+
   customer: PosCustomer;
 };
 
 export async function registerPosCustomer(
-  payload:
-    RegisterPosCustomerPayload,
+  payload: RegisterPosCustomerPayload
 ) {
   return apiRequest<RegisterPosCustomerResponse>(
     "/pos-customers",
     {
       method: "POST",
 
-      body:
-        JSON.stringify(
-          payload,
-        ),
-    },
+      body: JSON.stringify(payload)
+    }
   );
 }
 
 /* =========================================================
-   SALE
+   SALE INPUT
 ========================================================= */
 
 export type PosSaleItemInput = {
-  productSizeId?: string | null;
   productId: string;
+
+  productSizeId?: string | null;
+
   qty: number;
 };
 
 export type CompletePosSalePayload = {
-  salesChannelId?:
-    | string
-    | null;
+  salesChannelId?: string | null;
 
-  officialCustomerId?:
-    | number
-    | null;
+  officialCustomerId?: number | null;
 
-  receiptEmail?:
-    | string
-    | null;
+  receiptEmail?: string | null;
 
   discountTotal: number;
 
-  approvalId?:
-    | string
-    | null;
+  approvalId?: string | null;
 
-  idempotencyKey?:
-    | string
-    | null;
+  idempotencyKey?: string | null;
 
   payment: {
-    method:
-      PosPaymentMethod;
+    method: PosPaymentMethod;
 
-    tenderedAmount?:
-      | number
-      | null;
+    tenderedAmount?: number | null;
 
-    reference?:
-      | string
-      | null;
+    reference?: string | null;
   };
 
-  items:
-    PosSaleItemInput[];
+  items: PosSaleItemInput[];
 };
+
+/* =========================================================
+   RECEIPT PAYMENT
+========================================================= */
 
 export type PosReceiptPayment = {
   id?: string;
 
   paymentNo?: string;
 
-  method:
-    PosPaymentMethod;
+  method: PosPaymentMethod;
 
   status?: string;
 
-  amount:
-    | number
-    | string;
+  amount: number | string;
 
-  tenderedAmount?:
-    | number
-    | string
-    | null;
+  tenderedAmount?: number | string | null;
 
-  changeAmount?:
-    | number
-    | string
-    | null;
+  changeAmount?: number | string | null;
 
-  reference?:
-    | string
-    | null;
+  reference?: string | null;
 
-  completedAt?:
-    | string
-    | null;
+  completedAt?: string | null;
 };
 
+/* =========================================================
+   RECEIPT ITEMS
+========================================================= */
+
 export type PosReceiptItem = {
-  productSizeId?: string | null;
   id?: string;
 
   productId: string;
+
+  productSizeId?: string | null;
+
+  productSizeLabel?: string | null;
 
   productDisplayName?: string;
 
   product?: {
     name?: string;
+
     variantName?: string | null;
   };
 
-  qty:
-    | number
-    | string;
+  qty: number | string;
 
-  unitSellPrice:
-    | number
-    | string;
+  unitSellPrice: number | string;
 
-  lineTotal:
-    | number
-    | string;
+  lineTotal: number | string;
 
-  discountTotal:
-    | number
-    | string;
+  discountTotal: number | string;
 
-  netTotal:
-    | number
-    | string;
+  netTotal: number | string;
 };
+
+/* =========================================================
+   COMPLETED SALE
+========================================================= */
 
 export type CompletedPosSale = {
   id: string;
+
   orderNo: string;
 
   posSession?: {
     id: string;
+
     sessionNo: string;
+
     businessDate: string;
   } | null;
 
@@ -394,76 +477,52 @@ export type CompletedPosSale = {
     | string
     | {
         id?: string;
+
         name?: string;
       }
     | null;
 
-  paymentMethod:
-    PosPaymentMethod;
+  paymentMethod: PosPaymentMethod;
 
-  payments:
-    PosReceiptPayment[];
+  payments: PosReceiptPayment[];
 
   customer?: {
-    officialCustomerId?:
-      | number
-      | null;
+    officialCustomerId?: number | null;
 
-    name?:
-      | string
-      | null;
+    name?: string | null;
 
-    phone?:
-      | string
-      | null;
+    phone?: string | null;
 
-    email?:
-      | string
-      | null;
+    email?: string | null;
   } | null;
 
-  officialCustomerId?:
-    | number
-    | null;
+  officialCustomerId?: number | null;
 
-  customerNameSnapshot?:
-    | string
-    | null;
+  customerNameSnapshot?: string | null;
 
-  customerPhoneSnapshot?:
-    | string
-    | null;
+  customerPhoneSnapshot?: string | null;
 
-  customerEmailSnapshot?:
-    | string
-    | null;
+  customerEmailSnapshot?: string | null;
 
-  receiptEmail?:
-    | string
-    | null;
+  receiptEmail?: string | null;
 
-  receiptEmailStatus?:
-    | string
-    | null;
+  receiptEmailStatus?: string | null;
 
-  grossTotal:
-    | number
-    | string;
+  grossTotal: number | string;
 
-  discountTotal:
-    | number
-    | string;
+  discountTotal: number | string;
 
-  netTotal:
-    | number
-    | string;
+  netTotal: number | string;
+
+  cogsTotal?: number | string;
+
+  profitTotal?: number | string;
 
   status: string;
 
   soldAt: string;
 
-  items:
-    PosReceiptItem[];
+  items: PosReceiptItem[];
 
   [key: string]: unknown;
 };
@@ -473,23 +532,22 @@ export type CompletePosSaleResponse = {
 
   idempotentReplay?: boolean;
 
-  sale:
-    CompletedPosSale;
+  sale: CompletedPosSale;
 };
 
+/* =========================================================
+   COMPLETE POS SALE
+========================================================= */
+
 export async function completePosSale(
-  payload:
-    CompletePosSalePayload,
+  payload: CompletePosSalePayload
 ) {
   return apiRequest<CompletePosSaleResponse>(
     "/sales",
     {
       method: "POST",
 
-      body:
-        JSON.stringify(
-          payload,
-        ),
-    },
+      body: JSON.stringify(payload)
+    }
   );
 }

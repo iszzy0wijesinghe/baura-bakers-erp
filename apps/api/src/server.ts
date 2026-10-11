@@ -9,6 +9,7 @@ import ingredientRoutes from "./modules/ingredients/ingredients.routes";
 import carterRoutes from "./modules/carters/carters.routes";
 import inventoryRoutes from "./modules/inventory/inventory.routes";
 import productRoutes from "./modules/products/products.routes";
+import recipeExpensesRoutes from "./modules/products/recipeExpenses.routes";
 import productionRoutes from "./modules/production/production.routes";
 import bakeryStockRoutes from "./modules/bakery-stock/bakeryStock.routes";
 import salesRoutes from "./modules/sales/sales.routes";
@@ -25,13 +26,8 @@ dotenv.config();
 
 const app = express();
 
-const PORT = Number(
-  process.env.PORT || 4000,
-);
-
-const isProduction =
-  process.env.NODE_ENV ===
-  "production";
+const PORT = Number(process.env.PORT || 4000);
+const isProduction = process.env.NODE_ENV === "production";
 
 /*
 |--------------------------------------------------------------------------
@@ -39,15 +35,10 @@ const isProduction =
 |--------------------------------------------------------------------------
 */
 
-app.disable(
-  "x-powered-by",
-);
+app.disable("x-powered-by");
 
 if (isProduction) {
-  app.set(
-    "trust proxy",
-    1,
-  );
+  app.set("trust proxy", 1);
 }
 
 /*
@@ -59,10 +50,9 @@ if (isProduction) {
 app.use(
   helmet({
     crossOriginResourcePolicy: {
-      policy:
-        "cross-origin",
-    },
-  }),
+      policy: "cross-origin"
+    }
+  })
 );
 
 /*
@@ -72,49 +62,21 @@ app.use(
 */
 
 const configuredOrigins = (
-  process.env.FRONTEND_URL ||
-  "http://localhost:5173"
+  process.env.FRONTEND_URL || "http://localhost:5173"
 )
   .split(",")
-  .map(
-    (origin) =>
-      origin.trim(),
-  )
+  .map((origin) => origin.trim())
   .filter(Boolean);
 
 app.use(
   cors({
-    origin(
-      origin,
-      callback,
-    ) {
-      if (!origin) {
-        callback(
-          null,
-          true,
-        );
-
+    origin(origin, callback) {
+      if (!origin || configuredOrigins.includes(origin)) {
+        callback(null, true);
         return;
       }
 
-      if (
-        configuredOrigins.includes(
-          origin,
-        )
-      ) {
-        callback(
-          null,
-          true,
-        );
-
-        return;
-      }
-
-      callback(
-        new Error(
-          "Origin is not allowed by CORS",
-        ),
-      );
+      callback(new Error("Origin is not allowed by CORS"));
     },
 
     methods: [
@@ -123,20 +85,17 @@ app.use(
       "PUT",
       "PATCH",
       "DELETE",
-      "OPTIONS",
+      "OPTIONS"
     ],
 
     allowedHeaders: [
       "Content-Type",
-      "Authorization",
+      "Authorization"
     ],
 
-    credentials:
-      false,
-
-    maxAge:
-      86400,
-  }),
+    credentials: false,
+    maxAge: 86400
+  })
 );
 
 /*
@@ -145,21 +104,13 @@ app.use(
 |--------------------------------------------------------------------------
 */
 
-app.use(
-  express.json({
-    limit:
-      "1mb",
-  }),
-);
+app.use(express.json({ limit: "1mb" }));
 
 app.use(
   express.urlencoded({
-    extended:
-      false,
-
-    limit:
-      "1mb",
-  }),
+    extended: false,
+    limit: "1mb"
+  })
 );
 
 /*
@@ -168,32 +119,17 @@ app.use(
 |--------------------------------------------------------------------------
 */
 
-const apiLimiter =
-  rateLimit({
-    windowMs:
-      15 *
-      60 *
-      1000,
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 1500,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: {
+    message: "Too many requests. Please try again shortly."
+  }
+});
 
-    limit:
-      1500,
-
-    standardHeaders:
-      "draft-7",
-
-    legacyHeaders:
-      false,
-
-    message: {
-      message:
-        "Too many requests. Please try again shortly.",
-    },
-  });
-
-app.use(
-  "/api",
-  apiLimiter,
-);
+app.use("/api", apiLimiter);
 
 /*
 |--------------------------------------------------------------------------
@@ -201,35 +137,18 @@ app.use(
 |--------------------------------------------------------------------------
 */
 
-const authLimiter =
-  rateLimit({
-    windowMs:
-      15 *
-      60 *
-      1000,
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: {
+    message: "Too many authentication attempts. Please try again later."
+  }
+});
 
-    limit:
-      20,
-
-    standardHeaders:
-      "draft-7",
-
-    legacyHeaders:
-      false,
-
-    skipSuccessfulRequests:
-      true,
-
-    message: {
-      message:
-        "Too many authentication attempts. Please try again later.",
-    },
-  });
-
-app.use(
-  "/api/auth",
-  authLimiter,
-);
+app.use("/api/auth", authLimiter);
 
 /*
 |--------------------------------------------------------------------------
@@ -237,66 +156,48 @@ app.use(
 |--------------------------------------------------------------------------
 */
 
-app.get(
-  "/api/health",
-  (_req, res) => {
-    res.status(200).json({
-      status:
-        "OK",
-
-      timestamp:
-        new Date().toISOString(),
-    });
-  },
-);
+app.get("/api/health", (_req, res) => {
+  res.status(200).json({
+    status: "OK",
+    timestamp: new Date().toISOString()
+  });
+});
 
 /*
 |--------------------------------------------------------------------------
-| API routes
+| Core ERP routes
 |--------------------------------------------------------------------------
 */
 
-app.use(
-  "/api/auth",
-  authRoutes,
-);
+app.use("/api/auth", authRoutes);
+app.use("/api/ingredients", ingredientRoutes);
+app.use("/api/carters", carterRoutes);
+app.use("/api/inventory", inventoryRoutes);
+app.use("/api/products", productRoutes);
 
-app.use(
-  "/api/ingredients",
-  ingredientRoutes,
-);
+/*
+|--------------------------------------------------------------------------
+| Recipe expenses
+|--------------------------------------------------------------------------
+|
+| Supports additional recipe costs such as electricity, gas, labour,
+| packaging, decoration, transport, and other production expenses.
+|
+| Expense definitions can be assigned to products or specific sizes.
+|
+*/
 
-app.use(
-  "/api/carters",
-  carterRoutes,
-);
+app.use("/api/recipe-expenses", recipeExpensesRoutes);
 
-app.use(
-  "/api/inventory",
-  inventoryRoutes,
-);
+/*
+|--------------------------------------------------------------------------
+| Production and inventory
+|--------------------------------------------------------------------------
+*/
 
-app.use(
-  "/api/products",
-  productRoutes,
-);
-
-app.use(
-  "/api/production",
-  productionRoutes,
-);
-
-app.use(
-  "/api/bakery-stock",
-  bakeryStockRoutes,
-);
-
-app.use(
-  "/api/sales",
-  salesRoutes,
-);
-
-
+app.use("/api/production", productionRoutes);
+app.use("/api/bakery-stock", bakeryStockRoutes);
+app.use("/api/sales", salesRoutes);
 
 /*
 |--------------------------------------------------------------------------
@@ -305,50 +206,26 @@ app.use(
 |
 | POS remains part of the authoritative ERP backend.
 |
-| The standalone POS frontend will consume these endpoints. It does not
-| directly access the ERP database or official-site database.
+| The standalone POS frontend consumes these endpoints.
+| It does not directly access the ERP or official-site databases.
 |
 */
 
-app.use(
-  "/api/pos-approvals",
-  posApprovalRoutes,
-);
+app.use("/api/pos-approvals", posApprovalRoutes);
+app.use("/api/business-calendar", businessCalendarRoutes);
+app.use("/api/pos-sessions", posSessionRoutes);
+app.use("/api/pos-cash-movements", posCashMovementRoutes);
+app.use("/api/pos-catalogue", posCatalogueRoutes);
+app.use("/api/pos-customers", posCustomerRoutes);
 
-app.use(
-  "/api/business-calendar",
-  businessCalendarRoutes,
-);
+/*
+|--------------------------------------------------------------------------
+| Analytics and settings
+|--------------------------------------------------------------------------
+*/
 
-app.use(
-  "/api/pos-sessions",
-  posSessionRoutes,
-);
-
-app.use(
-  "/api/pos-cash-movements",
-  posCashMovementRoutes,
-);
-
-app.use(
-  "/api/pos-catalogue",
-  posCatalogueRoutes,
-);
-
-app.use(
-  "/api/pos-customers",
-  posCustomerRoutes,
-);
-
-app.use(
-  "/api/analytics",
-  analyticsRoutes,
-);
-
-app.use(
-  "/api/settings",
-  settingsRoutes,
-);
+app.use("/api/analytics", analyticsRoutes);
+app.use("/api/settings", settingsRoutes);
 
 /*
 |--------------------------------------------------------------------------
@@ -356,20 +233,12 @@ app.use(
 |--------------------------------------------------------------------------
 */
 
-app.use(
-  (
-    req,
-    res,
-  ) => {
-    res.status(404).json({
-      message:
-        "API route not found.",
-
-      path:
-        req.path,
-    });
-  },
-);
+app.use((req, res) => {
+  res.status(404).json({
+    message: "API route not found.",
+    path: req.path
+  });
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -382,37 +251,25 @@ app.use(
     error: unknown,
     _req: express.Request,
     res: express.Response,
-    _next: express.NextFunction,
+    _next: express.NextFunction
   ) => {
-    console.error(
-      error,
-    );
+    console.error(error);
 
-    const message =
-      error instanceof Error
-        ? error.message
-        : "";
+    const message = error instanceof Error ? error.message : "";
 
-    if (
-      message ===
-      "Origin is not allowed by CORS"
-    ) {
+    if (message === "Origin is not allowed by CORS") {
       res.status(403).json({
-        message:
-          "Origin not allowed.",
+        message: "Origin not allowed."
       });
-
       return;
     }
 
     res.status(500).json({
-      message:
-        isProduction
-          ? "Internal server error."
-          : message ||
-            "Internal server error.",
+      message: isProduction
+        ? "Internal server error."
+        : message || "Internal server error."
     });
-  },
+  }
 );
 
 /*
@@ -421,23 +278,15 @@ app.use(
 |--------------------------------------------------------------------------
 */
 
-const server =
-  app.listen(
-    PORT,
-    () => {
-      console.log(
-        `Baura Bakery ERP API running on http://localhost:${PORT}`,
-      );
-
-      console.log(
-        `Environment: ${
-          isProduction
-            ? "production"
-            : "development"
-        }`,
-      );
-    },
+const server = app.listen(PORT, () => {
+  console.log(
+    `Baura Bakery ERP API running on http://localhost:${PORT}`
   );
+
+  console.log(
+    `Environment: ${isProduction ? "production" : "development"}`
+  );
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -445,45 +294,25 @@ const server =
 |--------------------------------------------------------------------------
 */
 
-function shutdown(
-  signal: string,
-) {
-  console.log(
-    `${signal} received. Shutting down...`,
-  );
+let isShuttingDown = false;
 
-  server.close(
-    (error) => {
-      if (error) {
-        console.error(
-          "Server shutdown failed:",
-          error,
-        );
+function shutdown(signal: string) {
+  if (isShuttingDown) return;
 
-        process.exit(
-          1,
-        );
-      }
+  isShuttingDown = true;
 
-      process.exit(
-        0,
-      );
-    },
-  );
+  console.log(`${signal} received. Shutting down...`);
+
+  server.close((error) => {
+    if (error) {
+      console.error("Server shutdown failed:", error);
+      process.exitCode = 1;
+      return;
+    }
+
+    process.exitCode = 0;
+  });
 }
 
-process.on(
-  "SIGTERM",
-  () =>
-    shutdown(
-      "SIGTERM",
-    ),
-);
-
-process.on(
-  "SIGINT",
-  () =>
-    shutdown(
-      "SIGINT",
-    ),
-);
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 
 import {
@@ -61,6 +62,8 @@ import {
   useToast,
 } from "../../ui/ToastProvider";
 
+const BAURA_LOGO = "/images/logos/logo.webp";
+
 type CartItem = {
   product: PosProduct;
   productSizeId: string | null;
@@ -73,59 +76,33 @@ type Props = {
   session: PosSession;
   products: PosProduct[];
   loadingProducts: boolean;
-
   onRefreshProducts: () => void;
   onLogout: () => void;
   onDayEnd: () => void;
-
-  onSaleCompleted?: (
-    sale: CompletedPosSale,
-  ) => void;
+  onSaleCompleted?: (sale: CompletedPosSale) => void;
 };
 
-type CustomerModalMode =
-  | "SEARCH"
-  | "REGISTER";
+type CustomerModalMode = "SEARCH" | "REGISTER";
 
-type CashMovementMode =
-  | "CASH_IN"
-  | "CASH_OUT";
+type CashMovementMode = "CASH_IN" | "CASH_OUT";
 
-function money(
-  value: number,
-) {
-  return new Intl.NumberFormat(
-    "en-LK",
-    {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    },
-  ).format(
-    Number.isFinite(value)
-      ? value
-      : 0,
-  );
+function money(value: number) {
+  return new Intl.NumberFormat("en-LK", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(value) ? value : 0);
 }
 
-function numberValue(
-  value: unknown,
-) {
-  const parsed =
-    Number(value);
+function numberValue(value: unknown) {
+  const parsed = Number(value);
 
-  return Number.isFinite(
-    parsed,
-  )
-    ? parsed
-    : 0;
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function makeIdempotencyKey() {
   if (
-    typeof crypto !==
-      "undefined" &&
-    "randomUUID" in
-      crypto
+    typeof crypto !== "undefined" &&
+    "randomUUID" in crypto
   ) {
     return `pos-${crypto.randomUUID()}`;
   }
@@ -133,6 +110,58 @@ function makeIdempotencyKey() {
   return `pos-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2)}`;
+}
+
+function getCartKey(
+  productId: string,
+  productSizeId: string | null,
+) {
+  return `${productId}:${productSizeId ?? "standard"}`;
+}
+
+function formatBusinessDate(value: unknown) {
+  const raw = String(value ?? "");
+  const dateKey = raw.slice(0, 10);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+    return raw || "—";
+  }
+
+  return dateKey;
+}
+
+function getSriLankaToday() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Colombo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function BauraLogo({
+  className = "",
+  print = false,
+}: {
+  className?: string;
+  print?: boolean;
+}) {
+  return (
+    <img
+      src={BAURA_LOGO}
+      alt="Baura — baking oven's aura"
+      draggable={false}
+      className={`block object-contain ${className}`}
+      style={
+        print
+          ? {
+              WebkitPrintColorAdjust: "exact",
+              printColorAdjust: "exact",
+            }
+          : undefined
+      }
+    />
+  );
 }
 
 export function PosSellingWorkspace({
@@ -144,160 +173,102 @@ export function PosSellingWorkspace({
   onDayEnd,
   onSaleCompleted,
 }: Props) {
-  const toast =
-    useToast();
+  const toast = useToast();
 
-  const searchRef =
-    useRef<HTMLInputElement | null>(
-      null,
-    );
+  const searchRef = useRef<HTMLInputElement | null>(null);
+
+  const [search, setSearch] = useState("");
 
   const [
-    search,
-    setSearch,
-  ] = useState("");
+    selectedSizeProduct,
+    setSelectedSizeProduct,
+  ] = useState<PosProduct | null>(null);
 
-  const [
-    cart,
-    setCart,
-  ] =
-    useState<CartItem[]>(
-      [],
-    );
+  const [cart, setCart] = useState<CartItem[]>([]);
 
-  const [
-    paymentMethod,
-    setPaymentMethod,
-  ] =
-    useState<PosPaymentMethod>(
-      "CASH",
-    );
+  const [paymentMethod, setPaymentMethod] =
+    useState<PosPaymentMethod>("CASH");
 
-  const [
-    tendered,
-    setTendered,
-  ] = useState("");
+  const [tendered, setTendered] = useState("");
 
-  const [
-    paymentReference,
-    setPaymentReference,
-  ] = useState("");
+  const [paymentReference, setPaymentReference] =
+    useState("");
 
-  const [
-    selectedCustomer,
-    setSelectedCustomer,
-  ] =
-    useState<PosCustomer | null>(
-      null,
-    );
+  const [selectedCustomer, setSelectedCustomer] =
+    useState<PosCustomer | null>(null);
 
-  const [
-    receiptEmail,
-    setReceiptEmail,
-  ] = useState("");
+  const [receiptEmail, setReceiptEmail] = useState("");
 
-  const [
-    discountInput,
-    setDiscountInput,
-  ] = useState("");
+  const [discountInput, setDiscountInput] = useState("");
 
-  const [
-    discountApproval,
-    setDiscountApproval,
-  ] =
-    useState<PosApproval | null>(
-      null,
-    );
+  const [discountApproval, setDiscountApproval] =
+    useState<PosApproval | null>(null);
 
-  const [
-    approvalLoading,
-    setApprovalLoading,
-  ] = useState(false);
+  const [approvalLoading, setApprovalLoading] =
+    useState(false);
 
-  const [
-    processing,
-    setProcessing,
-  ] = useState(false);
+  const [processing, setProcessing] = useState(false);
 
-  const [
-    completedSale,
-    setCompletedSale,
-  ] =
-    useState<CompletedPosSale | null>(
-      null,
-    );
+  const [completedSale, setCompletedSale] =
+    useState<CompletedPosSale | null>(null);
 
-  const [
-    customerModal,
-    setCustomerModal,
-  ] = useState(false);
+  const [customerModal, setCustomerModal] =
+    useState(false);
 
-  const [
-    cashMovementModal,
-    setCashMovementModal,
-  ] = useState(false);
+  const [cashMovementModal, setCashMovementModal] =
+    useState(false);
 
-  const [
-    drawer,
-    setDrawer,
-  ] =
-    useState<PosDrawerSummary | null>(
-      null,
-    );
+  const [drawer, setDrawer] =
+    useState<PosDrawerSummary | null>(null);
 
-  /*
-  |--------------------------------------------------------------------------
-  | KEYBOARD SHORTCUT
-  |--------------------------------------------------------------------------
-  */
+  const sessionBusinessDate = formatBusinessDate(
+    session.businessDate,
+  );
+
+  const [today, setToday] = useState(getSriLankaToday);
+
+  const isOverdue = sessionBusinessDate < today;
+
+  const isFutureDated = sessionBusinessDate > today;
+
+  const isValidBusinessDate =
+    sessionBusinessDate === today;
 
   useEffect(() => {
-    function handleKeyDown(
-      event: KeyboardEvent,
-    ) {
+    function handleKeyDown(event: KeyboardEvent) {
       if (
-        (event.ctrlKey ||
-          event.metaKey) &&
-        event.key.toLowerCase() ===
-          "k"
+        (event.ctrlKey || event.metaKey) &&
+        event.key.toLowerCase() === "k"
       ) {
         event.preventDefault();
-
         searchRef.current?.focus();
       }
     }
 
-    window.addEventListener(
-      "keydown",
-      handleKeyDown,
-    );
+    window.addEventListener("keydown", handleKeyDown);
 
-    return () =>
+    return () => {
       window.removeEventListener(
         "keydown",
         handleKeyDown,
       );
+    };
   }, []);
 
-  /*
-  |--------------------------------------------------------------------------
-  | DRAWER
-  |--------------------------------------------------------------------------
-  */
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setToday(getSriLankaToday());
+    }, 30_000);
+
+    return () => window.clearInterval(interval);
+  }, []);
 
   async function loadDrawer() {
     try {
-      const response =
-        await getCurrentPosCashMovements();
-
-      setDrawer(
-        response.drawer,
-      );
+      const response = await getCurrentPosCashMovements();
+      setDrawer(response.drawer);
     } catch {
-      /*
-       * Drawer information is useful,
-       * but must never prevent billing.
-       */
+      // Drawer availability must not interrupt catalogue browsing.
     }
   }
 
@@ -305,301 +276,265 @@ export function PosSellingWorkspace({
     void loadDrawer();
   }, [session.id]);
 
-  /*
-  |--------------------------------------------------------------------------
-  | PRODUCTS
-  |--------------------------------------------------------------------------
-  */
+  const filteredProducts = useMemo(() => {
+    const query = search.trim().toLowerCase();
 
-  const filteredProducts =
-    useMemo(() => {
-      const query =
-        search
-          .trim()
-          .toLowerCase();
+    if (!query) {
+      return products;
+    }
 
-      if (!query) {
-        return products;
-      }
-
-      return products.filter(
-        (product) =>
-          product.displayName
-            .toLowerCase()
-            .includes(query),
-      );
-    }, [
-      products,
-      search,
-    ]);
-
-  /*
-  |--------------------------------------------------------------------------
-  | TOTALS
-  |--------------------------------------------------------------------------
-  */
-
-  const grossTotal =
-    useMemo(
-      () =>
-        cart.reduce(
-          (
-            total,
-            item,
-          ) =>
-            total +
-            item.unitPrice *
-              item.qty,
-          0,
-        ),
-      [cart],
+    return products.filter((product) =>
+      product.displayName.toLowerCase().includes(query),
     );
+  }, [products, search]);
 
-  const requestedDiscount =
-    Math.max(
-      0,
-      numberValue(
-        discountInput,
+  const grossTotal = useMemo(
+    () =>
+      cart.reduce(
+        (total, item) =>
+          total + item.unitPrice * item.qty,
+        0,
       ),
-    );
+    [cart],
+  );
 
-  const discountTotal =
-    Math.min(
-      requestedDiscount,
-      grossTotal,
-    );
+  const requestedDiscount = Math.max(
+    0,
+    numberValue(discountInput),
+  );
 
-  const netTotal =
-    Math.max(
-      0,
-      grossTotal -
-        discountTotal,
-    );
+  const discountTotal = Math.min(
+    requestedDiscount,
+    grossTotal,
+  );
 
-  const tenderedAmount =
-    numberValue(
-      tendered,
-    );
+  const netTotal = Math.max(
+    0,
+    grossTotal - discountTotal,
+  );
+
+  const tenderedAmount = numberValue(tendered);
 
   const change =
-    paymentMethod ===
-      "CASH"
-      ? Math.max(
-          0,
-          tenderedAmount -
-            netTotal,
-        )
+    paymentMethod === "CASH"
+      ? Math.max(0, tenderedAmount - netTotal)
       : 0;
 
-  const cartQty =
-    cart.reduce(
-      (
-        total,
-        item,
-      ) =>
-        total +
-        item.qty,
-      0,
-    );
+  const cartQty = cart.reduce(
+    (total, item) => total + item.qty,
+    0,
+  );
 
-  /*
-  |--------------------------------------------------------------------------
-  | CART
-  |--------------------------------------------------------------------------
-  */
-
-  function addProduct(
+  function getSizeStock(
     product: PosProduct,
+    sizeId: string | null,
   ) {
-    let selectedSize = product.sizes.length === 1 ? product.sizes[0] : undefined;
-    if (product.sizes.length > 1) {
-      const answer = window.prompt(`Select size (1-${product.sizes.length}) for ${product.displayName}:\n${product.sizes.map((s, i) => `${i + 1}. ${s.label} — Rs. ${s.price}`).join("\n")}`);
-      if (answer === null) return;
-      selectedSize = product.sizes[Number(answer) - 1];
-      if (!selectedSize) { toast.warning("Invalid size", "Choose an available size."); return; }
+    if (!sizeId) {
+      return product.sizes.length
+        ? 0
+        : numberValue(product.availableQty);
     }
-    const productSizeId = selectedSize?.id ?? null;
-    const cartKey = `${product.id}:${productSizeId ?? "standard"}`;
-    if (
-      !product.inStock ||
-      product.availableQty <=
-        0
-    ) {
-      toast.warning(
-        "Out of stock",
-        `${product.displayName} cannot be added.`,
-      );
 
+    return numberValue(
+      product.sizes.find((size) => size.id === sizeId)
+        ?.availableQty,
+    );
+  }
+
+  function addProduct(product: PosProduct) {
+    if (!isValidBusinessDate) {
+      toast.warning(
+        "Register requires Day End",
+        "This session is not for today's business date. Complete Day End before creating another sale.",
+      );
       return;
     }
 
-    setCart(
-      (current) => {
-        const existing =
-          current.find(
-            (item) =>
-              `${item.product.id}:${item.productSizeId ?? "standard"}` === cartKey,
-          );
+    if (product.sizes.length > 1) {
+      setSelectedSizeProduct(product);
+      return;
+    }
 
-        if (!existing) {
-          return [
-            ...current,
-            {
-              product,
-              productSizeId,
-              sizeLabel: selectedSize?.label ?? null,
-              unitPrice: selectedSize?.price ?? product.sellPrice,
-              qty: 1,
-            },
-          ];
-        }
-
-        if (
-          current.filter((item) => item.product.id === product.id).reduce((sum, item) => sum + item.qty, 0) >= product.availableQty
-        ) {
-          toast.warning(
-            "Stock limit reached",
-            `Only ${product.availableQty} available.`,
-          );
-
-          return current;
-        }
-
-        return current.map(
-          (item) =>
-            `${item.product.id}:${item.productSizeId ?? "standard"}` === cartKey
-              ? {
-                  ...item,
-                  qty:
-                    item.qty +
-                    1,
-                }
-              : item,
-        );
-      },
+    addSelectedProduct(
+      product,
+      product.sizes[0] ?? null,
     );
+  }
+
+  function addSelectedProduct(
+    product: PosProduct,
+    selectedSize: PosProduct["sizes"][number] | null,
+  ) {
+    if (!isValidBusinessDate) {
+      toast.warning(
+        "Register requires Day End",
+        "Sales cannot be added to a session from another business date.",
+      );
+      return;
+    }
+
+    const productSizeId = selectedSize?.id ?? null;
+
+    const availableQty = getSizeStock(
+      product,
+      productSizeId,
+    );
+
+    const cartKey = getCartKey(
+      product.id,
+      productSizeId,
+    );
+
+    if (availableQty <= 0) {
+      toast.warning(
+        "Out of stock",
+        `${product.displayName}${
+          selectedSize ? ` — ${selectedSize.label}` : ""
+        } is unavailable.`,
+      );
+      return;
+    }
+
+    setCart((current) => {
+      const existing = current.find(
+        (item) =>
+          getCartKey(
+            item.product.id,
+            item.productSizeId,
+          ) === cartKey,
+      );
+
+      if (existing && existing.qty >= availableQty) {
+        toast.warning(
+          "Stock limit reached",
+          `Only ${availableQty} available for this size.`,
+        );
+        return current;
+      }
+
+      if (existing) {
+        return current.map((item) =>
+          getCartKey(
+            item.product.id,
+            item.productSizeId,
+          ) === cartKey
+            ? {
+                ...item,
+                qty: item.qty + 1,
+                product,
+                unitPrice: numberValue(
+                  selectedSize?.price ??
+                    product.sellPrice,
+                ),
+              }
+            : item,
+        );
+      }
+
+      return [
+        ...current,
+        {
+          product,
+          productSizeId,
+          sizeLabel: selectedSize?.label ?? null,
+          unitPrice: numberValue(
+            selectedSize?.price ?? product.sellPrice,
+          ),
+          qty: 1,
+        },
+      ];
+    });
+
+    setSelectedSizeProduct(null);
   }
 
   function updateQty(
     productId: string,
     delta: number,
   ) {
-    setCart(
-      (current) =>
-        current
-          .map(
-            (item) => {
-              if (
-                `${item.product.id}:${item.productSizeId ?? "standard"}` !== productId
-              ) {
-                return item;
-              }
+    setCart((current) =>
+      current
+        .map((item) => {
+          if (
+            getCartKey(
+              item.product.id,
+              item.productSizeId,
+            ) !== productId
+          ) {
+            return item;
+          }
 
-              const next =
-                item.qty +
-                delta;
+          const next = item.qty + delta;
 
-              if (
-                next <= 0
-              ) {
-                return null;
-              }
+          if (next <= 0) {
+            return null;
+          }
 
-              return {
-                ...item,
+          const latestProduct =
+            products.find(
+              (product) =>
+                product.id === item.product.id,
+            ) ?? item.product;
 
-                qty:
-                  Math.min(
-                    next,
-                    Math.max(0, item.product.availableQty - current.filter((other) => other !== item && other.product.id === item.product.id).reduce((sum, other) => sum + other.qty, 0)),
-                  ),
-              };
-            },
-          )
-          .filter(
-            (
-              item,
-            ): item is CartItem =>
-              item !==
-              null,
-          ),
-    );
-  }
+          const available = getSizeStock(
+            latestProduct,
+            item.productSizeId,
+          );
 
-  function removeItem(
-    productId: string,
-  ) {
-    setCart(
-      (current) =>
-        current.filter(
-          (item) =>
-            `${item.product.id}:${item.productSizeId ?? "standard"}` !== productId,
+          if (next > available) {
+            toast.warning(
+              "Stock limit reached",
+              `Only ${available} available for this size.`,
+            );
+          }
+
+          return {
+            ...item,
+            product: latestProduct,
+            qty: Math.min(next, available),
+          };
+        })
+        .filter(
+          (item): item is CartItem =>
+            item !== null && item.qty > 0,
         ),
     );
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | RESET
-  |--------------------------------------------------------------------------
-  */
+  function removeItem(productId: string) {
+    setCart((current) =>
+      current.filter(
+        (item) =>
+          getCartKey(
+            item.product.id,
+            item.productSizeId,
+          ) !== productId,
+      ),
+    );
+  }
 
   function clearSale() {
     setCart([]);
-
-    setPaymentMethod(
-      "CASH",
-    );
-
+    setPaymentMethod("CASH");
     setTendered("");
-
-    setPaymentReference(
-      "",
-    );
-
-    setSelectedCustomer(
-      null,
-    );
-
+    setPaymentReference("");
+    setSelectedCustomer(null);
     setReceiptEmail("");
-
     setDiscountInput("");
-
-    setDiscountApproval(
-      null,
-    );
-
-    setCompletedSale(
-      null,
-    );
-
+    setDiscountApproval(null);
+    setCompletedSale(null);
     setSearch("");
+    setSelectedSizeProduct(null);
 
-    setTimeout(() => {
+    window.setTimeout(() => {
       searchRef.current?.focus();
     }, 50);
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | CUSTOMER
-  |--------------------------------------------------------------------------
-  */
-
-  function selectCustomer(
-    customer: PosCustomer,
-  ) {
-    setSelectedCustomer(
-      customer,
-    );
-
-    setReceiptEmail(
-      customer.email || "",
-    );
-
-    setCustomerModal(
-      false,
-    );
+  function selectCustomer(customer: PosCustomer) {
+    setSelectedCustomer(customer);
+    setReceiptEmail(customer.email || "");
+    setCustomerModal(false);
 
     toast.success(
       "Customer selected",
@@ -607,72 +542,39 @@ export function PosSellingWorkspace({
     );
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | DISCOUNT APPROVAL
-  |--------------------------------------------------------------------------
-  */
-
   async function requestDiscountApproval() {
-    if (
-      requestedDiscount <=
-        0
-    ) {
+    if (requestedDiscount <= 0) {
       toast.warning(
         "Enter discount",
         "Enter a discount amount first.",
       );
-
       return;
     }
 
-    if (
-      requestedDiscount >
-      grossTotal
-    ) {
+    if (requestedDiscount > grossTotal) {
       toast.warning(
         "Invalid discount",
         "Discount cannot exceed the sale total.",
       );
-
       return;
     }
 
-    setApprovalLoading(
-      true,
-    );
+    setApprovalLoading(true);
 
     try {
-      const response =
-        await requestPosApproval(
-          {
-            type:
-              "MANUAL_DISCOUNT",
+      const response = await requestPosApproval({
+        type: "MANUAL_DISCOUNT",
+        amount: requestedDiscount,
+        reason: "Manual discount requested from POS",
+        context: {
+          posSessionId: session.id,
+          sessionNo: session.sessionNo,
+          grossTotal,
+          itemCount: cartQty,
+        },
+      });
 
-            amount:
-              requestedDiscount,
-
-            reason:
-              "Manual discount requested from POS",
-
-            context: {
-              posSessionId:
-                session.id,
-
-              sessionNo:
-                session.sessionNo,
-
-              grossTotal,
-
-              itemCount:
-                cartQty,
-            },
-          },
-        );
-
-      setDiscountApproval(
-        response.approval,
-      );
+      setDiscountApproval(response.approval);
 
       toast.info(
         "Approval requested",
@@ -686,53 +588,35 @@ export function PosSellingWorkspace({
           : "Unable to request manager approval.",
       );
     } finally {
-      setApprovalLoading(
-        false,
-      );
+      setApprovalLoading(false);
     }
   }
 
   async function refreshApproval() {
-    if (
-      !discountApproval
-    ) {
+    if (!discountApproval) {
       return;
     }
 
-    setApprovalLoading(
-      true,
-    );
+    setApprovalLoading(true);
 
     try {
-      const response =
-        await getPosApprovalStatus(
-          discountApproval.id,
-        );
-
-      setDiscountApproval(
-        response.approval,
+      const response = await getPosApprovalStatus(
+        discountApproval.id,
       );
 
-      if (
-        response.approval
-          .status ===
-        "APPROVED"
-      ) {
+      setDiscountApproval(response.approval);
+
+      if (response.approval.status === "APPROVED") {
         toast.success(
           "Discount approved",
-          `Rs. ${money(
-            requestedDiscount,
-          )} approved.`,
+          `Rs. ${money(requestedDiscount)} approved.`,
         );
       } else if (
-        response.approval
-          .status ===
-        "REJECTED"
+        response.approval.status === "REJECTED"
       ) {
         toast.error(
           "Discount rejected",
-          response.approval
-            .reason ||
+          response.approval.reason ||
             "The manager rejected this discount.",
         );
       }
@@ -744,186 +628,125 @@ export function PosSellingWorkspace({
           : "Could not check approval status.",
       );
     } finally {
-      setApprovalLoading(
-        false,
-      );
+      setApprovalLoading(false);
     }
   }
 
-  function changeDiscount(
-    value: string,
-  ) {
-    setDiscountInput(
-      value,
-    );
-
-    /*
-     * Approval is tied to the exact
-     * amount. Editing the amount must
-     * invalidate the old approval.
-     */
-    setDiscountApproval(
-      null,
-    );
+  function changeDiscount(value: string) {
+    setDiscountInput(value);
+    setDiscountApproval(null);
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | CHECKOUT
-  |--------------------------------------------------------------------------
-  */
-
   async function checkout() {
-    if (
-      cart.length ===
-      0
-    ) {
+    if (!isValidBusinessDate) {
+      toast.warning(
+        "Sales unavailable",
+        "The register business date does not match today's date. Complete Day End first.",
+      );
+      return;
+    }
+
+    if (cart.length === 0) {
       toast.warning(
         "Empty order",
         "Add at least one product.",
       );
-
       return;
     }
 
-    if (
-      requestedDiscount >
-      grossTotal
-    ) {
+    if (requestedDiscount > grossTotal) {
       toast.warning(
         "Invalid discount",
         "Discount cannot exceed the sale total.",
       );
-
       return;
     }
 
     if (
-      requestedDiscount >
-        0 &&
-      discountApproval
-        ?.status !==
-        "APPROVED"
+      requestedDiscount > 0 &&
+      discountApproval?.status !== "APPROVED"
     ) {
       toast.warning(
         "Approval required",
         "The manual discount must be approved before payment.",
       );
-
       return;
     }
 
     if (
-      paymentMethod ===
-        "CASH" &&
-      tenderedAmount <
-        netTotal
+      paymentMethod === "CASH" &&
+      tenderedAmount < netTotal
     ) {
       toast.warning(
         "Insufficient cash",
         "Cash received is less than the total.",
       );
-
       return;
     }
 
     if (
-      (
-        paymentMethod ===
-          "CARD" ||
-        paymentMethod ===
-          "BANK_TRANSFER"
-      ) &&
+      (paymentMethod === "CARD" ||
+        paymentMethod === "BANK_TRANSFER") &&
       !paymentReference.trim()
     ) {
       toast.warning(
         "Reference required",
-        paymentMethod ===
-          "CARD"
+        paymentMethod === "CARD"
           ? "Enter the card payment reference."
           : "Enter the bank transfer reference.",
       );
-
       return;
     }
 
-    setProcessing(
-      true,
-    );
+    setProcessing(true);
 
     try {
-      const response =
-        await completePosSale(
-          {
-            officialCustomerId:
-              selectedCustomer?.id ??
-              null,
+      const response = await completePosSale({
+        officialCustomerId:
+          selectedCustomer?.id ?? null,
 
-            receiptEmail:
-              receiptEmail.trim() ||
-              null,
+        receiptEmail:
+          receiptEmail.trim() || null,
 
-            discountTotal:
-              discountTotal,
+        discountTotal,
 
-            approvalId:
-              discountTotal >
-                0
-                ? discountApproval?.id ??
-                  null
-                : null,
+        approvalId:
+          discountTotal > 0
+            ? discountApproval?.id ?? null
+            : null,
 
-            idempotencyKey:
-              makeIdempotencyKey(),
+        idempotencyKey: makeIdempotencyKey(),
 
-            payment: {
-              method:
-                paymentMethod,
+        payment: {
+          method: paymentMethod,
 
-              tenderedAmount:
-                paymentMethod ===
-                "CASH"
-                  ? tenderedAmount
-                  : null,
+          tenderedAmount:
+            paymentMethod === "CASH"
+              ? tenderedAmount
+              : null,
 
-              reference:
-                paymentMethod ===
-                "CASH"
-                  ? null
-                  : paymentReference.trim() ||
-                    null,
-            },
+          reference:
+            paymentMethod === "CASH"
+              ? null
+              : paymentReference.trim() || null,
+        },
 
-            items:
-              cart.map(
-                (item) => ({
-                  productId:
-                    item.product.id,
-                  productSizeId: item.productSizeId,
+        items: cart.map((item) => ({
+          productId: item.product.id,
+          productSizeId: item.productSizeId,
+          qty: item.qty,
+        })),
+      });
 
-                  qty:
-                    item.qty,
-                }),
-              ),
-          },
-        );
-
-      setCompletedSale(
-        response.sale,
-      );
+      setCompletedSale(response.sale);
 
       toast.success(
         "Payment completed",
-        response.sale
-          .orderNo,
+        response.sale.orderNo,
       );
 
-      onSaleCompleted?.(
-        response.sale,
-      );
-
+      onSaleCompleted?.(response.sale);
       onRefreshProducts();
-
       void loadDrawer();
     } catch (error) {
       toast.error(
@@ -933,359 +756,319 @@ export function PosSellingWorkspace({
           : "Unable to complete sale.",
       );
     } finally {
-      setProcessing(
-        false,
-      );
+      setProcessing(false);
     }
   }
-
-  /*
-  |--------------------------------------------------------------------------
-  | COMPLETED SALE
-  |--------------------------------------------------------------------------
-  */
 
   if (completedSale) {
     return (
       <SaleCompleted
-        sale={
-          completedSale
-        }
-        onPrint={() =>
-          window.print()
-        }
-        onNewSale={
-          clearSale
-        }
+        sale={completedSale}
+        onPrint={() => window.print()}
+        onNewSale={clearSale}
       />
     );
   }
 
   return (
-    <div className="h-screen overflow-hidden bg-[#f4f4f1] text-bauraInk">
-      {/* HEADER */}
-
-      <header className="flex h-[64px] items-center border-b border-black/[0.07] bg-white px-5">
-        <div className="flex min-w-[220px] items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-bauraPrimary text-[15px] font-black text-white shadow-sm">
-            B
+    <div className="flex h-screen flex-col overflow-hidden bg-[#f5f5f2] text-bauraInk">
+      <header className="relative z-20 flex h-[72px] shrink-0 items-center justify-between gap-4 border-b border-black/[0.07] bg-white px-5 lg:px-7">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-[50px] w-[118px] shrink-0 items-center justify-start">
+            <BauraLogo className="h-full w-full object-left" />
           </div>
 
-          <div>
+          <div className="hidden h-8 w-px bg-black/[0.08] sm:block" />
+
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-[14px] font-extrabold tracking-[-0.03em]">
+              <span className="truncate text-[12px] font-extrabold tracking-[-0.03em]">
                 Baura Bakers
               </span>
 
-              <span className="rounded-md bg-bauraGoldSoft px-2 py-0.5 text-[7px] font-black uppercase tracking-[0.13em] text-bauraGoldDark">
+              <span className="rounded-md bg-bauraGoldSoft px-2 py-1 text-[8px] font-black uppercase tracking-[0.12em] text-bauraGoldDark">
                 POS
               </span>
             </div>
 
-            <div className="mt-0.5 flex items-center gap-2 text-[8px] font-medium text-bauraMuted">
-              <span>
+            <div className="mt-1 flex items-center gap-2 text-[9px] text-bauraMuted">
+              <span className="truncate">
                 {session.sessionNo}
               </span>
 
-              <span>
-                •
-              </span>
+              <span>•</span>
 
-              <span className="font-bold text-emerald-600">
-                Register Open
+              <span
+                className={`whitespace-nowrap font-bold ${
+                  isValidBusinessDate
+                    ? "text-emerald-600"
+                    : "text-amber-600"
+                }`}
+              >
+                {isValidBusinessDate
+                  ? "Register Open"
+                  : "Day End Required"}
               </span>
             </div>
           </div>
         </div>
 
-        <div className="mx-auto hidden items-center gap-5 xl:flex">
+        <div className="mx-auto hidden items-center gap-6 2xl:flex">
           <HeaderStat
             label="Business date"
-            value={String(
-              session.businessDate,
-            ).slice(
-              0,
-              10,
-            )}
+            value={sessionBusinessDate}
           />
 
           <HeaderStat
             label="Opening float"
             value={`Rs. ${money(
-              numberValue(
-                session.openingFloat,
-              ),
+              numberValue(session.openingFloat),
             )}`}
           />
 
           <HeaderStat
-            label="Drawer"
+            label="Expected drawer"
             value={
               drawer
                 ? `Rs. ${money(
-                    drawer.expectedCash,
+                    numberValue(drawer.expectedCash),
                   )}`
                 : "—"
             }
           />
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
-            onClick={() =>
-              setCashMovementModal(
-                true,
-              )
-            }
-            className="hidden h-9 items-center gap-2 rounded-xl border border-black/[0.08] bg-white px-3 text-[9px] font-bold transition hover:bg-[#f8f8f6] lg:flex">
-            <CircleDollarSign
-              size={14}
-            />
-
+            onClick={() => setCashMovementModal(true)}
+            disabled={!isValidBusinessDate}
+            className="hidden h-10 items-center gap-2 rounded-xl border border-black/[0.09] bg-white px-3 text-[10px] font-bold transition hover:bg-[#faf8f5] disabled:cursor-not-allowed disabled:opacity-40 lg:flex"
+          >
+            <CircleDollarSign size={15} />
             Cash Drawer
           </button>
 
           <button
             type="button"
-            onClick={
-              onRefreshProducts
-            }
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-black/[0.08] bg-white transition hover:bg-[#f8f8f6]"
-            title="Refresh catalogue">
-            <RefreshCw
-              size={14}
-            />
+            onClick={onRefreshProducts}
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-black/[0.09] bg-white transition hover:bg-[#faf8f5]"
+            title="Refresh catalogue"
+            aria-label="Refresh catalogue"
+          >
+            <RefreshCw size={15} />
           </button>
 
           <button
             type="button"
-            onClick={
-              onDayEnd
-            }
-            className="h-9 rounded-xl bg-bauraGoldSoft px-4 text-[9px] font-extrabold text-bauraGoldDark transition hover:brightness-95">
+            onClick={onDayEnd}
+            className="flex h-10 items-center gap-2 rounded-xl bg-bauraGoldSoft px-4 text-[10px] font-extrabold text-bauraGoldDark transition hover:brightness-95"
+          >
+            <ReceiptText size={14} />
             Day End
           </button>
 
           <button
             type="button"
-            onClick={
-              onLogout
-            }
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-black/[0.08] bg-white transition hover:bg-red-50 hover:text-red-600"
-            title="Sign out">
-            <LogOut
-              size={14}
-            />
+            onClick={onLogout}
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-black/[0.09] bg-white transition hover:bg-red-50 hover:text-red-600"
+            title="Sign out"
+            aria-label="Sign out"
+          >
+            <LogOut size={15} />
           </button>
         </div>
       </header>
 
-      {/* WORKSPACE */}
+      {!isValidBusinessDate && (
+        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-amber-200 bg-amber-50 px-5 py-3 lg:px-7">
+          <div className="flex items-center gap-3">
+            <ShieldCheck
+              size={18}
+              className="shrink-0 text-amber-700"
+            />
 
-      <main className="grid h-[calc(100vh-64px)] grid-cols-[minmax(0,1fr)_410px] 2xl:grid-cols-[minmax(0,1fr)_440px]">
-        {/* PRODUCTS */}
+            <div>
+              <p className="text-[11px] font-extrabold text-amber-900">
+                {isOverdue
+                  ? "Previous business day is still open"
+                  : isFutureDated
+                    ? "Register has a future business date"
+                    : "Business date mismatch"}
+              </p>
 
-        <section className="flex min-w-0 flex-col overflow-hidden">
-          <div className="border-b border-black/[0.06] bg-[#f8f8f6] px-5 py-4">
-            <div className="flex items-center gap-3">
-              <div className="relative min-w-0 flex-1">
-                <Search
-                  size={17}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-bauraMuted"
-                />
+              <p className="mt-0.5 text-[9px] leading-4 text-amber-800">
+                Session date: {sessionBusinessDate} ·
+                Current date: {today}. Sales and cash
+                movements are disabled until this
+                session is resolved.
+              </p>
+            </div>
+          </div>
 
-                <input
-                  ref={
-                    searchRef
-                  }
-                  value={
-                    search
-                  }
-                  onChange={(
-                    event,
-                  ) =>
-                    setSearch(
-                      event.target
-                        .value,
-                    )
-                  }
-                  placeholder="Search products..."
-                  className="h-12 w-full rounded-2xl border border-black/[0.08] bg-white pl-11 pr-20 text-[11px] font-medium shadow-sm outline-none transition focus:border-bauraPrimary/40 focus:ring-4 focus:ring-bauraPrimary/[0.05]"
-                />
+          <button
+            type="button"
+            onClick={onDayEnd}
+            className="shrink-0 rounded-xl bg-bauraPrimary px-4 py-2.5 text-[10px] font-bold text-white transition hover:bg-bauraPrimaryDark"
+          >
+            Open Day End
+          </button>
+        </div>
+      )}
 
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg border border-black/[0.08] bg-[#f7f7f5] px-2 py-1 text-[7px] font-bold text-bauraMuted">
-                  ⌘ K
-                </span>
-              </div>
+      <main className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_410px] 2xl:grid-cols-[minmax(0,1fr)_440px]">
+        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+          <div className="shrink-0 border-b border-black/[0.06] bg-[#fafaf8] px-5 py-4 lg:px-6">
+            <div className="relative">
+              <Search
+                size={17}
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-bauraMuted"
+              />
+
+              <input
+                ref={searchRef}
+                value={search}
+                onChange={(event) =>
+                  setSearch(event.target.value)
+                }
+                placeholder="Search products..."
+                className="h-12 w-full rounded-2xl border border-black/[0.08] bg-white pl-11 pr-20 text-[12px] font-medium shadow-sm outline-none transition focus:border-bauraPrimary/40 focus:ring-4 focus:ring-bauraPrimary/[0.05]"
+              />
+
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg border border-black/[0.08] bg-[#f7f7f5] px-2 py-1 text-[9px] font-bold text-bauraMuted">
+                ⌘ K
+              </span>
             </div>
 
             <div className="mt-4 flex items-end justify-between">
               <div>
-                <h1 className="text-[19px] font-extrabold tracking-[-0.04em]">
+                <h1 className="text-[20px] font-extrabold tracking-[-0.04em]">
                   Products
                 </h1>
 
-                <p className="mt-1 text-[9px] text-bauraMuted">
-                  {
-                    filteredProducts.length
-                  }{" "}
-                  products • tap an item to add
+                <p className="mt-1 text-[10px] text-bauraMuted">
+                  {filteredProducts.length} products ·
+                  Select an item to add it to the order
                 </p>
               </div>
 
               {search && (
                 <button
                   type="button"
-                  onClick={() =>
-                    setSearch(
-                      "",
-                    )
-                  }
-                  className="text-[8px] font-bold text-bauraPrimary">
+                  onClick={() => setSearch("")}
+                  className="text-[10px] font-bold text-bauraPrimary"
+                >
                   Clear search
                 </button>
               )}
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-5">
+          <div className="min-h-0 flex-1 overflow-y-auto p-5 lg:p-6">
             {loadingProducts ? (
               <div className="flex h-full items-center justify-center">
                 <div className="text-center">
                   <Loader2
-                    size={24}
+                    size={26}
                     className="mx-auto animate-spin text-bauraPrimary"
                   />
 
-                  <p className="mt-3 text-[9px] font-bold text-bauraMuted">
+                  <p className="mt-3 text-[11px] font-bold text-bauraMuted">
                     Loading catalogue...
                   </p>
                 </div>
               </div>
-            ) : filteredProducts.length ===
-              0 ? (
+            ) : filteredProducts.length === 0 ? (
               <div className="flex h-full items-center justify-center">
                 <div className="text-center">
                   <PackageOpen
-                    size={30}
+                    size={32}
                     className="mx-auto text-black/20"
                   />
 
-                  <p className="mt-3 text-[11px] font-bold">
+                  <p className="mt-3 text-[12px] font-bold">
                     No products found
+                  </p>
+
+                  <p className="mt-1 text-[10px] text-bauraMuted">
+                    Try another product name.
                   </p>
                 </div>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-                {filteredProducts.map(
-                  (
-                    product,
-                  ) => (
-                    <ProductCard
-                      key={
-                        product.id
-                      }
-                      product={
-                        product
-                      }
-                      cartQty={
-                        cart.find(
-                          (
-                            item,
-                          ) =>
-                            item
-                              .product
-                              .id ===
-                            product.id,
-                        )?.qty || 0
-                      }
-                      onAdd={() =>
-                        addProduct(
-                          product,
-                        )
-                      }
-                    />
-                  ),
-                )}
+                {filteredProducts.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    cartQty={cart
+                      .filter(
+                        (item) =>
+                          item.product.id === product.id,
+                      )
+                      .reduce(
+                        (sum, item) =>
+                          sum + item.qty,
+                        0,
+                      )}
+                    onAdd={() => addProduct(product)}
+                  />
+                ))}
               </div>
             )}
           </div>
         </section>
 
-        {/* ORDER */}
-
         <aside className="flex min-h-0 flex-col border-l border-black/[0.07] bg-white shadow-[-12px_0_40px_rgba(0,0,0,0.025)]">
-          <div className="flex h-[68px] items-center border-b border-black/[0.07] px-4">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-bauraPrimary/[0.07] text-bauraPrimary">
-              <ShoppingBag
-                size={16}
-              />
+          <div className="flex h-[68px] shrink-0 items-center border-b border-black/[0.07] px-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-bauraPrimary/[0.07] text-bauraPrimary">
+              <ShoppingBag size={17} />
             </div>
 
             <div className="ml-3">
-              <h2 className="text-[13px] font-extrabold">
+              <h2 className="text-[14px] font-extrabold">
                 Current Order
               </h2>
 
-              <p className="text-[8px] text-bauraMuted">
-                {
-                  cartQty
-                }{" "}
-                item
-                {cartQty ===
-                1
-                  ? ""
-                  : "s"}
+              <p className="mt-0.5 text-[9px] text-bauraMuted">
+                {cartQty} item{cartQty === 1 ? "" : "s"}
               </p>
             </div>
 
-            {cart.length >
-              0 && (
+            {cart.length > 0 && (
               <button
                 type="button"
-                onClick={() =>
-                  setCart(
-                    [],
-                  )
-                }
-                className="ml-auto rounded-lg px-2 py-1 text-[8px] font-bold text-red-500 transition hover:bg-red-50">
+                onClick={() => setCart([])}
+                className="ml-auto rounded-lg px-3 py-2 text-[9px] font-bold text-red-500 transition hover:bg-red-50"
+              >
                 Clear
               </button>
             )}
           </div>
 
-          {/* CUSTOMER */}
-
-          <div className="border-b border-black/[0.07] p-3">
+          <div className="shrink-0 border-b border-black/[0.07] p-3">
             <button
               type="button"
-              onClick={() =>
-                setCustomerModal(
-                  true,
-                )
-              }
-              className="flex w-full items-center rounded-xl border border-black/[0.07] bg-[#fafaf8] p-3 text-left transition hover:border-bauraPrimary/20 hover:bg-white">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-bauraMuted shadow-sm">
-                <UserRound
-                  size={14}
-                />
+              onClick={() => setCustomerModal(true)}
+              className="flex w-full items-center rounded-xl border border-black/[0.07] bg-[#fafaf8] p-3 text-left transition hover:border-bauraPrimary/20 hover:bg-white"
+            >
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-bauraMuted shadow-sm">
+                <UserRound size={16} />
               </div>
 
               <div className="ml-3 min-w-0 flex-1">
-                <p className="text-[7px] font-bold uppercase tracking-[0.1em] text-bauraMuted">
+                <p className="text-[8px] font-bold uppercase tracking-[0.1em] text-bauraMuted">
                   Customer
                 </p>
 
-                <p className="mt-0.5 truncate text-[9px] font-bold">
+                <p className="mt-0.5 truncate text-[10px] font-bold">
                   {selectedCustomer
                     ? selectedCustomer.name
                     : "Walk-in customer"}
                 </p>
 
                 {selectedCustomer && (
-                  <p className="mt-0.5 truncate text-[7px] text-bauraMuted">
+                  <p className="mt-0.5 truncate text-[8px] text-bauraMuted">
                     {selectedCustomer.phone_normalized ||
                       selectedCustomer.phone}
                   </p>
@@ -1293,72 +1076,51 @@ export function PosSellingWorkspace({
               </div>
 
               <ChevronRight
-                size={14}
+                size={15}
                 className="text-bauraMuted"
               />
             </button>
           </div>
 
-          {/* CART */}
-
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
-            {cart.length ===
-            0 ? (
+            {cart.length === 0 ? (
               <div className="flex h-full min-h-52 flex-col items-center justify-center px-8 text-center">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f4f4f1] text-black/20">
-                  <ShoppingBag
-                    size={24}
-                  />
+                  <ShoppingBag size={24} />
                 </div>
 
-                <p className="mt-4 text-[11px] font-extrabold">
+                <p className="mt-4 text-[12px] font-extrabold">
                   Start an order
                 </p>
 
-                <p className="mt-1 max-w-[210px] text-[8px] leading-4 text-bauraMuted">
-                  Select products from the catalogue. They will appear here instantly.
+                <p className="mt-1 max-w-[220px] text-[9px] leading-4 text-bauraMuted">
+                  Select products from the catalogue.
+                  They will appear here instantly.
                 </p>
               </div>
             ) : (
               <div className="space-y-2">
-                {cart.map(
-                  (
-                    item,
-                  ) => (
+                {cart.map((item) => {
+                  const key = getCartKey(
+                    item.product.id,
+                    item.productSizeId,
+                  );
+
+                  return (
                     <CartRow
-                      key={
-                        `${item.product.id}:${item.productSizeId ?? "standard"}`
-                      }
-                      item={
-                        item
-                      }
-                      onMinus={() =>
-                        updateQty(
-                          `${item.product.id}:${item.productSizeId ?? "standard"}`,
-                          -1,
-                        )
-                      }
-                      onPlus={() =>
-                        updateQty(
-                          `${item.product.id}:${item.productSizeId ?? "standard"}`,
-                          1,
-                        )
-                      }
-                      onRemove={() =>
-                        removeItem(
-                          `${item.product.id}:${item.productSizeId ?? "standard"}`,
-                        )
-                      }
+                      key={key}
+                      item={item}
+                      onMinus={() => updateQty(key, -1)}
+                      onPlus={() => updateQty(key, 1)}
+                      onRemove={() => removeItem(key)}
                     />
-                  ),
-                )}
+                  );
+                })}
               </div>
             )}
           </div>
 
-          {/* TOTALS + PAYMENT */}
-
-          <div className="border-t border-black/[0.07] bg-white p-4">
+          <div className="shrink-0 border-t border-black/[0.07] bg-white p-4">
             <div className="space-y-2">
               <SummaryRow
                 label="Subtotal"
@@ -1366,43 +1128,31 @@ export function PosSellingWorkspace({
               />
 
               <div className="flex items-center gap-2">
-                <div className="flex-1 text-[9px] text-bauraMuted">
+                <div className="flex-1 text-[10px] text-bauraMuted">
                   Discount
                 </div>
 
-                <div className="relative w-[130px]">
-                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[8px] font-bold text-bauraMuted">
+                <div className="relative w-[140px]">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-bauraMuted">
                     Rs.
                   </span>
 
                   <input
                     inputMode="decimal"
-                    value={
-                      discountInput
-                    }
-                    onChange={(
-                      event,
-                    ) =>
-                      changeDiscount(
-                        event.target
-                          .value,
-                      )
+                    value={discountInput}
+                    onChange={(event) =>
+                      changeDiscount(event.target.value)
                     }
                     placeholder="0.00"
-                    className="h-8 w-full rounded-lg border border-black/[0.08] pl-8 pr-2 text-right text-[9px] font-bold outline-none focus:border-bauraPrimary/40"
+                    className="h-9 w-full rounded-lg border border-black/[0.08] pl-8 pr-2 text-right text-[10px] font-bold outline-none focus:border-bauraPrimary/40"
                   />
                 </div>
               </div>
 
-              {requestedDiscount >
-                0 && (
+              {requestedDiscount > 0 && (
                 <DiscountApprovalStatus
-                  approval={
-                    discountApproval
-                  }
-                  loading={
-                    approvalLoading
-                  }
+                  approval={discountApproval}
+                  loading={approvalLoading}
                   onRequest={() =>
                     void requestDiscountApproval()
                   }
@@ -1417,189 +1167,122 @@ export function PosSellingWorkspace({
 
             <div className="flex items-end justify-between">
               <div>
-                <p className="text-[8px] font-bold uppercase tracking-[0.08em] text-bauraMuted">
+                <p className="text-[9px] font-bold uppercase tracking-[0.08em] text-bauraMuted">
                   Total
                 </p>
 
-                <p className="mt-1 text-[8px] text-bauraMuted">
-                  {
-                    cartQty
-                  }{" "}
-                  item
-                  {cartQty ===
-                  1
-                    ? ""
-                    : "s"}
+                <p className="mt-1 text-[9px] text-bauraMuted">
+                  {cartQty} item{cartQty === 1 ? "" : "s"}
                 </p>
               </div>
 
               <div className="text-right">
-                <span className="text-[10px] font-bold text-bauraMuted">
+                <span className="text-[11px] font-bold text-bauraMuted">
                   Rs.
                 </span>{" "}
 
-                <span className="text-[24px] font-black tracking-[-0.055em]">
-                  {money(
-                    netTotal,
-                  )}
+                <span className="text-[25px] font-black tracking-[-0.055em]">
+                  {money(netTotal)}
                 </span>
               </div>
             </div>
 
             <div className="mt-4 grid grid-cols-3 gap-2">
               <PaymentButton
-                active={
-                  paymentMethod ===
-                  "CASH"
-                }
+                active={paymentMethod === "CASH"}
                 label="Cash"
-                icon={
-                  <Banknote
-                    size={15}
-                  />
-                }
-                onClick={() =>
-                  setPaymentMethod(
-                    "CASH",
-                  )
-                }
+                icon={<Banknote size={15} />}
+                onClick={() => setPaymentMethod("CASH")}
               />
 
               <PaymentButton
-                active={
-                  paymentMethod ===
-                  "CARD"
-                }
+                active={paymentMethod === "CARD"}
                 label="Card"
-                icon={
-                  <CreditCard
-                    size={15}
-                  />
-                }
-                onClick={() =>
-                  setPaymentMethod(
-                    "CARD",
-                  )
-                }
+                icon={<CreditCard size={15} />}
+                onClick={() => setPaymentMethod("CARD")}
               />
 
               <PaymentButton
                 active={
-                  paymentMethod ===
-                  "BANK_TRANSFER"
+                  paymentMethod === "BANK_TRANSFER"
                 }
                 label="Bank"
-                icon={
-                  <WalletCards
-                    size={15}
-                  />
-                }
+                icon={<WalletCards size={15} />}
                 onClick={() =>
-                  setPaymentMethod(
-                    "BANK_TRANSFER",
-                  )
+                  setPaymentMethod("BANK_TRANSFER")
                 }
               />
             </div>
 
-            {paymentMethod ===
-            "CASH" ? (
+            {paymentMethod === "CASH" ? (
               <div className="mt-3">
                 <div className="grid grid-cols-[1fr_auto] gap-2">
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[8px] font-bold text-bauraMuted">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[9px] font-bold text-bauraMuted">
                       Rs.
                     </span>
 
                     <input
                       inputMode="decimal"
-                      value={
-                        tendered
-                      }
-                      onChange={(
-                        event,
-                      ) =>
-                        setTendered(
-                          event.target
-                            .value,
-                        )
+                      value={tendered}
+                      onChange={(event) =>
+                        setTendered(event.target.value)
                       }
                       placeholder="Cash received"
-                      className="h-11 w-full rounded-xl border border-black/[0.08] pl-9 pr-3 text-[10px] font-bold outline-none focus:border-bauraPrimary/40"
+                      className="h-11 w-full rounded-xl border border-black/[0.08] pl-9 pr-3 text-[11px] font-bold outline-none focus:border-bauraPrimary/40"
                     />
                   </div>
 
                   <button
                     type="button"
                     onClick={() =>
-                      setTendered(
-                        netTotal.toFixed(
-                          2,
-                        ),
-                      )
+                      setTendered(netTotal.toFixed(2))
                     }
-                    className="rounded-xl border border-black/[0.08] px-3 text-[8px] font-bold">
+                    className="rounded-xl border border-black/[0.08] px-3 text-[9px] font-bold transition hover:bg-[#fafaf8]"
+                  >
                     Exact
                   </button>
                 </div>
 
                 <div className="mt-2 flex items-center justify-between rounded-lg bg-[#f6f6f3] px-3 py-2">
-                  <span className="text-[8px] font-medium text-bauraMuted">
+                  <span className="text-[9px] font-medium text-bauraMuted">
                     Change
                   </span>
 
-                  <span className="text-[10px] font-extrabold">
-                    Rs.{" "}
-                    {money(
-                      change,
-                    )}
+                  <span className="text-[11px] font-extrabold">
+                    Rs. {money(change)}
                   </span>
                 </div>
               </div>
             ) : (
               <input
-                value={
-                  paymentReference
-                }
-                onChange={(
-                  event,
-                ) =>
-                  setPaymentReference(
-                    event.target
-                      .value,
-                  )
+                value={paymentReference}
+                onChange={(event) =>
+                  setPaymentReference(event.target.value)
                 }
                 placeholder={
-                  paymentMethod ===
-                  "CARD"
+                  paymentMethod === "CARD"
                     ? "Card payment reference"
                     : "Bank transfer reference"
                 }
-                className="mt-3 h-11 w-full rounded-xl border border-black/[0.08] px-3 text-[9px] font-medium outline-none focus:border-bauraPrimary/40"
+                className="mt-3 h-11 w-full rounded-xl border border-black/[0.08] px-3 text-[10px] font-medium outline-none focus:border-bauraPrimary/40"
               />
             )}
 
             <div className="relative mt-2">
               <Mail
-                size={13}
+                size={14}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-bauraMuted"
               />
 
               <input
                 type="email"
-                value={
-                  receiptEmail
-                }
-                onChange={(
-                  event,
-                ) =>
-                  setReceiptEmail(
-                    event.target
-                      .value,
-                  )
+                value={receiptEmail}
+                onChange={(event) =>
+                  setReceiptEmail(event.target.value)
                 }
                 placeholder="Receipt email (optional)"
-                className="h-10 w-full rounded-xl border border-black/[0.08] pl-9 pr-3 text-[8px] outline-none focus:border-bauraPrimary/40"
+                className="h-10 w-full rounded-xl border border-black/[0.08] pl-9 pr-3 text-[9px] outline-none focus:border-bauraPrimary/40"
               />
             </div>
 
@@ -1607,32 +1290,24 @@ export function PosSellingWorkspace({
               type="button"
               disabled={
                 processing ||
-                cart.length ===
-                  0
+                cart.length === 0 ||
+                !isValidBusinessDate
               }
-              onClick={() =>
-                void checkout()
-              }
-              className="mt-3 flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-bauraPrimary px-4 text-[11px] font-extrabold text-white shadow-[0_10px_25px_rgba(91,55,38,0.18)] transition hover:bg-bauraPrimaryDark disabled:cursor-not-allowed disabled:opacity-40">
+              onClick={() => void checkout()}
+              className="mt-3 flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-bauraPrimary px-4 text-[12px] font-extrabold text-white shadow-[0_10px_25px_rgba(91,55,38,0.18)] transition hover:bg-bauraPrimaryDark disabled:cursor-not-allowed disabled:opacity-40"
+            >
               {processing ? (
                 <>
                   <Loader2
-                    size={15}
+                    size={16}
                     className="animate-spin"
                   />
-
                   Processing payment...
                 </>
               ) : (
                 <>
-                  <CreditCard
-                    size={15}
-                  />
-
-                  Pay Rs.{" "}
-                  {money(
-                    netTotal,
-                  )}
+                  <CreditCard size={16} />
+                  Pay Rs. {money(netTotal)}
                 </>
               )}
             </button>
@@ -1640,62 +1315,99 @@ export function PosSellingWorkspace({
         </aside>
       </main>
 
+      {selectedSizeProduct && (
+        <ModalShell
+          title="Choose product size"
+          description={`Select an available size for ${selectedSizeProduct.displayName}.`}
+          onClose={() => setSelectedSizeProduct(null)}
+        >
+          <div className="grid gap-3">
+            {selectedSizeProduct.sizes.map((size) => {
+              const available = numberValue(
+                size.availableQty,
+              );
+
+              const inStock = available > 0;
+
+              return (
+                <button
+                  key={size.id}
+                  type="button"
+                  disabled={!inStock}
+                  onClick={() =>
+                    addSelectedProduct(
+                      selectedSizeProduct,
+                      size,
+                    )
+                  }
+                  className="group flex w-full items-center justify-between gap-4 rounded-2xl border border-black/[0.09] bg-white p-4 text-left transition hover:border-bauraPrimary/50 hover:bg-bauraPrimary/[0.03] hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <div className="min-w-0">
+                    <p className="text-[12px] font-bold">
+                      {size.label}
+                    </p>
+
+                    <p
+                      className={`mt-1 text-[9px] font-semibold ${
+                        inStock
+                          ? "text-bauraMuted"
+                          : "text-red-600"
+                      }`}
+                    >
+                      {inStock
+                        ? `${available} available`
+                        : "Out of stock"}
+                    </p>
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span className="text-[12px] font-extrabold text-bauraPrimary">
+                      Rs. {money(numberValue(size.price))}
+                    </span>
+
+                    <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-bauraPrimary/10 text-bauraPrimary group-hover:bg-bauraPrimary group-hover:text-white">
+                      <Plus size={15} />
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setSelectedSizeProduct(null)}
+            className="mt-4 w-full rounded-xl border border-black/10 px-4 py-3 text-[10px] font-bold text-bauraMuted hover:bg-black/[0.03]"
+          >
+            Cancel
+          </button>
+        </ModalShell>
+      )}
+
       {customerModal && (
         <CustomerModal
-          selectedCustomer={
-            selectedCustomer
-          }
-          onClose={() =>
-            setCustomerModal(
-              false,
-            )
-          }
-          onSelect={
-            selectCustomer
-          }
+          selectedCustomer={selectedCustomer}
+          onClose={() => setCustomerModal(false)}
+          onSelect={selectCustomer}
           onWalkIn={() => {
-            setSelectedCustomer(
-              null,
-            );
-
-            setReceiptEmail(
-              "",
-            );
-
-            setCustomerModal(
-              false,
-            );
+            setSelectedCustomer(null);
+            setReceiptEmail("");
+            setCustomerModal(false);
           }}
         />
       )}
 
       {cashMovementModal && (
         <CashMovementModal
-          session={
-            session
-          }
-          drawer={
-            drawer
-          }
-          onClose={() =>
-            setCashMovementModal(
-              false,
-            )
-          }
-          onSaved={() => {
-            void loadDrawer();
-          }}
+          session={session}
+          drawer={drawer}
+          onClose={() => setCashMovementModal(false)}
+          onSaved={() => void loadDrawer()}
         />
       )}
     </div>
   );
 }
-
-/*
-|--------------------------------------------------------------------------
-| HEADER STAT
-|--------------------------------------------------------------------------
-*/
 
 function HeaderStat({
   label,
@@ -1706,22 +1418,16 @@ function HeaderStat({
 }) {
   return (
     <div>
-      <p className="text-[7px] font-bold uppercase tracking-[0.08em] text-bauraMuted">
+      <p className="text-[8px] font-bold uppercase tracking-[0.08em] text-bauraMuted">
         {label}
       </p>
 
-      <p className="mt-0.5 text-[9px] font-extrabold">
+      <p className="mt-1 text-[10px] font-extrabold">
         {value}
       </p>
     </div>
   );
 }
-
-/*
-|--------------------------------------------------------------------------
-| PRODUCT CARD
-|--------------------------------------------------------------------------
-*/
 
 function ProductCard({
   product,
@@ -1735,91 +1441,74 @@ function ProductCard({
   return (
     <button
       type="button"
-      disabled={
-        !product.inStock
-      }
-      onClick={
-        onAdd
-      }
-      className="group relative overflow-hidden rounded-[18px] border border-black/[0.07] bg-white text-left shadow-[0_2px_10px_rgba(0,0,0,0.025)] transition duration-150 hover:-translate-y-0.5 hover:border-bauraPrimary/20 hover:shadow-[0_12px_28px_rgba(0,0,0,0.08)] disabled:cursor-not-allowed disabled:opacity-45">
+      disabled={!product.inStock}
+      onClick={onAdd}
+      className="group relative overflow-hidden rounded-[18px] border border-black/[0.07] bg-white text-left shadow-[0_2px_10px_rgba(0,0,0,0.025)] transition duration-150 hover:-translate-y-0.5 hover:border-bauraPrimary/20 hover:shadow-[0_12px_28px_rgba(0,0,0,0.08)] disabled:cursor-not-allowed disabled:opacity-45"
+    >
       <div className="relative aspect-[4/3] overflow-hidden bg-[#efefeb]">
         {product.imageUrl ? (
           <img
-            src={
-              product.imageUrl
-            }
-            alt={
-              product.displayName
-            }
+            src={product.imageUrl}
+            alt={product.displayName}
             loading="lazy"
             className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
           />
         ) : (
           <div className="flex h-full items-center justify-center text-black/20">
-            <PackageOpen
-              size={27}
-            />
+            <PackageOpen size={27} />
           </div>
         )}
 
-        {product.isLowStock &&
-          product.inStock && (
-            <span className="absolute left-2 top-2 rounded-lg bg-amber-500 px-2 py-1 text-[7px] font-black text-white shadow-sm">
-              LOW STOCK
-            </span>
-          )}
+        {product.isLowStock && product.inStock && (
+          <span className="absolute left-2 top-2 rounded-lg bg-amber-500 px-2 py-1 text-[8px] font-black text-white shadow-sm">
+            LOW STOCK
+          </span>
+        )}
 
         {!product.inStock && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
-            <span className="rounded-lg bg-black px-2.5 py-1.5 text-[7px] font-black uppercase tracking-[0.08em] text-white">
+            <span className="rounded-lg bg-black px-2.5 py-1.5 text-[8px] font-black uppercase tracking-[0.08em] text-white">
               Sold out
             </span>
           </div>
         )}
 
-        {cartQty >
-          0 && (
-          <span className="absolute right-2 top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-bauraPrimary px-1.5 text-[8px] font-black text-white shadow-md">
+        {cartQty > 0 && (
+          <span className="absolute right-2 top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-bauraPrimary px-1.5 text-[9px] font-black text-white shadow-md">
             {cartQty}
           </span>
         )}
       </div>
 
       <div className="p-3">
-        <p className="line-clamp-2 min-h-[32px] text-[10px] font-extrabold leading-4">
-          {
-            product.displayName
-          }
+        <p className="line-clamp-2 min-h-[34px] text-[11px] font-extrabold leading-4">
+          {product.displayName}
         </p>
 
         <div className="mt-3 flex items-end justify-between gap-2">
           <div>
-            <p className="text-[7px] font-medium text-bauraMuted">
+            <p className="text-[8px] font-medium text-bauraMuted">
               Price
             </p>
 
             <p className="mt-0.5 text-[12px] font-black text-bauraPrimary">
-              Rs.{" "}
-              {money(
-                product.sellPrice,
-              )}
+              Rs. {money(product.sellPrice)}
             </p>
           </div>
 
           <div className="text-right">
-            <p className="text-[7px] text-bauraMuted">
+            <p className="text-[8px] text-bauraMuted">
               Stock
             </p>
 
             <p
-              className={`mt-0.5 text-[8px] font-bold ${
+              className={`mt-0.5 text-[9px] font-bold ${
                 product.isLowStock
                   ? "text-amber-600"
                   : "text-bauraInk"
-              }`}>
-              {
-                product.availableQty
-              }
+              }`}
+            >
+              {product.availableQty}
             </p>
           </div>
         </div>
@@ -1827,12 +1516,6 @@ function ProductCard({
     </button>
   );
 }
-
-/*
-|--------------------------------------------------------------------------
-| CART ROW
-|--------------------------------------------------------------------------
-*/
 
 function CartRow({
   item,
@@ -1846,94 +1529,74 @@ function CartRow({
   onRemove: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-black/[0.07] bg-white p-2.5 transition hover:border-black/[0.11]">
-      <div className="flex gap-2.5">
+    <div className="rounded-xl border border-black/[0.07] bg-white p-3 transition hover:border-black/[0.11]">
+      <div className="flex gap-3">
         <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-[#f1f1ed]">
-          {item.product
-            .imageUrl ? (
+          {item.product.imageUrl ? (
             <img
-              src={
-                item.product
-                  .imageUrl
-              }
+              src={item.product.imageUrl}
               alt=""
               className="h-full w-full object-cover"
             />
           ) : (
             <div className="flex h-full items-center justify-center text-black/20">
-              <PackageOpen
-                size={16}
-              />
+              <PackageOpen size={16} />
             </div>
           )}
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex gap-2">
-            <p className="line-clamp-2 flex-1 text-[9px] font-extrabold leading-4">
-              {
-                item.product
-                  .displayName
-              }{item.sizeLabel ? ` — ${item.sizeLabel}` : ""}
+            <p className="line-clamp-2 flex-1 text-[10px] font-extrabold leading-4">
+              {item.product.displayName}
+              {item.sizeLabel
+                ? ` — ${item.sizeLabel}`
+                : ""}
             </p>
 
             <button
               type="button"
-              onClick={
-                onRemove
-              }
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-bauraMuted transition hover:bg-red-50 hover:text-red-500">
-              <Trash2
-                size={11}
-              />
+              onClick={onRemove}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-bauraMuted transition hover:bg-red-50 hover:text-red-500"
+              aria-label="Remove item"
+            >
+              <Trash2 size={13} />
             </button>
           </div>
 
-          <p className="mt-0.5 text-[8px] text-bauraMuted">
-            Rs.{" "}
-            {money(
-              item.unitPrice,
-            )}{" "}
-            each
+          <p className="mt-1 text-[9px] text-bauraMuted">
+            Rs. {money(item.unitPrice)} each
           </p>
         </div>
       </div>
 
-      <div className="mt-2.5 flex items-center justify-between">
+      <div className="mt-3 flex items-center justify-between">
         <div className="flex items-center rounded-lg border border-black/[0.07] bg-[#f7f7f4] p-0.5">
           <button
             type="button"
-            onClick={
-              onMinus
-            }
-            className="flex h-7 w-7 items-center justify-center rounded-md transition hover:bg-white">
-            <Minus
-              size={11}
-            />
+            onClick={onMinus}
+            className="flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-white"
+            aria-label="Decrease quantity"
+          >
+            <Minus size={12} />
           </button>
 
-          <span className="w-8 text-center text-[9px] font-black">
+          <span className="w-8 text-center text-[10px] font-black">
             {item.qty}
           </span>
 
           <button
             type="button"
-            onClick={
-              onPlus
-            }
-            className="flex h-7 w-7 items-center justify-center rounded-md transition hover:bg-white">
-            <Plus
-              size={11}
-            />
+            onClick={onPlus}
+            className="flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-white"
+            aria-label="Increase quantity"
+          >
+            <Plus size={12} />
           </button>
         </div>
 
-        <p className="text-[10px] font-black">
-          Rs.{" "}
-          {money(
-            item.qty *
-              item.unitPrice,
-          )}
+        <p className="text-[11px] font-black">
+          Rs. {money(item.qty * item.unitPrice)}
         </p>
       </div>
     </div>
@@ -1948,26 +1611,17 @@ function SummaryRow({
   value: number;
 }) {
   return (
-    <div className="flex items-center justify-between text-[9px]">
+    <div className="flex items-center justify-between text-[10px]">
       <span className="text-bauraMuted">
         {label}
       </span>
 
       <span className="font-bold">
-        Rs.{" "}
-        {money(
-          value,
-        )}
+        Rs. {money(value)}
       </span>
     </div>
   );
 }
-
-/*
-|--------------------------------------------------------------------------
-| PAYMENT BUTTON
-|--------------------------------------------------------------------------
-*/
 
 function PaymentButton({
   active,
@@ -1977,32 +1631,24 @@ function PaymentButton({
 }: {
   active: boolean;
   label: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
-      onClick={
-        onClick
-      }
-      className={`flex h-11 items-center justify-center gap-2 rounded-xl border text-[8px] font-extrabold transition ${
+      onClick={onClick}
+      className={`flex h-11 items-center justify-center gap-2 rounded-xl border text-[9px] font-extrabold transition ${
         active
           ? "border-bauraPrimary bg-bauraPrimary/[0.06] text-bauraPrimary shadow-sm"
           : "border-black/[0.08] bg-white text-bauraMuted hover:bg-[#fafaf8]"
-      }`}>
+      }`}
+    >
       {icon}
-
       {label}
     </button>
   );
 }
-
-/*
-|--------------------------------------------------------------------------
-| DISCOUNT APPROVAL
-|--------------------------------------------------------------------------
-*/
 
 function DiscountApprovalStatus({
   approval,
@@ -2019,29 +1665,20 @@ function DiscountApprovalStatus({
     return (
       <button
         type="button"
-        disabled={
-          loading
-        }
-        onClick={
-          onRequest
-        }
-        className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 text-[8px] font-extrabold text-amber-700">
-        <ShieldCheck
-          size={12}
-        />
-
-        Request manager approval
+        disabled={loading}
+        onClick={onRequest}
+        className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 text-[9px] font-extrabold text-amber-700 disabled:opacity-50"
+      >
+        <ShieldCheck size={13} />
+        {loading
+          ? "Requesting approval..."
+          : "Request manager approval"}
       </button>
     );
   }
 
-  const approved =
-    approval.status ===
-    "APPROVED";
-
-  const pending =
-    approval.status ===
-    "PENDING";
+  const approved = approval.status === "APPROVED";
+  const pending = approval.status === "PENDING";
 
   return (
     <div
@@ -2051,15 +1688,16 @@ function DiscountApprovalStatus({
           : pending
             ? "border-amber-200 bg-amber-50"
             : "border-red-200 bg-red-50"
-      }`}>
+      }`}
+    >
       {approved ? (
         <Check
-          size={13}
+          size={14}
           className="text-emerald-600"
         />
       ) : (
         <ShieldCheck
-          size={13}
+          size={14}
           className={
             pending
               ? "text-amber-600"
@@ -2070,13 +1708,14 @@ function DiscountApprovalStatus({
 
       <div className="ml-2">
         <p
-          className={`text-[8px] font-extrabold ${
+          className={`text-[9px] font-extrabold ${
             approved
               ? "text-emerald-700"
               : pending
                 ? "text-amber-700"
                 : "text-red-600"
-          }`}>
+          }`}
+        >
           {approved
             ? "Discount approved"
             : pending
@@ -2088,34 +1727,31 @@ function DiscountApprovalStatus({
       {pending && (
         <button
           type="button"
-          disabled={
-            loading
-          }
-          onClick={
-            onRefresh
-          }
-          className="ml-auto flex h-7 items-center gap-1 rounded-md bg-white px-2 text-[7px] font-bold shadow-sm">
+          disabled={loading}
+          onClick={onRefresh}
+          className="ml-auto flex h-7 items-center gap-1 rounded-md bg-white px-2 text-[8px] font-bold shadow-sm"
+        >
           <RefreshCw
-            size={9}
-            className={
-              loading
-                ? "animate-spin"
-                : ""
-            }
+            size={11}
+            className={loading ? "animate-spin" : ""}
           />
-
           Check
+        </button>
+      )}
+
+      {!pending && !approved && (
+        <button
+          type="button"
+          disabled={loading}
+          onClick={onRequest}
+          className="ml-auto rounded-md bg-white px-2 py-1.5 text-[8px] font-bold"
+        >
+          Request again
         </button>
       )}
     </div>
   );
 }
-
-/*
-|--------------------------------------------------------------------------
-| CUSTOMER MODAL
-|--------------------------------------------------------------------------
-*/
 
 function CustomerModal({
   selectedCustomer,
@@ -2125,89 +1761,44 @@ function CustomerModal({
 }: {
   selectedCustomer: PosCustomer | null;
   onClose: () => void;
-  onSelect: (
-    customer: PosCustomer,
-  ) => void;
+  onSelect: (customer: PosCustomer) => void;
   onWalkIn: () => void;
 }) {
-  const toast =
-    useToast();
+  const toast = useToast();
 
-  const [
-    mode,
-    setMode,
-  ] =
-    useState<CustomerModalMode>(
-      "SEARCH",
-    );
+  const [mode, setMode] =
+    useState<CustomerModalMode>("SEARCH");
 
-  const [
-    phone,
-    setPhone,
-  ] = useState("");
+  const [phone, setPhone] = useState("");
 
-  const [
-    foundCustomer,
-    setFoundCustomer,
-  ] =
-    useState<PosCustomer | null>(
-      selectedCustomer,
-    );
+  const [foundCustomer, setFoundCustomer] =
+    useState<PosCustomer | null>(selectedCustomer);
 
-  const [
-    searching,
-    setSearching,
-  ] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const [
-    saving,
-    setSaving,
-  ] = useState(false);
-
-  const [
-    name,
-    setName,
-  ] = useState("");
-
-  const [
-    email,
-    setEmail,
-  ] = useState("");
-
-  const [
-    address,
-    setAddress,
-  ] = useState("");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [address, setAddress] = useState("");
 
   async function searchCustomer() {
-    if (
-      !phone.trim()
-    ) {
+    if (!phone.trim()) {
       toast.warning(
         "Phone required",
         "Enter the customer's phone number.",
       );
-
       return;
     }
 
-    setSearching(
-      true,
-    );
+    setSearching(true);
+    setFoundCustomer(null);
 
     try {
-      const response =
-        await lookupPosCustomer(
-          phone,
-        );
+      const response = await lookupPosCustomer(phone);
 
-      setFoundCustomer(
-        response.customer,
-      );
+      setFoundCustomer(response.customer);
 
-      if (
-        !response.found
-      ) {
+      if (!response.found) {
         toast.info(
           "Customer not found",
           "You can register this customer now.",
@@ -2221,52 +1812,31 @@ function CustomerModal({
           : "Unable to find customer.",
       );
     } finally {
-      setSearching(
-        false,
-      );
+      setSearching(false);
     }
   }
 
   async function registerCustomer() {
-    if (
-      !name.trim() ||
-      !phone.trim()
-    ) {
+    if (!name.trim() || !phone.trim()) {
       toast.warning(
         "Details required",
         "Customer name and phone are required.",
       );
-
       return;
     }
 
-    setSaving(
-      true,
-    );
+    setSaving(true);
 
     try {
-      const response =
-        await registerPosCustomer(
-          {
-            name:
-              name.trim(),
+      const response = await registerPosCustomer({
+        name: name.trim(),
+        phone: phone.trim(),
+        email: email.trim() || null,
+        defaultDeliveryAddress:
+          address.trim() || null,
+      });
 
-            phone:
-              phone.trim(),
-
-            email:
-              email.trim() ||
-              null,
-
-            defaultDeliveryAddress:
-              address.trim() ||
-              null,
-          },
-        );
-
-      onSelect(
-        response.customer,
-      );
+      onSelect(response.customer);
     } catch (error) {
       toast.error(
         "Registration failed",
@@ -2275,100 +1845,71 @@ function CustomerModal({
           : "Unable to register customer.",
       );
     } finally {
-      setSaving(
-        false,
-      );
+      setSaving(false);
     }
   }
 
   return (
     <ModalShell
       title="Customer"
-      description="Find an existing official-site customer or create a new customer."
-      onClose={
-        onClose
-      }>
+      description="Find an existing customer or register a new one."
+      onClose={onClose}
+    >
       <div className="grid grid-cols-2 gap-2 rounded-xl bg-[#f4f4f1] p-1">
         <button
           type="button"
-          onClick={() =>
-            setMode(
-              "SEARCH",
-            )
-          }
-          className={`h-9 rounded-lg text-[8px] font-extrabold transition ${
-            mode ===
-            "SEARCH"
+          onClick={() => setMode("SEARCH")}
+          className={`h-10 rounded-lg text-[10px] font-extrabold transition ${
+            mode === "SEARCH"
               ? "bg-white shadow-sm"
               : "text-bauraMuted"
-          }`}>
+          }`}
+        >
           Find Customer
         </button>
 
         <button
           type="button"
-          onClick={() =>
-            setMode(
-              "REGISTER",
-            )
-          }
-          className={`h-9 rounded-lg text-[8px] font-extrabold transition ${
-            mode ===
-            "REGISTER"
+          onClick={() => setMode("REGISTER")}
+          className={`h-10 rounded-lg text-[10px] font-extrabold transition ${
+            mode === "REGISTER"
               ? "bg-white shadow-sm"
               : "text-bauraMuted"
-          }`}>
+          }`}
+        >
           Register New
         </button>
       </div>
 
-      {mode ===
-      "SEARCH" ? (
+      {mode === "SEARCH" ? (
         <>
-          <label className="mt-5 block text-[8px] font-bold text-bauraMuted">
-            PHONE NUMBER
+          <label className="mt-5 block text-[9px] font-bold uppercase text-bauraMuted">
+            Phone number
           </label>
 
-          <div className="mt-1.5 flex gap-2">
+          <div className="mt-2 flex gap-2">
             <input
               autoFocus
-              value={
-                phone
+              value={phone}
+              onChange={(event) =>
+                setPhone(event.target.value)
               }
-              onChange={(
-                event,
-              ) =>
-                setPhone(
-                  event.target
-                    .value,
-                )
-              }
-              onKeyDown={(
-                event,
-              ) => {
-                if (
-                  event.key ===
-                  "Enter"
-                ) {
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
                   void searchCustomer();
                 }
               }}
               placeholder="077 123 4567"
-              className="h-11 flex-1 rounded-xl border border-black/[0.08] px-3 text-[10px] outline-none focus:border-bauraPrimary/40"
+              className="h-11 min-w-0 flex-1 rounded-xl border border-black/[0.08] px-3 text-[11px] outline-none focus:border-bauraPrimary/40"
             />
 
             <button
               type="button"
-              disabled={
-                searching
-              }
-              onClick={() =>
-                void searchCustomer()
-              }
-              className="flex h-11 items-center justify-center rounded-xl bg-bauraPrimary px-4 text-[8px] font-bold text-white">
-              {searching
-                ? "Searching..."
-                : "Search"}
+              disabled={searching}
+              onClick={() => void searchCustomer()}
+              className="flex h-11 items-center justify-center rounded-xl bg-bauraPrimary px-4 text-[10px] font-bold text-white disabled:opacity-50"
+            >
+              {searching ? "Searching..." : "Search"}
             </button>
           </div>
 
@@ -2376,28 +1917,22 @@ function CustomerModal({
             <div className="mt-4 rounded-2xl border border-black/[0.08] p-4">
               <div className="flex items-center">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-bauraPrimary/[0.07] text-bauraPrimary">
-                  <UserRound
-                    size={16}
-                  />
+                  <UserRound size={17} />
                 </div>
 
                 <div className="ml-3 min-w-0">
-                  <p className="text-[10px] font-extrabold">
-                    {
-                      foundCustomer.name
-                    }
+                  <p className="text-[11px] font-extrabold">
+                    {foundCustomer.name}
                   </p>
 
-                  <p className="mt-0.5 text-[8px] text-bauraMuted">
+                  <p className="mt-1 text-[9px] text-bauraMuted">
                     {foundCustomer.phone_normalized ||
                       foundCustomer.phone}
                   </p>
 
                   {foundCustomer.email && (
-                    <p className="mt-0.5 text-[8px] text-bauraMuted">
-                      {
-                        foundCustomer.email
-                      }
+                    <p className="mt-1 text-[9px] text-bauraMuted">
+                      {foundCustomer.email}
                     </p>
                   )}
                 </div>
@@ -2405,12 +1940,9 @@ function CustomerModal({
 
               <button
                 type="button"
-                onClick={() =>
-                  onSelect(
-                    foundCustomer,
-                  )
-                }
-                className="mt-4 h-10 w-full rounded-xl bg-bauraPrimary text-[9px] font-bold text-white">
+                onClick={() => onSelect(foundCustomer)}
+                className="mt-4 h-10 w-full rounded-xl bg-bauraPrimary text-[10px] font-bold text-white"
+              >
                 Use this customer
               </button>
             </div>
@@ -2418,10 +1950,9 @@ function CustomerModal({
 
           <button
             type="button"
-            onClick={
-              onWalkIn
-            }
-            className="mt-4 h-10 w-full rounded-xl border border-black/[0.08] text-[8px] font-bold">
+            onClick={onWalkIn}
+            className="mt-4 h-10 w-full rounded-xl border border-black/[0.08] text-[10px] font-bold"
+          >
             Continue as walk-in customer
           </button>
         </>
@@ -2429,73 +1960,48 @@ function CustomerModal({
         <div className="mt-5 space-y-3">
           <Field
             label="Customer name"
-            value={
-              name
-            }
-            onChange={
-              setName
-            }
+            value={name}
+            onChange={setName}
             placeholder="Full name"
           />
 
           <Field
             label="Phone"
-            value={
-              phone
-            }
-            onChange={
-              setPhone
-            }
+            value={phone}
+            onChange={setPhone}
             placeholder="077 123 4567"
           />
 
           <Field
             label="Email"
-            value={
-              email
-            }
-            onChange={
-              setEmail
-            }
+            value={email}
+            onChange={setEmail}
             placeholder="Optional"
           />
 
           <div>
-            <label className="text-[8px] font-bold text-bauraMuted">
-              DELIVERY ADDRESS
+            <label className="text-[9px] font-bold uppercase text-bauraMuted">
+              Delivery address
             </label>
 
             <textarea
-              value={
-                address
-              }
-              onChange={(
-                event,
-              ) =>
-                setAddress(
-                  event.target
-                    .value,
-                )
+              value={address}
+              onChange={(event) =>
+                setAddress(event.target.value)
               }
               rows={3}
               placeholder="Optional"
-              className="mt-1.5 w-full resize-none rounded-xl border border-black/[0.08] p-3 text-[9px] outline-none focus:border-bauraPrimary/40"
+              className="mt-2 w-full resize-none rounded-xl border border-black/[0.08] p-3 text-[10px] outline-none focus:border-bauraPrimary/40"
             />
           </div>
 
           <button
             type="button"
-            disabled={
-              saving
-            }
-            onClick={() =>
-              void registerCustomer()
-            }
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-bauraPrimary text-[9px] font-bold text-white">
-            <UserPlus
-              size={13}
-            />
-
+            disabled={saving}
+            onClick={() => void registerCustomer()}
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-bauraPrimary text-[10px] font-bold text-white disabled:opacity-50"
+          >
+            <UserPlus size={14} />
             {saving
               ? "Registering..."
               : "Register Customer"}
@@ -2505,12 +2011,6 @@ function CustomerModal({
     </ModalShell>
   );
 }
-
-/*
-|--------------------------------------------------------------------------
-| CASH MOVEMENT
-|--------------------------------------------------------------------------
-*/
 
 function CashMovementModal({
   session,
@@ -2523,103 +2023,54 @@ function CashMovementModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const toast =
-    useToast();
+  const toast = useToast();
 
-  const [
-    mode,
-    setMode,
-  ] =
-    useState<CashMovementMode>(
-      "CASH_IN",
-    );
+  const [mode, setMode] =
+    useState<CashMovementMode>("CASH_IN");
 
-  const [
-    amount,
-    setAmount,
-  ] = useState("");
-
-  const [
-    reason,
-    setReason,
-  ] = useState("");
-
-  const [
-    reference,
-    setReference,
-  ] = useState("");
-
-  const [
-    saving,
-    setSaving,
-  ] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
+  const [reference, setReference] = useState("");
+  const [saving, setSaving] = useState(false);
 
   async function save() {
-    const numericAmount =
-      numberValue(
-        amount,
-      );
+    const numericAmount = numberValue(amount);
 
-    if (
-      numericAmount <=
-        0
-    ) {
+    if (numericAmount <= 0) {
       toast.warning(
         "Invalid amount",
         "Enter an amount greater than zero.",
       );
-
       return;
     }
 
-    if (
-      !reason.trim()
-    ) {
+    if (!reason.trim()) {
       toast.warning(
         "Reason required",
         "Enter a reason for this drawer movement.",
       );
-
       return;
     }
 
-    setSaving(
-      true,
-    );
+    setSaving(true);
 
     try {
-      await createPosCashMovement(
-        {
-          posSessionId:
-            session.id,
-
-          type:
-            mode,
-
-          amount:
-            numericAmount,
-
-          reason:
-            reason.trim(),
-
-          reference:
-            reference.trim() ||
-            null,
-        },
-      );
+      await createPosCashMovement({
+        posSessionId: session.id,
+        type: mode,
+        amount: numericAmount,
+        reason: reason.trim(),
+        reference: reference.trim() || null,
+      });
 
       toast.success(
-        mode ===
-          "CASH_IN"
+        mode === "CASH_IN"
           ? "Cash added"
           : "Cash removed",
-        `Rs. ${money(
-          numericAmount,
-        )}`,
+        `Rs. ${money(numericAmount)}`,
       );
 
       onSaved();
-
       onClose();
     } catch (error) {
       toast.error(
@@ -2629,9 +2080,7 @@ function CashMovementModal({
           : "Unable to update the cash drawer.",
       );
     } finally {
-      setSaving(
-        false,
-      );
+      setSaving(false);
     }
   }
 
@@ -2639,20 +2088,16 @@ function CashMovementModal({
     <ModalShell
       title="Cash Drawer"
       description="Record non-sale cash entering or leaving the register."
-      onClose={
-        onClose
-      }>
+      onClose={onClose}
+    >
       {drawer && (
         <div className="mb-5 rounded-2xl bg-[#f5f5f2] p-4">
-          <p className="text-[8px] font-bold uppercase tracking-[0.08em] text-bauraMuted">
+          <p className="text-[9px] font-bold uppercase tracking-[0.08em] text-bauraMuted">
             Expected drawer cash
           </p>
 
-          <p className="mt-1 text-[22px] font-black tracking-[-0.04em]">
-            Rs.{" "}
-            {money(
-              drawer.expectedCash,
-            )}
+          <p className="mt-1 text-[23px] font-black tracking-[-0.04em]">
+            Rs. {money(drawer.expectedCash)}
           </p>
         </div>
       )}
@@ -2660,41 +2105,27 @@ function CashMovementModal({
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
-          onClick={() =>
-            setMode(
-              "CASH_IN",
-            )
-          }
-          className={`flex h-11 items-center justify-center gap-2 rounded-xl border text-[8px] font-bold ${
-            mode ===
-            "CASH_IN"
+          onClick={() => setMode("CASH_IN")}
+          className={`flex h-11 items-center justify-center gap-2 rounded-xl border text-[10px] font-bold ${
+            mode === "CASH_IN"
               ? "border-emerald-300 bg-emerald-50 text-emerald-700"
               : "border-black/[0.08]"
-          }`}>
-          <ArrowDownToLine
-            size={13}
-          />
-
+          }`}
+        >
+          <ArrowDownToLine size={14} />
           Cash In
         </button>
 
         <button
           type="button"
-          onClick={() =>
-            setMode(
-              "CASH_OUT",
-            )
-          }
-          className={`flex h-11 items-center justify-center gap-2 rounded-xl border text-[8px] font-bold ${
-            mode ===
-            "CASH_OUT"
+          onClick={() => setMode("CASH_OUT")}
+          className={`flex h-11 items-center justify-center gap-2 rounded-xl border text-[10px] font-bold ${
+            mode === "CASH_OUT"
               ? "border-amber-300 bg-amber-50 text-amber-700"
               : "border-black/[0.08]"
-          }`}>
-          <ArrowUpFromLine
-            size={13}
-          />
-
+          }`}
+        >
+          <ArrowUpFromLine size={14} />
           Cash Out
         </button>
       </div>
@@ -2702,26 +2133,17 @@ function CashMovementModal({
       <div className="mt-4 space-y-3">
         <Field
           label="Amount"
-          value={
-            amount
-          }
-          onChange={
-            setAmount
-          }
+          value={amount}
+          onChange={setAmount}
           placeholder="0.00"
         />
 
         <Field
           label="Reason"
-          value={
-            reason
-          }
-          onChange={
-            setReason
-          }
+          value={reason}
+          onChange={setReason}
           placeholder={
-            mode ===
-            "CASH_IN"
+            mode === "CASH_IN"
               ? "Why is cash being added?"
               : "Why is cash being removed?"
           }
@@ -2729,41 +2151,27 @@ function CashMovementModal({
 
         <Field
           label="Reference"
-          value={
-            reference
-          }
-          onChange={
-            setReference
-          }
+          value={reference}
+          onChange={setReference}
           placeholder="Optional"
         />
       </div>
 
       <button
         type="button"
-        disabled={
-          saving
-        }
-        onClick={() =>
-          void save()
-        }
-        className="mt-5 h-11 w-full rounded-xl bg-bauraPrimary text-[9px] font-bold text-white">
+        disabled={saving}
+        onClick={() => void save()}
+        className="mt-5 h-11 w-full rounded-xl bg-bauraPrimary text-[10px] font-bold text-white disabled:opacity-50"
+      >
         {saving
           ? "Saving..."
-          : mode ===
-              "CASH_IN"
+          : mode === "CASH_IN"
             ? "Record Cash In"
             : "Record Cash Out"}
       </button>
     </ModalShell>
   );
 }
-
-/*
-|--------------------------------------------------------------------------
-| MODAL HELPERS
-|--------------------------------------------------------------------------
-*/
 
 function ModalShell({
   title,
@@ -2774,39 +2182,33 @@ function ModalShell({
   title: string;
   description: string;
   onClose: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/35 p-5 backdrop-blur-[2px]">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-5 backdrop-blur-[3px]">
       <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[22px] border border-white/30 bg-white shadow-[0_30px_100px_rgba(0,0,0,0.22)]">
         <div className="sticky top-0 z-10 flex items-start border-b border-black/[0.07] bg-white p-5">
           <div>
-            <h2 className="text-[16px] font-extrabold tracking-[-0.03em]">
+            <h2 className="text-[17px] font-extrabold tracking-[-0.03em]">
               {title}
             </h2>
 
-            <p className="mt-1 text-[8px] leading-4 text-bauraMuted">
-              {
-                description
-              }
+            <p className="mt-1 text-[9px] leading-4 text-bauraMuted">
+              {description}
             </p>
           </div>
 
           <button
             type="button"
-            onClick={
-              onClose
-            }
-            className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg bg-[#f5f5f2]">
-            <X
-              size={13}
-            />
+            onClick={onClose}
+            className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg bg-[#f5f5f2] transition hover:bg-[#ecece8]"
+            aria-label="Close"
+          >
+            <X size={15} />
           </button>
         </div>
 
-        <div className="p-5">
-          {children}
-        </div>
+        <div className="p-5">{children}</div>
       </div>
     </div>
   );
@@ -2820,43 +2222,26 @@ function Field({
 }: {
   label: string;
   value: string;
-  onChange: (
-    value: string,
-  ) => void;
+  onChange: (value: string) => void;
   placeholder?: string;
 }) {
   return (
     <div>
-      <label className="text-[8px] font-bold uppercase tracking-[0.05em] text-bauraMuted">
+      <label className="text-[9px] font-bold uppercase tracking-[0.05em] text-bauraMuted">
         {label}
       </label>
 
       <input
-        value={
-          value
+        value={value}
+        onChange={(event) =>
+          onChange(event.target.value)
         }
-        onChange={(
-          event,
-        ) =>
-          onChange(
-            event.target
-              .value,
-          )
-        }
-        placeholder={
-          placeholder
-        }
-        className="mt-1.5 h-11 w-full rounded-xl border border-black/[0.08] px-3 text-[9px] outline-none focus:border-bauraPrimary/40"
+        placeholder={placeholder}
+        className="mt-2 h-11 w-full rounded-xl border border-black/[0.08] px-3 text-[10px] outline-none focus:border-bauraPrimary/40"
       />
     </div>
   );
 }
-
-/*
-|--------------------------------------------------------------------------
-| SALE COMPLETED / RECEIPT
-|--------------------------------------------------------------------------
-*/
 
 function SaleCompleted({
   sale,
@@ -2867,198 +2252,167 @@ function SaleCompleted({
   onPrint: () => void;
   onNewSale: () => void;
 }) {
-  const payment =
-    sale.payments?.[0];
+  const payment = sale.payments?.[0];
+
+  const saleDate = sale.soldAt
+    ? new Date(sale.soldAt).toLocaleString(
+        "en-LK",
+        {
+          timeZone: "Asia/Colombo",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        },
+      )
+    : "—";
 
   return (
-    <div className="min-h-screen bg-[#f2f2ef] px-5 py-8 text-bauraInk print:bg-white print:p-0">
-      <div className="mx-auto max-w-[420px]">
-        <div className="mb-4 flex items-center justify-between print:hidden">
+    <div className="min-h-screen bg-[#f5f5f2] px-5 py-8 text-bauraInk print:min-h-0 print:bg-white print:p-0">
+      <div className="mx-auto max-w-[440px] print:max-w-none">
+        <div className="mb-5 flex items-center justify-between print:hidden">
           <div>
-            <p className="text-[8px] font-bold uppercase tracking-[0.1em] text-emerald-600">
+            <p className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-emerald-600">
               Payment successful
             </p>
 
-            <h1 className="mt-1 text-[20px] font-extrabold tracking-[-0.04em]">
+            <h1 className="mt-1 text-[22px] font-extrabold tracking-[-0.04em]">
               Receipt ready
             </h1>
+
+            <p className="mt-1 text-[10px] text-bauraMuted">
+              Sale {sale.orderNo} completed successfully.
+            </p>
           </div>
 
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-            <Check
-              size={20}
-            />
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+            <Check size={22} />
           </div>
         </div>
 
         <div
           id="pos-receipt"
-          className="rounded-[20px] bg-white p-6 shadow-[0_18px_60px_rgba(0,0,0,0.08)] print:rounded-none print:p-0 print:shadow-none">
+          className="overflow-hidden rounded-[20px] bg-white p-6 shadow-[0_18px_60px_rgba(0,0,0,0.08)] print:overflow-visible print:rounded-none print:p-0 print:shadow-none"
+        >
           <div className="text-center">
-            <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-bauraPrimary text-[16px] font-black text-white print:hidden">
-              B
+            <div className="mx-auto flex w-full justify-center">
+              <BauraLogo
+                print
+                className="h-auto max-h-[90px] w-[205px] object-contain print:max-h-[22mm] print:w-[52mm]"
+              />
             </div>
 
-            <h2 className="mt-3 text-[15px] font-black">
-              BAURA BAKERS
-            </h2>
-
-            <p className="mt-1 text-[8px] text-bauraMuted">
+            <p className="mt-3 text-[9px] font-semibold uppercase tracking-[0.16em] text-bauraMuted print:mt-2 print:text-black">
               Sales Receipt
             </p>
           </div>
 
-          <div className="my-5 border-t border-dashed border-black/20" />
+          <div className="my-5 border-t border-dashed border-black/20 print:my-3" />
 
           <ReceiptInfo
             label="Invoice"
-            value={
-              sale.orderNo
-            }
+            value={sale.orderNo}
           />
 
           <ReceiptInfo
             label="Date"
-            value={
-              sale.soldAt
-                ? new Date(
-                    sale.soldAt,
-                  ).toLocaleString(
-                    "en-LK",
-                  )
-                : "—"
-            }
+            value={saleDate}
           />
 
-          {sale.posSession
-            ?.sessionNo && (
+          {sale.posSession?.sessionNo && (
             <ReceiptInfo
               label="Register"
-              value={
-                sale.posSession
-                  .sessionNo
-              }
+              value={sale.posSession.sessionNo}
             />
           )}
 
-          {(sale.customer
-            ?.name ||
+          {(sale.customer?.name ||
             sale.customerNameSnapshot) && (
             <ReceiptInfo
               label="Customer"
               value={
-                sale.customer
-                  ?.name ||
+                sale.customer?.name ||
                 sale.customerNameSnapshot ||
                 ""
               }
             />
           )}
 
-          <div className="my-5 border-t border-dashed border-black/20" />
+          <div className="my-5 border-t border-dashed border-black/20 print:my-3" />
 
-          <div className="space-y-3">
-            {sale.items.map(
-              (
-                item,
-                index,
-              ) => (
-                <div
-                  key={
-                    item.id ||
-                    `${item.productId}-${index}`
-                  }
-                  className="flex justify-between gap-4 text-[9px]">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-extrabold">
-                      {item.productDisplayName ||
-                        item.product
-                          ?.name ||
-                        "Product"}
-                    </p>
+          <div className="space-y-3 print:space-y-2">
+            {sale.items.map((item, index) => (
+              <div
+                key={
+                  item.id ||
+                  `${item.productId}-${index}`
+                }
+                className="flex justify-between gap-4 text-[10px] print:gap-2 print:text-[9px]"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="break-words font-extrabold">
+                    {item.productDisplayName ||
+                      item.product?.name ||
+                      "Product"}
+                  </p>
 
-                    <p className="mt-0.5 text-[8px] text-bauraMuted">
-                      {numberValue(
-                        item.qty,
-                      )}{" "}
-                      × Rs.{" "}
-                      {money(
-                        numberValue(
-                          item.unitSellPrice,
-                        ),
-                      )}
-                    </p>
-                  </div>
-
-                  <p className="font-extrabold">
-                    Rs.{" "}
+                  <p className="mt-1 text-[9px] text-bauraMuted print:text-black">
+                    {numberValue(item.qty)} × Rs.{" "}
                     {money(
-                      numberValue(
-                        item.netTotal,
-                      ),
+                      numberValue(item.unitSellPrice),
                     )}
                   </p>
                 </div>
-              ),
-            )}
+
+                <p className="shrink-0 text-right font-extrabold">
+                  Rs.{" "}
+                  {money(numberValue(item.netTotal))}
+                </p>
+              </div>
+            ))}
           </div>
 
-          <div className="my-5 border-t border-dashed border-black/20" />
+          <div className="my-5 border-t border-dashed border-black/20 print:my-3" />
 
           <ReceiptInfo
             label="Subtotal"
             value={`Rs. ${money(
-              numberValue(
-                sale.grossTotal,
-              ),
+              numberValue(sale.grossTotal),
             )}`}
           />
 
-          {numberValue(
-            sale.discountTotal,
-          ) >
-            0 && (
+          {numberValue(sale.discountTotal) > 0 && (
             <ReceiptInfo
               label="Discount"
               value={`- Rs. ${money(
-                numberValue(
-                  sale.discountTotal,
-                ),
+                numberValue(sale.discountTotal),
               )}`}
             />
           )}
 
-          <div className="mt-3 flex items-end justify-between">
-            <span className="text-[10px] font-black">
+          <div className="mt-3 flex items-end justify-between gap-3">
+            <span className="text-[11px] font-black">
               TOTAL
             </span>
 
-            <span className="text-[20px] font-black tracking-[-0.04em]">
-              Rs.{" "}
-              {money(
-                numberValue(
-                  sale.netTotal,
-                ),
-              )}
+            <span className="text-right text-[21px] font-black tracking-[-0.04em] print:text-[16px]">
+              Rs. {money(numberValue(sale.netTotal))}
             </span>
           </div>
 
-          <div className="my-5 border-t border-dashed border-black/20" />
+          <div className="my-5 border-t border-dashed border-black/20 print:my-3" />
 
           <ReceiptInfo
             label="Payment"
-            value={
-              sale.paymentMethod.replace(
-                "_",
-                " ",
-              )
-            }
+            value={sale.paymentMethod.replace(
+              /_/g,
+              " ",
+            )}
           />
 
-          {payment?.tenderedAmount !==
-            null &&
-            payment?.tenderedAmount !==
-              undefined && (
+          {payment?.tenderedAmount !== null &&
+            payment?.tenderedAmount !== undefined && (
               <ReceiptInfo
                 label="Tendered"
                 value={`Rs. ${money(
@@ -3069,16 +2423,12 @@ function SaleCompleted({
               />
             )}
 
-          {payment?.changeAmount !==
-            null &&
-            payment?.changeAmount !==
-              undefined && (
+          {payment?.changeAmount !== null &&
+            payment?.changeAmount !== undefined && (
               <ReceiptInfo
                 label="Change"
                 value={`Rs. ${money(
-                  numberValue(
-                    payment.changeAmount,
-                  ),
+                  numberValue(payment.changeAmount),
                 )}`}
               />
             )}
@@ -3086,70 +2436,59 @@ function SaleCompleted({
           {payment?.reference && (
             <ReceiptInfo
               label="Reference"
-              value={
-                payment.reference
-              }
+              value={payment.reference}
             />
           )}
 
           {sale.receiptEmail && (
-            <div className="mt-4 rounded-xl bg-[#f6f6f3] p-3 text-center print:bg-transparent">
-              <p className="text-[7px] font-bold uppercase tracking-[0.08em] text-bauraMuted">
+            <div className="mt-4 rounded-xl bg-[#f6f6f3] p-3 text-center print:bg-transparent print:p-1">
+              <p className="text-[8px] font-bold uppercase tracking-[0.08em] text-bauraMuted print:text-black">
                 Email receipt
               </p>
 
-              <p className="mt-1 text-[8px] font-bold">
-                {
-                  sale.receiptEmail
-                }
+              <p className="mt-1 break-all text-[9px] font-bold">
+                {sale.receiptEmail}
               </p>
 
               {sale.receiptEmailStatus && (
-                <p className="mt-0.5 text-[7px] text-bauraMuted">
-                  Status:{" "}
-                  {
-                    sale.receiptEmailStatus
-                  }
+                <p className="mt-1 text-[8px] text-bauraMuted print:text-black">
+                  Status: {sale.receiptEmailStatus}
                 </p>
               )}
             </div>
           )}
 
-          <div className="mt-6 text-center">
-            <p className="text-[9px] font-bold">
-              Thank you!
+          <div className="mt-6 text-center print:mt-4">
+            <p className="text-[11px] font-extrabold">
+              Thank you for shopping with us!
             </p>
 
-            <p className="mt-1 text-[7px] text-bauraMuted">
+            <p className="mt-1 text-[9px] text-bauraMuted print:text-black">
               Baura Bakers
+            </p>
+
+            <p className="mt-1 text-[8px] text-bauraMuted print:text-black">
+              Baking oven&apos;s aura
             </p>
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-2 print:hidden">
+        <div className="mt-4 grid grid-cols-2 gap-3 print:hidden">
           <button
             type="button"
-            onClick={
-              onPrint
-            }
-            className="flex h-12 items-center justify-center gap-2 rounded-xl border border-black/[0.08] bg-white text-[9px] font-extrabold">
-            <Printer
-              size={14}
-            />
-
+            onClick={onPrint}
+            className="flex h-12 items-center justify-center gap-2 rounded-xl border border-black/[0.08] bg-white text-[10px] font-extrabold transition hover:bg-[#fafaf8]"
+          >
+            <Printer size={15} />
             Print Receipt
           </button>
 
           <button
             type="button"
-            onClick={
-              onNewSale
-            }
-            className="flex h-12 items-center justify-center gap-2 rounded-xl bg-bauraPrimary text-[9px] font-extrabold text-white">
-            <ReceiptText
-              size={14}
-            />
-
+            onClick={onNewSale}
+            className="flex h-12 items-center justify-center gap-2 rounded-xl bg-bauraPrimary text-[10px] font-extrabold text-white transition hover:bg-bauraPrimaryDark"
+          >
+            <ReceiptText size={15} />
             New Sale
           </button>
         </div>
@@ -3157,6 +2496,24 @@ function SaleCompleted({
 
       <style>{`
         @media print {
+          @page {
+            size: 80mm auto;
+            margin: 0;
+          }
+
+          html,
+          body,
+          #root {
+            width: 80mm !important;
+            min-width: 0 !important;
+            height: auto !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            background: #ffffff !important;
+          }
+
           body * {
             visibility: hidden !important;
           }
@@ -3167,17 +2524,50 @@ function SaleCompleted({
           }
 
           #pos-receipt {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 80mm;
-            padding: 4mm;
-            font-family: Arial, sans-serif;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 80mm !important;
+            max-width: 80mm !important;
+            min-width: 0 !important;
+            height: auto !important;
+            margin: 0 !important;
+            padding: 4mm !important;
+            border: 0 !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            box-sizing: border-box !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            font-family: Arial, Helvetica, sans-serif !important;
+            font-size: 9px !important;
+            overflow: visible !important;
           }
 
-          @page {
-            size: 80mm auto;
-            margin: 0;
+          #pos-receipt * {
+            box-sizing: border-box !important;
+            overflow-wrap: anywhere;
+          }
+
+          #pos-receipt img {
+            display: block !important;
+            max-width: 52mm !important;
+            max-height: 22mm !important;
+            width: auto !important;
+            height: auto !important;
+            object-fit: contain !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          #pos-receipt .text-bauraMuted {
+            color: #333333 !important;
+          }
+
+          #pos-receipt > div {
+            break-inside: avoid;
           }
         }
       `}</style>
@@ -3193,12 +2583,12 @@ function ReceiptInfo({
   value: string;
 }) {
   return (
-    <div className="mb-1.5 flex justify-between gap-4 text-[8px]">
-      <span className="text-bauraMuted">
+    <div className="mb-2 flex justify-between gap-3 text-[9px] print:mb-1.5 print:text-[9px]">
+      <span className="shrink-0 text-bauraMuted print:text-black">
         {label}
       </span>
 
-      <span className="text-right font-bold">
+      <span className="min-w-0 break-words text-right font-bold">
         {value}
       </span>
     </div>

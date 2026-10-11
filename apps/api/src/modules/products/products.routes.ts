@@ -19,82 +19,25 @@ const optionalImageUrl = z.preprocess(
 
     return value;
   },
-  z.string()
-    .url("Image URL must be valid")
-    .max(1200, "Image URL is too long")
-    .nullable()
+  z.string().url().max(1200).nullable()
 );
 
 const recipeItemSchema = z.object({
-  ingredientId: z.string().uuid("Valid ingredient is required"),
-  requiredBaseQty: z.coerce.number().positive("Required quantity must be positive"),
+  ingredientId: z.string().uuid(),
+  productSizeId: z.string().uuid().nullable().optional(),
+  requiredBaseQty: z.coerce.number().positive(),
   baseUnit: z.enum(["G", "ML", "UNIT"]),
   imageUrl: optionalImageUrl
 });
 
-type ProductSizeRecord = {
-  id: string;
-  productId: string;
-  officialSiteSizeId: number;
-  label: string;
-  serves: string | null;
-  price: Prisma.Decimal;
-  sortOrder: number;
-  isActive: boolean;
-  officialSiteUpdatedAt: Date | null;
-  syncedAt: Date;
-  createdAt: Date;
-  updatedAt: Date;
-};
+const costPreviewQuerySchema = z.object({
+  productSizeId: z.string().uuid().optional(),
+  productionQty: z.coerce.number().int().positive().max(100000).default(1)
+});
 
-type ProductRecord = {
-  id: string;
-  officialSiteProductId: number | null;
-  officialSiteSyncedAt: Date | null;
-  name: string;
-  variantName: string | null;
-  imageUrl: string | null;
-  sellPrice: Prisma.Decimal;
-  isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
-type IngredientRecord = {
-  id: string;
-  brand: string | null;
-  name: string;
-  imageUrl: string | null;
-  packageQty: Prisma.Decimal;
-  packageUnit: string;
-  baseQty: Prisma.Decimal;
-  baseUnit: string;
-};
-
-type RecipeItemRecord = {
-  id: string;
-  productId: string;
-  ingredientId: string;
-  imageUrl: string | null;
-  requiredBaseQty: Prisma.Decimal;
-  baseUnit: string;
-  createdAt: Date;
-  ingredient: IngredientRecord;
-};
-
-type StockLotRecord = {
-  id: string;
-  remainingBaseQty: Prisma.Decimal;
-  unitCostBase: Prisma.Decimal;
-  receivedAt: Date;
-  expiryDate: Date | null;
-};
-
-type CostRecipeItemRecord = RecipeItemRecord & {
-  ingredient: IngredientRecord & {
-    stockLots: StockLotRecord[];
-  };
-};
+function roundMoney(value: number) {
+  return Number(value.toFixed(2));
+}
 
 function getIngredientDisplayName(ingredient: {
   brand: string | null;
@@ -116,80 +59,87 @@ function getProductDisplayName(product: {
     : product.name;
 }
 
-function mapProductSize(size: ProductSizeRecord) {
+function mapProductSize(size: {
+  id: string;
+  productId: string;
+  officialSiteSizeId: number;
+  label: string;
+  serves: string | null;
+  price: Prisma.Decimal;
+  sortOrder: number;
+  isActive: boolean;
+  officialSiteUpdatedAt: Date | null;
+  syncedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
   return {
-    id: size.id,
-    productId: size.productId,
-    officialSiteSizeId: size.officialSiteSizeId,
+    ...size,
     name: size.label,
-    label: size.label,
-    serves: size.serves,
-    price: Number(size.price),
-    sortOrder: size.sortOrder,
-    isActive: size.isActive,
-    officialSiteUpdatedAt: size.officialSiteUpdatedAt,
-    syncedAt: size.syncedAt,
-    createdAt: size.createdAt,
-    updatedAt: size.updatedAt
+    price: Number(size.price)
   };
 }
 
 function mapProduct(
-  product: ProductRecord,
-  sizes: ProductSizeRecord[] = [],
+  product: {
+    id: string;
+    officialSiteProductId: number | null;
+    officialSiteSyncedAt: Date | null;
+    name: string;
+    variantName: string | null;
+    imageUrl: string | null;
+    sellPrice: Prisma.Decimal;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  },
+  sizes: Awaited<ReturnType<typeof getProductSizes>> = [],
   recipeItemCount = 0
 ) {
   const mappedSizes = sizes.map(mapProductSize);
   const activeSizes = mappedSizes.filter((size) => size.isActive);
 
   return {
-    id: product.id,
-    officialSiteProductId: product.officialSiteProductId,
-    officialSiteSyncedAt: product.officialSiteSyncedAt,
-    isOfficialSiteProduct: product.officialSiteProductId !== null,
-    name: product.name,
-    variantName: product.variantName,
-    imageUrl: product.imageUrl,
+    ...product,
     displayName: getProductDisplayName(product),
     sellPrice: Number(product.sellPrice),
-    isActive: product.isActive,
+    isOfficialSiteProduct: product.officialSiteProductId !== null,
     sizes: mappedSizes,
     activeSizes,
     hasMultipleSizes: activeSizes.length > 1,
-    recipeItemCount,
-    createdAt: product.createdAt,
-    updatedAt: product.updatedAt
+    recipeItemCount
   };
 }
 
-function mapRecipeItem(recipeItem: RecipeItemRecord) {
+function mapRecipeItem(
+  item: Awaited<ReturnType<typeof getRecipeItems>>[number]
+) {
   return {
-    id: recipeItem.id,
-    productId: recipeItem.productId,
-    ingredientId: recipeItem.ingredientId,
-    imageUrl: recipeItem.imageUrl,
-    ingredientImageUrl: recipeItem.ingredient.imageUrl,
-    displayImageUrl:
-      recipeItem.imageUrl ||
-      recipeItem.ingredient.imageUrl ||
-      null,
-    ingredientDisplayName: getIngredientDisplayName(recipeItem.ingredient),
-    requiredBaseQty: Number(recipeItem.requiredBaseQty),
-    baseUnit: recipeItem.baseUnit,
+    id: item.id,
+    productId: item.productId,
+    productSizeId: item.productSizeId,
+    ingredientId: item.ingredientId,
+    imageUrl: item.imageUrl,
+    ingredientImageUrl: item.ingredient.imageUrl,
+    displayImageUrl: item.imageUrl || item.ingredient.imageUrl || null,
+    ingredientDisplayName: getIngredientDisplayName(item.ingredient),
+    requiredBaseQty: Number(item.requiredBaseQty),
+    baseUnit: item.baseUnit,
     ingredient: {
-      brand: recipeItem.ingredient.brand,
-      name: recipeItem.ingredient.name,
-      imageUrl: recipeItem.ingredient.imageUrl,
-      packageQty: Number(recipeItem.ingredient.packageQty),
-      packageUnit: recipeItem.ingredient.packageUnit,
-      baseQty: Number(recipeItem.ingredient.baseQty),
-      baseUnit: recipeItem.ingredient.baseUnit
+      id: item.ingredient.id,
+      brand: item.ingredient.brand,
+      name: item.ingredient.name,
+      imageUrl: item.ingredient.imageUrl,
+      packageQty: Number(item.ingredient.packageQty),
+      packageUnit: item.ingredient.packageUnit,
+      baseQty: Number(item.ingredient.baseQty),
+      baseUnit: item.ingredient.baseUnit
     },
-    createdAt: recipeItem.createdAt
+    createdAt: item.createdAt
   };
 }
 
-function isPrismaUniqueError(error: unknown) {
+function isUniqueError(error: unknown) {
   return (
     error instanceof Prisma.PrismaClientKnownRequestError &&
     error.code === "P2002"
@@ -203,10 +153,6 @@ async function findOfficialProduct(productId: string) {
       officialSiteProductId: {
         not: null
       }
-    },
-    select: {
-      id: true,
-      isActive: true
     }
   });
 }
@@ -233,9 +179,58 @@ async function getRecipeItems(productId: string) {
       ingredient: true
     },
     orderBy: {
-      createdAt: "desc"
+      createdAt: "asc"
     }
   });
+}
+
+async function validateSize(
+  productId: string,
+  productSizeId: string | null | undefined
+) {
+  if (!productSizeId) {
+    return true;
+  }
+
+  const size = await prisma.productSize.findFirst({
+    where: {
+      id: productSizeId,
+      productId,
+      isActive: true
+    },
+    select: {
+      id: true
+    }
+  });
+
+  return Boolean(size);
+}
+
+async function ingredientExistsInRecipe(
+  productId: string,
+  ingredientId: string,
+  productSizeId: string | null,
+  excludeItemId?: string
+) {
+  const existing = await prisma.productRecipeItem.findFirst({
+    where: {
+      productId,
+      ingredientId,
+      productSizeId,
+      ...(excludeItemId
+        ? {
+            id: {
+              not: excludeItemId
+            }
+          }
+        : {})
+    },
+    select: {
+      id: true
+    }
+  });
+
+  return Boolean(existing);
 }
 
 router.post("/sync-official-site", async (_req, res) => {
@@ -307,7 +302,11 @@ router.get("/", async (_req, res) => {
       })
     ]);
 
-    const sizesByProduct = new Map<string, ProductSizeRecord[]>();
+    const sizesByProduct = new Map<
+      string,
+      typeof sizes
+    >();
+
     const recipeCountByProduct = new Map<string, number>();
 
     for (const size of sizes) {
@@ -350,14 +349,7 @@ router.get("/:id", async (req, res) => {
   try {
     const id = getRouteParam(req.params.id, "Product id");
 
-    const product = await prisma.product.findFirst({
-      where: {
-        id,
-        officialSiteProductId: {
-          not: null
-        }
-      }
-    });
+    const product = await findOfficialProduct(id);
 
     if (!product) {
       return res.status(404).json({
@@ -391,6 +383,7 @@ router.get("/:id", async (req, res) => {
 router.get("/:id/recipe", async (req, res) => {
   try {
     const productId = getRouteParam(req.params.id, "Product id");
+
     const product = await findOfficialProduct(productId);
 
     if (!product) {
@@ -399,9 +392,36 @@ router.get("/:id/recipe", async (req, res) => {
       });
     }
 
-    const recipeItems = await getRecipeItems(product.id);
+    const requestedSizeId =
+      typeof req.query.productSizeId === "string"
+        ? req.query.productSizeId
+        : null;
+
+    if (
+      requestedSizeId &&
+      !(await validateSize(product.id, requestedSizeId))
+    ) {
+      return res.status(400).json({
+        message: "Invalid product size"
+      });
+    }
+
+    const recipeItems = await prisma.productRecipeItem.findMany({
+      where: {
+        productId: product.id,
+        productSizeId: requestedSizeId
+      },
+      include: {
+        ingredient: true
+      },
+      orderBy: {
+        createdAt: "asc"
+      }
+    });
 
     return res.json({
+      productId: product.id,
+      productSizeId: requestedSizeId,
       recipeItems: recipeItems.map(mapRecipeItem)
     });
   } catch (error) {
@@ -428,6 +448,7 @@ router.post("/:id/recipe-items", async (req, res) => {
 
   try {
     const productId = getRouteParam(req.params.id, "Product id");
+
     const product = await findOfficialProduct(productId);
 
     if (!product) {
@@ -438,13 +459,22 @@ router.post("/:id/recipe-items", async (req, res) => {
 
     if (!product.isActive) {
       return res.status(409).json({
-        message: "Cannot modify the recipe of an inactive official product"
+        message: "Cannot modify an inactive official product"
+      });
+    }
+
+    const data = parsed.data;
+    const productSizeId = data.productSizeId ?? null;
+
+    if (!(await validateSize(product.id, productSizeId))) {
+      return res.status(400).json({
+        message: "Invalid product size"
       });
     }
 
     const ingredient = await prisma.ingredient.findUnique({
       where: {
-        id: parsed.data.ingredientId
+        id: data.ingredientId
       }
     });
 
@@ -454,19 +484,32 @@ router.post("/:id/recipe-items", async (req, res) => {
       });
     }
 
-    if (ingredient.baseUnit !== parsed.data.baseUnit) {
+    if (ingredient.baseUnit !== data.baseUnit) {
       return res.status(400).json({
-        message: `Unit mismatch. This ingredient uses ${ingredient.baseUnit}.`
+        message: `Unit mismatch. Ingredient uses ${ingredient.baseUnit}.`
+      });
+    }
+
+    const duplicate = await ingredientExistsInRecipe(
+      product.id,
+      ingredient.id,
+      productSizeId
+    );
+
+    if (duplicate) {
+      return res.status(409).json({
+        message: "This ingredient already exists in the selected recipe"
       });
     }
 
     const recipeItem = await prisma.productRecipeItem.create({
       data: {
         productId: product.id,
+        productSizeId,
         ingredientId: ingredient.id,
-        imageUrl: parsed.data.imageUrl,
-        requiredBaseQty: parsed.data.requiredBaseQty,
-        baseUnit: parsed.data.baseUnit
+        imageUrl: data.imageUrl,
+        requiredBaseQty: data.requiredBaseQty,
+        baseUnit: data.baseUnit
       },
       include: {
         ingredient: true
@@ -477,9 +520,9 @@ router.post("/:id/recipe-items", async (req, res) => {
       recipeItem: mapRecipeItem(recipeItem)
     });
   } catch (error) {
-    if (isPrismaUniqueError(error)) {
+    if (isUniqueError(error)) {
       return res.status(409).json({
-        message: "This ingredient is already added to the recipe"
+        message: "This ingredient already exists in the selected recipe"
       });
     }
 
@@ -521,25 +564,7 @@ router.put("/:id/recipe-items/:recipeItemId", async (req, res) => {
 
     if (!product.isActive) {
       return res.status(409).json({
-        message: "Cannot modify the recipe of an inactive official product"
-      });
-    }
-
-    const ingredient = await prisma.ingredient.findUnique({
-      where: {
-        id: parsed.data.ingredientId
-      }
-    });
-
-    if (!ingredient || !ingredient.isActive) {
-      return res.status(404).json({
-        message: "Active ingredient not found"
-      });
-    }
-
-    if (ingredient.baseUnit !== parsed.data.baseUnit) {
-      return res.status(400).json({
-        message: `Unit mismatch. This ingredient uses ${ingredient.baseUnit}.`
+        message: "Cannot modify an inactive official product"
       });
     }
 
@@ -556,15 +581,56 @@ router.put("/:id/recipe-items/:recipeItemId", async (req, res) => {
       });
     }
 
+    const data = parsed.data;
+    const productSizeId = data.productSizeId ?? existing.productSizeId;
+
+    if (!(await validateSize(product.id, productSizeId))) {
+      return res.status(400).json({
+        message: "Invalid product size"
+      });
+    }
+
+    const ingredient = await prisma.ingredient.findUnique({
+      where: {
+        id: data.ingredientId
+      }
+    });
+
+    if (!ingredient || !ingredient.isActive) {
+      return res.status(404).json({
+        message: "Active ingredient not found"
+      });
+    }
+
+    if (ingredient.baseUnit !== data.baseUnit) {
+      return res.status(400).json({
+        message: `Unit mismatch. Ingredient uses ${ingredient.baseUnit}.`
+      });
+    }
+
+    const duplicate = await ingredientExistsInRecipe(
+      product.id,
+      ingredient.id,
+      productSizeId,
+      existing.id
+    );
+
+    if (duplicate) {
+      return res.status(409).json({
+        message: "This ingredient already exists in the selected recipe"
+      });
+    }
+
     const recipeItem = await prisma.productRecipeItem.update({
       where: {
         id: existing.id
       },
       data: {
+        productSizeId,
         ingredientId: ingredient.id,
-        imageUrl: parsed.data.imageUrl,
-        requiredBaseQty: parsed.data.requiredBaseQty,
-        baseUnit: parsed.data.baseUnit
+        imageUrl: data.imageUrl,
+        requiredBaseQty: data.requiredBaseQty,
+        baseUnit: data.baseUnit
       },
       include: {
         ingredient: true
@@ -575,9 +641,9 @@ router.put("/:id/recipe-items/:recipeItemId", async (req, res) => {
       recipeItem: mapRecipeItem(recipeItem)
     });
   } catch (error) {
-    if (isPrismaUniqueError(error)) {
+    if (isUniqueError(error)) {
       return res.status(409).json({
-        message: "This ingredient is already added to the recipe"
+        message: "This ingredient already exists in the selected recipe"
       });
     }
 
@@ -610,7 +676,7 @@ router.delete("/:id/recipe-items/:recipeItemId", async (req, res) => {
 
     if (!product.isActive) {
       return res.status(409).json({
-        message: "Cannot modify the recipe of an inactive official product"
+        message: "Cannot modify an inactive official product"
       });
     }
 
@@ -643,23 +709,21 @@ router.delete("/:id/recipe-items/:recipeItemId", async (req, res) => {
 });
 
 router.get("/:id/cost-preview", async (req, res) => {
+  const parsed = costPreviewQuerySchema.safeParse(req.query);
+
+  if (!parsed.success) {
+    return res.status(400).json({
+      message: "Invalid cost preview query",
+      errors: parsed.error.flatten()
+    });
+  }
+
   try {
     const productId = getRouteParam(req.params.id, "Product id");
+    const { productSizeId, productionQty } = parsed.data;
     const now = new Date();
 
-    const requestedSizeId =
-      typeof req.query.productSizeId === "string"
-        ? req.query.productSizeId.trim()
-        : null;
-
-    const product = await prisma.product.findFirst({
-      where: {
-        id: productId,
-        officialSiteProductId: {
-          not: null
-        }
-      }
-    });
+    const product = await findOfficialProduct(productId);
 
     if (!product) {
       return res.status(404).json({
@@ -667,11 +731,25 @@ router.get("/:id/cost-preview", async (req, res) => {
       });
     }
 
-    const [sizes, recipeItems] = await Promise.all([
-      getProductSizes(product.id),
+    const sizes = await getProductSizes(product.id);
+
+    const selectedSize = productSizeId
+      ? sizes.find(
+          (size) => size.id === productSizeId && size.isActive
+        )
+      : null;
+
+    if (productSizeId && !selectedSize) {
+      return res.status(404).json({
+        message: "Active product size not found"
+      });
+    }
+
+    const [recipeItems, expenses] = await Promise.all([
       prisma.productRecipeItem.findMany({
         where: {
-          productId: product.id
+          productId: product.id,
+          productSizeId: productSizeId ?? null
         },
         include: {
           ingredient: {
@@ -689,35 +767,38 @@ router.get("/:id/cost-preview", async (req, res) => {
         orderBy: {
           createdAt: "asc"
         }
+      }),
+      prisma.productRecipeExpense.findMany({
+        where: {
+          productId: product.id,
+          isActive: true,
+          OR: [
+            { productSizeId: null },
+            ...(productSizeId ? [{ productSizeId }] : [])
+          ]
+        },
+        orderBy: {
+          createdAt: "asc"
+        }
       })
     ]);
 
-    const selectedSize = requestedSizeId
-      ? sizes.find(
-          (size) => size.id === requestedSizeId && size.isActive
-        )
-      : null;
+    let ingredientCostTotal = 0;
 
-    if (requestedSizeId && !selectedSize) {
-      return res.status(404).json({
-        message: "Active product size not found"
-      });
-    }
+    const lines = recipeItems.map((item) => {
+      const requiredPerUnit = Number(item.requiredBaseQty);
+      const requiredQty = requiredPerUnit * productionQty;
 
-    let currentCost = 0;
-
-    const lines = recipeItems.map((recipeItem: CostRecipeItemRecord) => {
-      const requiredQty = Number(recipeItem.requiredBaseQty);
       let remainingNeed = requiredQty;
       let ingredientCost = 0;
 
-      const eligibleLots = recipeItem.ingredient.stockLots
+      const eligibleLots = item.ingredient.stockLots
         .filter(
-          (lot: StockLotRecord) =>
+          (lot) =>
             !lot.expiryDate ||
             lot.expiryDate.getTime() >= now.getTime()
         )
-        .sort((first: StockLotRecord, second: StockLotRecord) => {
+        .sort((first, second) => {
           if (first.expiryDate && second.expiryDate) {
             const difference =
               first.expiryDate.getTime() -
@@ -747,23 +828,16 @@ router.get("/:id/cost-preview", async (req, res) => {
         remainingNeed -= takeQty;
       }
 
-      currentCost += ingredientCost;
+      ingredientCostTotal += ingredientCost;
 
       return {
-        recipeItemId: recipeItem.id,
-        ingredientId: recipeItem.ingredientId,
-        ingredientDisplayName: getIngredientDisplayName(
-          recipeItem.ingredient
-        ),
-        imageUrl: recipeItem.imageUrl,
-        ingredientImageUrl: recipeItem.ingredient.imageUrl,
-        displayImageUrl:
-          recipeItem.imageUrl ||
-          recipeItem.ingredient.imageUrl ||
-          null,
-        requiredBaseQty: requiredQty,
-        baseUnit: recipeItem.baseUnit,
-        estimatedCost: Number(ingredientCost.toFixed(2)),
+        recipeItemId: item.id,
+        ingredientId: item.ingredientId,
+        ingredientDisplayName: getIngredientDisplayName(item.ingredient),
+        requiredBaseQty: requiredPerUnit,
+        totalRequiredBaseQty: requiredQty,
+        baseUnit: item.baseUnit,
+        estimatedCost: roundMoney(ingredientCost),
         availableBaseQty: Number(
           (requiredQty - Math.max(remainingNeed, 0)).toFixed(3)
         ),
@@ -774,33 +848,71 @@ router.get("/:id/cost-preview", async (req, res) => {
       };
     });
 
+    let expenseCostTotal = 0;
+
+    const expenseLines = expenses.map((expense) => {
+      const quantity = Number(expense.quantity);
+      const rate = Number(expense.rate);
+
+      let totalAmount = rate;
+
+      if (expense.calculationMethod === "PER_UNIT") {
+        totalAmount = rate * productionQty;
+      } else if (expense.calculationMethod === "QUANTITY_BASED") {
+        totalAmount = quantity * rate;
+      }
+
+      totalAmount = roundMoney(totalAmount);
+      expenseCostTotal += totalAmount;
+
+      return {
+        id: expense.id,
+        name: expense.name,
+        category: expense.category,
+        calculationMethod: expense.calculationMethod,
+        productSizeId: expense.productSizeId,
+        quantity,
+        rate,
+        totalAmount,
+        unitAmount: roundMoney(totalAmount / productionQty)
+      };
+    });
+
     const sellPrice = selectedSize
       ? Number(selectedSize.price)
       : Number(product.sellPrice);
 
-    const roundedCurrentCost = Number(currentCost.toFixed(2));
-    const estimatedProfit = Number(
-      (sellPrice - roundedCurrentCost).toFixed(2)
+    const roundedIngredientCost = roundMoney(ingredientCostTotal);
+    const roundedExpenseCost = roundMoney(expenseCostTotal);
+    const totalProductionCost = roundMoney(
+      roundedIngredientCost + roundedExpenseCost
     );
+
+    const unitCost = roundMoney(totalProductionCost / productionQty);
+    const estimatedProfit = roundMoney(sellPrice - unitCost);
 
     return res.json({
       costPreview: {
         productId: product.id,
         productSizeId: selectedSize?.id ?? null,
         sizeLabel: selectedSize?.label ?? null,
+        productionQty,
         sellPrice,
-        currentCost: roundedCurrentCost,
+        ingredientCostTotal: roundedIngredientCost,
+        expenseCostTotal: roundedExpenseCost,
+        totalProductionCost,
+        unitCost,
+        currentCost: unitCost,
         estimatedProfit,
         profitMarginPercent:
           sellPrice > 0
-            ? Number(
-                ((estimatedProfit / sellPrice) * 100).toFixed(2)
-              )
+            ? roundMoney((estimatedProfit / sellPrice) * 100)
             : 0,
         canProduce:
           recipeItems.length > 0 &&
           lines.every((line) => line.isAvailable),
-        lines
+        lines,
+        expenseLines
       }
     });
   } catch (error) {

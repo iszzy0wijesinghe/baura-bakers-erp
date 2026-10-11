@@ -192,8 +192,13 @@ export type SubmitDayEndResponse = {
   closingDenominations: ClosingDenomination[];
 };
 
+export type PendingPosDayEnd = PosDayEnd & {
+  posSession?: PosSession | null;
+  session?: PosSession | null;
+};
+
 export type PendingPosDayEndsResponse = {
-  dayEnds: PosDayEnd[];
+  dayEnds: PendingPosDayEnd[];
 };
 
 export type ApprovePosDayEndPayload = {

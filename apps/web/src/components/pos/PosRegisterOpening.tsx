@@ -3,14 +3,18 @@
 import { useMemo, useState } from "react";
 
 import {
+  AlertCircle,
   Banknote,
   CalendarDays,
+  CheckCircle2,
   ChevronRight,
+  Coins,
   Minus,
   Plus,
   RefreshCw,
   ShieldCheck,
   Store,
+  Wallet,
 } from "lucide-react";
 
 import {
@@ -27,24 +31,99 @@ type Props = {
   onOpened: (session: PosSession) => void;
 };
 
+type DenominationType = "NOTE" | "COIN";
+
 type DenominationRow = {
   value: number;
   label: string;
+  type: DenominationType;
+  imageUrl: string | null;
   quantity: number;
 };
 
+const IMAGE_BASE = "/images/currency/lkr";
+
+const MAX_QUANTITY = 100000;
+const MAX_OPENING_FLOAT = 10000000;
+
 const DEFAULT_DENOMINATIONS: DenominationRow[] = [
-  { value: 5000, label: "Rs. 5,000", quantity: 0 },
-  { value: 2000, label: "Rs. 2,000", quantity: 0 },
-  { value: 1000, label: "Rs. 1,000", quantity: 0 },
-  { value: 500, label: "Rs. 500", quantity: 0 },
-  { value: 100, label: "Rs. 100", quantity: 0 },
-  { value: 50, label: "Rs. 50", quantity: 0 },
-  { value: 20, label: "Rs. 20", quantity: 0 },
-  { value: 10, label: "Rs. 10", quantity: 0 },
-  { value: 5, label: "Rs. 5", quantity: 0 },
-  { value: 2, label: "Rs. 2", quantity: 0 },
-  { value: 1, label: "Rs. 1", quantity: 0 },
+  {
+    value: 5000,
+    label: "Rs. 5,000",
+    type: "NOTE",
+    imageUrl: `${IMAGE_BASE}/5000-F.webp`,
+    quantity: 0,
+  },
+  {
+    value: 2000,
+    label: "Rs. 2,000",
+    type: "NOTE",
+    imageUrl: `${IMAGE_BASE}/2000.webp`,
+    quantity: 0,
+  },
+  {
+    value: 1000,
+    label: "Rs. 1,000",
+    type: "NOTE",
+    imageUrl: `${IMAGE_BASE}/1000-F.webp`,
+    quantity: 0,
+  },
+  {
+    value: 500,
+    label: "Rs. 500",
+    type: "NOTE",
+    imageUrl: `${IMAGE_BASE}/500-F.webp`,
+    quantity: 0,
+  },
+  {
+    value: 100,
+    label: "Rs. 100",
+    type: "NOTE",
+    imageUrl: `${IMAGE_BASE}/100-F.webp`,
+    quantity: 0,
+  },
+  {
+    value: 50,
+    label: "Rs. 50",
+    type: "NOTE",
+    imageUrl: `${IMAGE_BASE}/50-F.webp`,
+    quantity: 0,
+  },
+  {
+    value: 20,
+    label: "Rs. 20",
+    type: "NOTE",
+    imageUrl: `${IMAGE_BASE}/20-F.webp`,
+    quantity: 0,
+  },
+  {
+    value: 10,
+    label: "Rs. 10",
+    type: "COIN",
+    imageUrl: null,
+    quantity: 0,
+  },
+  {
+    value: 5,
+    label: "Rs. 5",
+    type: "COIN",
+    imageUrl: null,
+    quantity: 0,
+  },
+  {
+    value: 2,
+    label: "Rs. 2",
+    type: "COIN",
+    imageUrl: null,
+    quantity: 0,
+  },
+  {
+    value: 1,
+    label: "Rs. 1",
+    type: "COIN",
+    imageUrl: null,
+    quantity: 0,
+  },
 ];
 
 function formatCurrency(value: number) {
@@ -55,7 +134,7 @@ function formatCurrency(value: number) {
 }
 
 function formatBusinessDate(value: string) {
-  const date = new Date(`${value}T00:00:00`);
+  const date = new Date(`${value.slice(0, 10)}T00:00:00.000Z`);
 
   if (Number.isNaN(date.getTime())) {
     return value;
@@ -63,10 +142,303 @@ function formatBusinessDate(value: string) {
 
   return new Intl.DateTimeFormat("en-LK", {
     weekday: "long",
-    day: "2-digit",
+    day: "numeric",
     month: "long",
     year: "numeric",
+    timeZone: "UTC",
   }).format(date);
+}
+
+function normalizeQuantity(value: number) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.max(
+    0,
+    Math.min(MAX_QUANTITY, Math.floor(value)),
+  );
+}
+
+function CurrencyVisual({
+  denomination,
+}: {
+  denomination: DenominationRow;
+}) {
+  const [imageFailed, setImageFailed] = useState(false);
+
+  if (denomination.type === "COIN") {
+    return (
+      <div className="flex h-[64px] w-[92px] shrink-0 items-center justify-center rounded-xl border border-[#e9e0d3] bg-[#f8f4ed] sm:h-[72px] sm:w-[112px]">
+        <div className="flex h-[46px] w-[46px] items-center justify-center rounded-full border-[3px] border-[#cbb58e] bg-gradient-to-br from-[#fff9e9] via-[#ead8b5] to-[#d4bb8e] shadow-[0_3px_8px_rgba(85,60,30,0.10)]">
+          <Coins
+            size={22}
+            strokeWidth={1.5}
+            className="text-[#896c44]"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (!denomination.imageUrl || imageFailed) {
+    return (
+      <div className="flex h-[64px] w-[92px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-[#eee8e0] bg-[#f8f6f2] sm:h-[72px] sm:w-[112px]">
+        <Banknote
+          size={22}
+          strokeWidth={1.5}
+          className="text-bauraGoldDark"
+        />
+
+        <span className="text-[9px] font-bold text-bauraInk">
+          {denomination.label}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-[64px] w-[92px] shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#eeeae5] bg-white p-1.5 sm:h-[72px] sm:w-[112px]">
+      <img
+        src={denomination.imageUrl}
+        alt={`${denomination.label} Sri Lankan banknote`}
+        loading="lazy"
+        draggable={false}
+        onError={() => setImageFailed(true)}
+        className="h-full w-full object-contain"
+      />
+    </div>
+  );
+}
+
+function QuantityControl({
+  value,
+  quantity,
+  onChange,
+  disabled,
+}: {
+  value: number;
+  quantity: number;
+  onChange: (value: number, quantity: number) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="flex h-[38px] w-[132px] items-center rounded-[11px] border border-black/[0.08] bg-[#faf9f7] p-1 sm:w-[142px]">
+      <button
+        type="button"
+        disabled={disabled || quantity === 0}
+        onClick={() => onChange(value, quantity - 1)}
+        aria-label={`Decrease Rs. ${value} quantity`}
+        className="flex h-[29px] w-[29px] shrink-0 items-center justify-center rounded-[8px] text-bauraMuted transition hover:bg-white hover:text-bauraInk disabled:cursor-not-allowed disabled:opacity-30">
+        <Minus size={13} />
+      </button>
+
+      <input
+        type="number"
+        min={0}
+        max={MAX_QUANTITY}
+        step={1}
+        inputMode="numeric"
+        disabled={disabled}
+        value={quantity}
+        onChange={(event) =>
+          onChange(value, Number(event.target.value))
+        }
+        aria-label={`Rs. ${value} quantity`}
+        className="h-full min-w-0 flex-1 bg-transparent text-center text-[12px] font-extrabold text-bauraInk outline-none disabled:opacity-50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+      />
+
+      <button
+        type="button"
+        disabled={disabled || quantity >= MAX_QUANTITY}
+        onClick={() => onChange(value, quantity + 1)}
+        aria-label={`Increase Rs. ${value} quantity`}
+        className="flex h-[29px] w-[29px] shrink-0 items-center justify-center rounded-[8px] text-bauraMuted transition hover:bg-white hover:text-bauraInk disabled:cursor-not-allowed disabled:opacity-30">
+        <Plus size={13} />
+      </button>
+    </div>
+  );
+}
+
+function DenominationItem({
+  denomination,
+  onChange,
+  disabled,
+}: {
+  denomination: DenominationRow;
+  onChange: (value: number, quantity: number) => void;
+  disabled: boolean;
+}) {
+  const subtotal = denomination.value * denomination.quantity;
+  const isCounted = denomination.quantity > 0;
+
+  return (
+    <div
+      className={`group flex flex-col gap-3 px-4 py-3.5 transition-colors sm:flex-row sm:items-center sm:gap-4 sm:px-5 ${
+        isCounted
+          ? "bg-[#fdfbf8]"
+          : "bg-white hover:bg-[#fdfcfb]"
+      }`}>
+      <div className="flex min-w-0 flex-1 items-center gap-3.5">
+        <CurrencyVisual denomination={denomination} />
+
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="text-[12px] font-extrabold tracking-[-0.02em] text-bauraInk">
+              {denomination.label}
+            </p>
+
+            {isCounted && (
+              <CheckCircle2
+                size={13}
+                className="shrink-0 text-emerald-600"
+              />
+            )}
+          </div>
+
+          <p className="mt-1 text-[9px] text-bauraMuted">
+            {denomination.type === "NOTE"
+              ? "Banknote"
+              : "Coin"}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 pl-0 sm:justify-end sm:pl-2">
+        <QuantityControl
+          value={denomination.value}
+          quantity={denomination.quantity}
+          onChange={onChange}
+          disabled={disabled}
+        />
+
+        <div className="min-w-[112px] text-right sm:min-w-[130px]">
+          <p
+            className={`text-[11px] font-extrabold tabular-nums ${
+              isCounted
+                ? "text-bauraPrimary"
+                : "text-bauraInk"
+            }`}>
+            {formatCurrency(subtotal)}
+          </p>
+
+          <p className="mt-1 text-[8px] text-bauraMuted">
+            Subtotal
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DenominationSection({
+  title,
+  description,
+  type,
+  denominations,
+  onChange,
+  disabled,
+}: {
+  title: string;
+  description: string;
+  type: DenominationType;
+  denominations: DenominationRow[];
+  onChange: (value: number, quantity: number) => void;
+  disabled: boolean;
+}) {
+  const rows = denominations.filter(
+    (denomination) => denomination.type === type,
+  );
+
+  const sectionTotal = rows.reduce(
+    (sum, denomination) =>
+      sum + denomination.value * denomination.quantity,
+    0,
+  );
+
+  const sectionCount = rows.reduce(
+    (sum, denomination) => sum + denomination.quantity,
+    0,
+  );
+
+  return (
+    <section className="overflow-hidden rounded-[20px] border border-black/[0.07] bg-white shadow-[0_8px_28px_rgba(47,33,23,0.025)]">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/[0.06] px-5 py-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-bauraGoldSoft text-bauraGoldDark">
+            {type === "NOTE" ? (
+              <Banknote size={17} strokeWidth={1.7} />
+            ) : (
+              <Coins size={17} strokeWidth={1.7} />
+            )}
+          </div>
+
+          <div>
+            <h2 className="text-[12px] font-extrabold text-bauraInk">
+              {title}
+            </h2>
+
+            <p className="mt-0.5 text-[9px] text-bauraMuted">
+              {description}
+            </p>
+          </div>
+        </div>
+
+        <div className="text-right">
+          <p className="text-[12px] font-extrabold tabular-nums text-bauraPrimary">
+            {formatCurrency(sectionTotal)}
+          </p>
+
+          <p className="mt-0.5 text-[9px] text-bauraMuted">
+            {sectionCount} counted
+          </p>
+        </div>
+      </div>
+
+      <div className="divide-y divide-black/[0.055]">
+        {rows.map((denomination) => (
+          <DenominationItem
+            key={denomination.value}
+            denomination={denomination}
+            onChange={onChange}
+            disabled={disabled}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SummaryLine({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+  value: number;
+  strong?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span
+        className={`text-[10px] ${
+          strong
+            ? "font-bold text-bauraInk"
+            : "text-bauraMuted"
+        }`}>
+        {label}
+      </span>
+
+      <span
+        className={`text-[11px] tabular-nums ${
+          strong
+            ? "font-extrabold text-bauraInk"
+            : "font-bold text-bauraInk"
+        }`}>
+        {formatCurrency(value)}
+      </span>
+    </div>
+  );
 }
 
 export function PosRegisterOpening({
@@ -75,31 +447,58 @@ export function PosRegisterOpening({
 }: Props) {
   const toast = useToast();
 
-  const [denominations, setDenominations] =
-    useState<DenominationRow[]>(DEFAULT_DENOMINATIONS);
+  const [denominations, setDenominations] = useState<
+    DenominationRow[]
+  >(() => DEFAULT_DENOMINATIONS.map((row) => ({ ...row })));
 
   const [openingNote, setOpeningNote] = useState("");
-
   const [isOpening, setIsOpening] = useState(false);
 
-  const total = useMemo(
-    () =>
-      denominations.reduce(
-        (sum, denomination) =>
-          sum + denomination.value * denomination.quantity,
-        0,
-      ),
-    [denominations],
-  );
+  const totals = useMemo(() => {
+    let notesTotal = 0;
+    let coinsTotal = 0;
+    let notesCount = 0;
+    let coinsCount = 0;
+
+    for (const denomination of denominations) {
+      const amount =
+        denomination.value * denomination.quantity;
+
+      if (denomination.type === "NOTE") {
+        notesTotal += amount;
+        notesCount += denomination.quantity;
+      } else {
+        coinsTotal += amount;
+        coinsCount += denomination.quantity;
+      }
+    }
+
+    return {
+      notesTotal,
+      coinsTotal,
+      notesCount,
+      coinsCount,
+      total: notesTotal + coinsTotal,
+    };
+  }, [denominations]);
+
+  const exceedsLimit = totals.total > MAX_OPENING_FLOAT;
+
+  const canOpen =
+    business.isOpenDay &&
+    business.isWithinOpeningHours &&
+    !exceedsLimit &&
+    !isOpening;
 
   function updateQuantity(
     denominationValue: number,
     quantity: number,
   ) {
-    const safeQuantity = Math.max(
-      0,
-      Math.min(100000, Math.floor(quantity || 0)),
-    );
+    if (isOpening) {
+      return;
+    }
+
+    const safeQuantity = normalizeQuantity(quantity);
 
     setDenominations((current) =>
       current.map((denomination) =>
@@ -113,43 +512,17 @@ export function PosRegisterOpening({
     );
   }
 
-  function increment(denominationValue: number) {
-    setDenominations((current) =>
-      current.map((denomination) =>
-        denomination.value === denominationValue
-          ? {
-              ...denomination,
-              quantity: denomination.quantity + 1,
-            }
-          : denomination,
-      ),
-    );
-  }
-
-  function decrement(denominationValue: number) {
-    setDenominations((current) =>
-      current.map((denomination) =>
-        denomination.value === denominationValue
-          ? {
-              ...denomination,
-              quantity: Math.max(
-                0,
-                denomination.quantity - 1,
-              ),
-            }
-          : denomination,
-      ),
-    );
-  }
-
   async function handleOpenRegister() {
+    if (isOpening) {
+      return;
+    }
+
     if (!business.isOpenDay) {
       toast.warning(
         "Business day closed",
         business.reason ||
           "The shop is closed for this business date.",
       );
-
       return;
     }
 
@@ -158,22 +531,25 @@ export function PosRegisterOpening({
         "Outside business hours",
         "The POS register cannot be opened outside configured business hours.",
       );
-
       return;
     }
 
-    /*
-     * Backend currently requires at least
-     * one denomination row. We submit every
-     * supported denomination, including zero
-     * quantities, so opening evidence remains
-     * explicit and consistent.
-     */
-    const payload: PosDenominationInput[] =
-      denominations.map((denomination) => ({
+    if (exceedsLimit) {
+      toast.warning(
+        "Opening float limit exceeded",
+        `The opening float cannot exceed ${formatCurrency(
+          MAX_OPENING_FLOAT,
+        )}.`,
+      );
+      return;
+    }
+
+    const payload: PosDenominationInput[] = denominations.map(
+      (denomination) => ({
         denominationValue: denomination.value,
         quantity: denomination.quantity,
-      }));
+      }),
+    );
 
     setIsOpening(true);
 
@@ -201,23 +577,18 @@ export function PosRegisterOpening({
     }
   }
 
-  const canOpen =
-    business.isOpenDay &&
-    business.isWithinOpeningHours &&
-    !isOpening;
-
   return (
-    <div className="min-h-screen bg-[#f6f7f8] text-bauraInk">
+    <div className="min-h-screen bg-[#f7f7f5] text-bauraInk">
       <header className="border-b border-black/[0.07] bg-white">
-        <div className="mx-auto flex h-[72px] max-w-[1500px] items-center px-6 lg:px-10">
+        <div className="mx-auto flex h-[72px] max-w-[1500px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-bauraPrimary font-bold text-white">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-bauraPrimary text-[15px] font-extrabold text-white">
               B
             </div>
 
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[14px] font-bold tracking-[-0.03em]">
+                <span className="text-[14px] font-extrabold tracking-[-0.035em]">
                   Baura
                 </span>
 
@@ -226,221 +597,300 @@ export function PosRegisterOpening({
                 </span>
               </div>
 
-              <p className="text-[9px] text-bauraMuted">
+              <p className="mt-0.5 text-[9px] text-bauraMuted">
                 Point of Sale
               </p>
             </div>
           </div>
 
-          <div className="ml-auto flex items-center gap-2 rounded-xl border border-black/[0.07] bg-[#fafafa] px-3 py-2">
+          <div className="flex items-center gap-2 rounded-xl border border-black/[0.07] bg-[#faf9f7] px-3 py-2">
             <Store size={14} className="text-bauraMuted" />
 
-            <span className="text-[9px] font-semibold">
+            <span className="text-[9px] font-bold text-bauraInk">
               Register closed
             </span>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-[1500px] gap-8 px-6 py-8 lg:grid-cols-[minmax(0,1fr)_430px] lg:px-10 lg:py-12">
-        <section>
-          <div className="max-w-2xl">
-            <div className="mb-3 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.12em] text-bauraGoldDark">
-              <Banknote size={14} />
-
-              Cash register
-            </div>
-
-            <h1 className="text-[28px] font-bold tracking-[-0.045em] sm:text-[34px]">
-              Open your register
-            </h1>
-
-            <p className="mt-2 max-w-xl text-[11px] leading-5 text-bauraMuted">
-              Count the physical cash currently in the drawer.
-              This becomes the opening float for today&apos;s POS
-              session.
-            </p>
+      <main className="mx-auto max-w-[1500px] px-4 py-7 sm:px-6 lg:px-10 lg:py-10">
+        <div className="mb-7">
+          <div className="mb-3 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.13em] text-bauraGoldDark">
+            <Wallet size={14} strokeWidth={1.8} />
+            Cash Register
           </div>
 
-          <div className="mt-7 overflow-hidden rounded-[18px] border border-black/[0.07] bg-white">
-            <div className="grid grid-cols-[1fr_150px_150px] border-b border-black/[0.06] bg-[#fafafa] px-5 py-3">
-              <span className="text-[8px] font-bold uppercase tracking-[0.1em] text-bauraMuted">
-                Denomination
-              </span>
+          <h1 className="text-[28px] font-extrabold tracking-[-0.055em] text-bauraInk sm:text-[34px]">
+            Open your register
+          </h1>
 
-              <span className="text-center text-[8px] font-bold uppercase tracking-[0.1em] text-bauraMuted">
-                Quantity
-              </span>
+          <p className="mt-2 max-w-[680px] text-[11px] leading-6 text-bauraMuted">
+            Count the physical cash currently inside the drawer.
+            The amount you record becomes the opening float for
+            this POS session.
+          </p>
+        </div>
 
-              <span className="text-right text-[8px] font-bold uppercase tracking-[0.1em] text-bauraMuted">
-                Amount
-              </span>
+        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
+          <div className="min-w-0 space-y-5">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-[16px] border border-black/[0.06] bg-white p-4">
+                <p className="text-[9px] font-semibold text-bauraMuted">
+                  Banknotes
+                </p>
+
+                <p className="mt-2 text-[17px] font-extrabold tabular-nums">
+                  {totals.notesCount}
+                </p>
+
+                <p className="mt-1 text-[9px] text-bauraMuted">
+                  Notes counted
+                </p>
+              </div>
+
+              <div className="rounded-[16px] border border-black/[0.06] bg-white p-4">
+                <p className="text-[9px] font-semibold text-bauraMuted">
+                  Coins
+                </p>
+
+                <p className="mt-2 text-[17px] font-extrabold tabular-nums">
+                  {totals.coinsCount}
+                </p>
+
+                <p className="mt-1 text-[9px] text-bauraMuted">
+                  Coins counted
+                </p>
+              </div>
+
+              <div className="rounded-[16px] border border-black/[0.06] bg-white p-4">
+                <p className="text-[9px] font-semibold text-bauraMuted">
+                  Opening float
+                </p>
+
+                <p className="mt-2 text-[15px] font-extrabold tracking-[-0.03em] text-bauraPrimary sm:text-[17px]">
+                  {formatCurrency(totals.total)}
+                </p>
+
+                <p className="mt-1 text-[9px] text-bauraMuted">
+                  Total counted
+                </p>
+              </div>
             </div>
 
-            <div className="divide-y divide-black/[0.05]">
-              {denominations.map((denomination) => (
-                <div
-                  key={denomination.value}
-                  className="grid min-h-[62px] grid-cols-[1fr_150px_150px] items-center px-5">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-bauraGoldSoft text-bauraGoldDark">
-                      <Banknote size={14} />
-                    </div>
+            <DenominationSection
+              title="Sri Lankan Banknotes"
+              description="Enter the number of notes in the drawer."
+              type="NOTE"
+              denominations={denominations}
+              onChange={updateQuantity}
+              disabled={isOpening}
+            />
 
-                    <span className="text-[11px] font-bold">
-                      {denomination.label}
-                    </span>
-                  </div>
+            <DenominationSection
+              title="Sri Lankan Coins"
+              description="Enter the number of coins in the drawer."
+              type="COIN"
+              denominations={denominations}
+              onChange={updateQuantity}
+              disabled={isOpening}
+            />
+          </div>
 
-                  <div className="mx-auto flex items-center rounded-lg border border-black/[0.08] bg-[#fafafa]">
-                    <button
-                      type="button"
-                      onClick={() => decrement(denomination.value)}
-                      className="flex h-8 w-8 items-center justify-center text-bauraMuted transition hover:bg-white hover:text-bauraInk">
-                      <Minus size={12} />
-                    </button>
+          <aside className="min-w-0">
+            <div className="rounded-[20px] border border-black/[0.07] bg-white p-5 shadow-[0_18px_55px_rgba(49,34,24,0.045)] xl:sticky xl:top-6">
+              <div className="flex items-start gap-3 border-b border-black/[0.07] pb-5">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-bauraGoldSoft text-bauraGoldDark">
+                  <CalendarDays size={18} strokeWidth={1.7} />
+                </div>
 
-                    <input
-                      type="number"
-                      min={0}
-                      max={100000}
-                      value={denomination.quantity}
-                      onChange={(event) =>
-                        updateQuantity(
-                          denomination.value,
-                          Number(event.target.value),
-                        )
-                      }
-                      className="h-8 w-12 border-x border-black/[0.06] bg-white text-center text-[10px] font-bold outline-none"
+                <div className="min-w-0">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-bauraMuted">
+                    Business Date
+                  </p>
+
+                  <p className="mt-1.5 text-[12px] font-extrabold leading-5 text-bauraInk">
+                    {formatBusinessDate(business.businessDate)}
+                  </p>
+
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        business.isOpenDay
+                          ? "bg-emerald-500"
+                          : "bg-red-500"
+                      }`}
                     />
 
-                    <button
-                      type="button"
-                      onClick={() => increment(denomination.value)}
-                      className="flex h-8 w-8 items-center justify-center text-bauraMuted transition hover:bg-white hover:text-bauraInk">
-                      <Plus size={12} />
-                    </button>
+                    <span className="text-[9px] font-semibold text-bauraMuted">
+                      {business.isOpenDay
+                        ? "Scheduled business day"
+                        : "Business day closed"}
+                    </span>
                   </div>
-
-                  <p className="text-right text-[11px] font-semibold">
-                    {formatCurrency(
-                      denomination.value * denomination.quantity,
-                    )}
-                  </p>
                 </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <aside>
-          <div className="sticky top-8 rounded-[20px] border border-black/[0.07] bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.06)]">
-            <div className="flex items-start gap-3 border-b border-black/[0.06] pb-5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-bauraGoldSoft text-bauraGoldDark">
-                <CalendarDays size={17} />
               </div>
 
-              <div>
-                <p className="text-[8px] font-bold uppercase tracking-[0.1em] text-bauraMuted">
-                  Business date
+              <div className="py-6">
+                <p className="text-[9px] font-bold uppercase tracking-[0.11em] text-bauraMuted">
+                  Opening Float
                 </p>
 
-                <p className="mt-1 text-[11px] font-bold">
-                  {formatBusinessDate(business.businessDate)}
-                </p>
-              </div>
-            </div>
-
-            <div className="py-6">
-              <p className="text-[8px] font-bold uppercase tracking-[0.12em] text-bauraMuted">
-                Opening float
-              </p>
-
-              <p className="mt-2 text-[30px] font-bold tracking-[-0.05em] text-bauraPrimary">
-                {formatCurrency(total)}
-              </p>
-
-              <p className="mt-2 text-[9px] leading-4 text-bauraMuted">
-                Calculated automatically from the physical
-                denomination count.
-              </p>
-            </div>
-
-            <label className="block">
-              <span className="mb-2 block text-[8px] font-bold uppercase tracking-[0.1em] text-bauraMuted">
-                Opening note
-              </span>
-
-              <textarea
-                value={openingNote}
-                onChange={(event) =>
-                  setOpeningNote(event.target.value)
-                }
-                maxLength={500}
-                rows={4}
-                placeholder="Optional note about the opening drawer..."
-                className="w-full resize-none rounded-xl border border-black/[0.08] bg-[#fafafa] px-3 py-3 text-[10px] leading-5 outline-none transition focus:border-bauraGold focus:bg-white"
-              />
-            </label>
-
-            {!business.isOpenDay && (
-              <div className="mt-4 rounded-xl border border-red-100 bg-red-50 p-3">
-                <p className="text-[9px] font-bold text-red-700">
-                  Business day closed
+                <p className="mt-2 text-[30px] font-extrabold tracking-[-0.055em] tabular-nums text-bauraPrimary">
+                  {formatCurrency(totals.total)}
                 </p>
 
-                <p className="mt-1 text-[8px] leading-4 text-red-600">
-                  {business.reason ||
-                    "The POS cannot be opened today."}
+                <p className="mt-2 text-[10px] leading-5 text-bauraMuted">
+                  Automatically calculated from your physical
+                  denomination count.
                 </p>
               </div>
-            )}
 
-            {business.isOpenDay &&
-              !business.isWithinOpeningHours && (
-                <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 p-3">
-                  <p className="text-[9px] font-bold text-amber-700">
-                    Outside business hours
-                  </p>
+              <div className="space-y-3 border-y border-black/[0.07] py-5">
+                <SummaryLine
+                  label="Banknotes"
+                  value={totals.notesTotal}
+                />
 
-                  <p className="mt-1 text-[8px] leading-4 text-amber-700">
-                    The register cannot be opened until configured
-                    business hours.
-                  </p>
+                <SummaryLine
+                  label="Coins"
+                  value={totals.coinsTotal}
+                />
+
+                <div className="border-t border-dashed border-black/[0.09] pt-3">
+                  <SummaryLine
+                    label="Total opening cash"
+                    value={totals.total}
+                    strong
+                  />
                 </div>
-              )}
+              </div>
 
-            <button
-              type="button"
-              disabled={!canOpen}
-              onClick={handleOpenRegister}
-              className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-bauraPrimary px-4 text-[10px] font-bold text-white shadow-bauraButton transition hover:bg-bauraPrimaryDark disabled:cursor-not-allowed disabled:opacity-40">
-              {isOpening ? (
-                <>
-                  <RefreshCw
-                    size={14}
-                    className="animate-spin"
+              <label className="mt-5 block">
+                <span className="mb-2 block text-[9px] font-bold uppercase tracking-[0.1em] text-bauraMuted">
+                  Opening Note
+                  <span className="ml-1 font-medium normal-case tracking-normal">
+                    (Optional)
+                  </span>
+                </span>
+
+                <textarea
+                  value={openingNote}
+                  onChange={(event) =>
+                    setOpeningNote(event.target.value)
+                  }
+                  maxLength={500}
+                  rows={3}
+                  disabled={isOpening}
+                  placeholder="Add a note about the opening drawer..."
+                  className="w-full resize-none rounded-xl border border-black/[0.09] bg-[#faf9f7] px-3.5 py-3 text-[11px] leading-5 text-bauraInk outline-none transition placeholder:text-bauraMuted/70 focus:border-bauraGold focus:bg-white disabled:opacity-60"
+                />
+
+                <p className="mt-1 text-right text-[9px] text-bauraMuted">
+                  {openingNote.length}/500
+                </p>
+              </label>
+
+              {!business.isOpenDay && (
+                <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-red-100 bg-red-50 p-3">
+                  <AlertCircle
+                    size={15}
+                    className="mt-0.5 shrink-0 text-red-600"
                   />
 
-                  Opening register...
-                </>
-              ) : (
-                <>
-                  <ShieldCheck size={15} />
+                  <div>
+                    <p className="text-[10px] font-extrabold text-red-700">
+                      Business day closed
+                    </p>
 
-                  Open Register
-
-                  <ChevronRight size={14} />
-                </>
+                    <p className="mt-1 text-[9px] leading-5 text-red-600">
+                      {business.reason ||
+                        "The POS cannot be opened on this business date."}
+                    </p>
+                  </div>
+                </div>
               )}
-            </button>
 
-            <p className="mt-3 text-center text-[8px] leading-4 text-bauraMuted">
-              Opening the register creates an auditable POS session
-              and enables sales for this cashier.
-            </p>
-          </div>
-        </aside>
+              {business.isOpenDay &&
+                !business.isWithinOpeningHours && (
+                  <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-amber-100 bg-amber-50 p-3">
+                    <AlertCircle
+                      size={15}
+                      className="mt-0.5 shrink-0 text-amber-700"
+                    />
+
+                    <div>
+                      <p className="text-[10px] font-extrabold text-amber-800">
+                        Outside business hours
+                      </p>
+
+                      <p className="mt-1 text-[9px] leading-5 text-amber-700">
+                        The register cannot be opened outside
+                        configured business hours.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+              {exceedsLimit && (
+                <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-red-100 bg-red-50 p-3">
+                  <AlertCircle
+                    size={15}
+                    className="mt-0.5 shrink-0 text-red-600"
+                  />
+
+                  <div>
+                    <p className="text-[10px] font-extrabold text-red-700">
+                      Opening float limit exceeded
+                    </p>
+
+                    <p className="mt-1 text-[9px] leading-5 text-red-600">
+                      Maximum permitted opening cash is{" "}
+                      {formatCurrency(MAX_OPENING_FLOAT)}.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="button"
+                disabled={!canOpen}
+                onClick={() => void handleOpenRegister()}
+                className="mt-5 flex h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-bauraPrimary px-4 text-[11px] font-extrabold text-white shadow-bauraButton transition hover:bg-bauraPrimaryDark disabled:cursor-not-allowed disabled:opacity-40">
+                {isOpening ? (
+                  <>
+                    <RefreshCw
+                      size={15}
+                      className="animate-spin"
+                    />
+
+                    Opening register...
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck size={16} strokeWidth={1.8} />
+
+                    Open Register
+
+                    <ChevronRight size={15} />
+                  </>
+                )}
+              </button>
+
+              <div className="mt-4 flex items-start gap-2.5 rounded-xl bg-[#f8f6f2] p-3.5">
+                <ShieldCheck
+                  size={15}
+                  className="mt-0.5 shrink-0 text-bauraGoldDark"
+                />
+
+                <p className="text-[9px] leading-5 text-bauraMuted">
+                  Opening the register creates an auditable POS
+                  session. Your opening cash count is recorded
+                  against the current business date.
+                </p>
+              </div>
+            </div>
+          </aside>
+        </div>
       </main>
     </div>
   );

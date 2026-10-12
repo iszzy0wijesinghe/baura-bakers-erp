@@ -5,7 +5,6 @@ import { authMiddleware, requirePermission } from "../../middleware/auth.middlew
 
 import controlsRouter from "./finance.controls.routes";
 import operationsRouter from "./finance.operations.routes";
-import { validateJournalLines } from "./finance.validation";
 
 const router = Router();
 router.use(authMiddleware);
@@ -18,7 +17,9 @@ const postingEnabled = () => process.env.FINANCE_POSTING_ENABLED === "true";
 
 function fail(res: Response, error: unknown) {
   const message = error instanceof Error ? error.message : "Unexpected finance error";
-  return res.status(message.startsWith("FINANCE:") ? 400 : 500).json({ message: message.replace(/^FINANCE: /, "") });
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return res.status(409).json({ message: "Duplicate journal number or idempotency key." });
+  if (!message.startsWith("FINANCE:")) { console.error("Finance route error", error); return res.status(500).json({ message: "Finance operation failed" }); }
+  return res.status(400).json({ message: message.slice(9) });
 }
 function invalid(message: string): never { throw new Error(`FINANCE: ${message}`); }
 function dateOnly(input: unknown): Date {
@@ -93,14 +94,24 @@ router.get("/journals", read, async (req, res) => {
 });
 
 router.post("/journals/post", post, async (req: Request, res: Response) => {
+  if (!postingEnabled()) return res.status(503).json({ message: "Finance journal posting is disabled." });
   try {
-    if (!postingEnabled()) return res.status(503).json({ message: "Journal posting is disabled. Use an isolated test environment before enabling." });
     const { journalNo, accountingDate, description, lines, idempotencyKey } = req.body ?? {};
     if (typeof journalNo !== "string" || !/^[A-Za-z0-9._/-]{4,40}$/.test(journalNo)) invalid("Invalid journal number.");
     if (typeof description !== "string" || !description.trim() || description.length > 500) invalid("Invalid description.");
+    if (!Array.isArray(lines) || lines.length < 2 || lines.length > 100) invalid("Journal requires 2–100 lines.");
     if (idempotencyKey !== undefined && (typeof idempotencyKey !== "string" || !idempotencyKey.trim() || idempotencyKey.length > 191)) invalid("Invalid idempotency key.");
     const date = dateOnly(accountingDate);
-    const parsed = validateJournalLines(lines);
+    const parsed = lines.map((line: any) => {
+      if (typeof line?.accountId !== "string") invalid("Each line requires an accountId.");
+      const debit = cents(line.debit ?? "0");
+      const credit = cents(line.credit ?? "0");
+      if ((debit === 0n) === (credit === 0n)) invalid("Each line must have either debit or credit, never both.");
+      return { accountId: line.accountId as string, debit, credit };
+    });
+    const debitTotal = parsed.reduce((sum, line) => sum + line.debit, 0n);
+    const creditTotal = parsed.reduce((sum, line) => sum + line.credit, 0n);
+    if (debitTotal !== creditTotal || debitTotal === 0n) invalid("Journal debits and credits must balance.");
     const result = await prisma.$transaction(async (tx) => {
       if (idempotencyKey) {
         const existing = await tx.financeJournal.findUnique({ where: { idempotencyKey } });
@@ -120,10 +131,7 @@ router.post("/journals/post", post, async (req: Request, res: Response) => {
       }, include: { lines: true } });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     res.status(201).json(result);
-  } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return res.status(409).json({ message: "Duplicate journal number or idempotency key." });
-    fail(res, error);
-  }
+  } catch (error) { fail(res, error); }
 });
 
 router.get("/trial-balance", read, async (req, res) => {

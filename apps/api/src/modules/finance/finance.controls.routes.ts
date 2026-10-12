@@ -7,10 +7,12 @@ const router = Router();
 const read = requirePermission("erp.finance.read");
 const closePeriod = requirePermission("erp.finance.periods.close");
 const reverseJournal = requirePermission("erp.finance.journals.reverse");
+const postingEnabled = () => process.env.FINANCE_POSTING_ENABLED === "true";
 
 function problem(res: Response, error: unknown) {
   const message = error instanceof Error ? error.message : "Unexpected finance error";
   const known = message.startsWith("FINANCE: ");
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return res.status(409).json({ message: "Duplicate reversal or journal reference." });
   if (!known) console.error("Finance controls error", error);
   return res.status(known ? 400 : 500).json({ message: known ? message.slice(9) : "Finance operation failed" });
 }
@@ -56,6 +58,7 @@ router.get("/periods", read, async (req, res) => {
 });
 
 router.post("/periods/:id/close", closePeriod, async (req, res) => {
+  if (!postingEnabled()) return res.status(503).json({ message: "Finance period closing is disabled." });
   try {
     const periodId = String(req.params.id);
     const period = await prisma.$transaction(async (tx) => {
@@ -73,8 +76,8 @@ router.post("/periods/:id/close", closePeriod, async (req, res) => {
 });
 
 router.post("/journals/:id/reverse", reverseJournal, async (req, res) => {
+  if (!postingEnabled()) return res.status(503).json({ message: "Finance journal reversal is disabled." });
   try {
-    if (process.env.FINANCE_POSTING_ENABLED !== "true") return res.status(503).json({ message: "Journal reversals are disabled until isolated tests pass." });
     const originalJournalId = String(req.params.id);
     const date = dateOnly(req.body?.accountingDate);
     const journalNo = req.body?.journalNo;

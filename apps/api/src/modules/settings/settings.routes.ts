@@ -22,6 +22,23 @@ import {
 
 const router = Router();
 
+// OAuth authorization codes must be tied to a short-lived, single-use state.
+// No schema migration is needed: the existing googleOauthState column stores it.
+const GOOGLE_OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+
+function createGoogleOAuthState(): string {
+  return `${Date.now().toString(36)}.${crypto.randomBytes(32).toString("hex")}`;
+}
+
+function isFreshGoogleOAuthState(state: string): boolean {
+  const match = /^([0-9a-z]+)\.([a-f0-9]{64})$/.exec(state);
+  if (!match) return false;
+
+  const issuedAt = parseInt(match[1], 36);
+  const age = Date.now() - issuedAt;
+  return Number.isSafeInteger(issuedAt) && age >= 0 && age <= GOOGLE_OAUTH_STATE_TTL_MS;
+}
+
 const backupSettingSchema =
   z.object({
     frequency: z.enum([
@@ -297,6 +314,12 @@ router.get(
           );
       }
 
+      if (!isFreshGoogleOAuthState(state)) {
+        return res
+          .status(400)
+          .send("Invalid or expired Google OAuth state. Please reconnect Google Drive.");
+      }
+
       const setting =
         await prisma.backupSetting.findFirst(
           {
@@ -313,6 +336,24 @@ router.get(
           .send(
             "Invalid or expired Google OAuth state."
           );
+      }
+
+      // Atomically consume the state before exchanging the authorization code.
+      // Concurrent callbacks and replayed URLs cannot both connect a Drive account.
+      const claimed = await prisma.backupSetting.updateMany({
+        where: {
+          id: setting.id,
+          googleOauthState: state
+        },
+        data: {
+          googleOauthState: null
+        }
+      });
+
+      if (claimed.count !== 1) {
+        return res
+          .status(400)
+          .send("Google OAuth state has already been used. Please reconnect Google Drive.");
       }
 
       const auth =
@@ -599,10 +640,7 @@ router.get(
     const auth =
       getGoogleOAuthClient();
 
-    const state =
-      crypto
-        .randomBytes(32)
-        .toString("hex");
+    const state = createGoogleOAuthState();
 
     await prisma.backupSetting.update(
       {

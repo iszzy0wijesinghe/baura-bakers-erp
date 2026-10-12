@@ -240,12 +240,8 @@ export async function authMiddleware(
      * linked ERP identity.
      */
     if (
-      typeof decoded
-        .officialSiteUserId ===
-        "number" &&
-      decoded
-        .officialSiteUserId !==
-        user.officialSiteUserId
+      !Number.isSafeInteger(decoded.officialSiteUserId) ||
+      decoded.officialSiteUserId !== user.officialSiteUserId
     ) {
       return res
         .status(401)

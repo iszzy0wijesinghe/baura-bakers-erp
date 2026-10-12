@@ -57,6 +57,18 @@ app.use(
 );
 
 /*
+ * ERP API responses must never be stored in browser or intermediary caches.
+ * This does not hide responses from the authenticated browser user.
+ */
+app.use("/api", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  next();
+});
+
+/*
 |--------------------------------------------------------------------------
 | CORS
 |--------------------------------------------------------------------------

@@ -34,6 +34,7 @@ type BackupSetting = {
   googleDriveFolderId: string | null;
   googleDriveConnectedAt?: string | null;
   isGoogleDriveConnected?: boolean;
+  isGoogleDriveConfigured?: boolean;
   lastBackupAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -142,6 +143,13 @@ export function SettingsPage() {
   const [, setError] = useState("");
 
   const latestBackup = history[0];
+  const latestDriveBackup = history.find((item) => item.target === "GOOGLE_DRIVE");
+  const driveReady = Boolean(backupSetting?.isGoogleDriveConfigured && backupSetting?.isGoogleDriveConnected);
+  const unsavedDriveChanges = Boolean(backupSetting && (
+    backupForm.googleDriveEnabled !== backupSetting.googleDriveEnabled ||
+    backupForm.googleDriveFolderId.trim() !== (backupSetting.googleDriveFolderId || "") ||
+    backupForm.localBackupEnabled !== backupSetting.localBackupEnabled
+  ));
 
   const historyStats = useMemo(() => {
     return {
@@ -319,7 +327,7 @@ export function SettingsPage() {
     <AppLayout
       activeItem="Settings"
       title="Settings"
-      subtitle="Manage MySQL database backup settings, storage location and backup history."
+      subtitle="Database protection, cloud recovery and backup activity."
       actions={
         <>
           <button
@@ -332,7 +340,7 @@ export function SettingsPage() {
 
           <button
             onClick={handleRunBackupNow}
-            disabled={isRunningBackup || isLoading}
+            disabled={isRunningBackup || isLoading || unsavedDriveChanges}
             className="erp-button-primary disabled:cursor-not-allowed disabled:opacity-60"
           >
             <DatabaseBackup size={16} />
@@ -342,6 +350,37 @@ export function SettingsPage() {
       }
     >
       <div className="grid gap-5">
+        <section className="relative overflow-hidden rounded-2xl bg-bauraBrown p-6 text-bauraCream shadow-[0_12px_35px_rgba(45,33,27,0.12)] md:p-8">
+          <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full border border-white/10" aria-hidden="true" />
+          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-2xl">
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-bauraGold">Data protection center</p>
+              <h2 className="mt-2 text-2xl font-bold tracking-tight md:text-3xl">Keep your business data recoverable.</h2>
+              <p className="mt-3 text-sm leading-6 text-bauraCream/75">Protect the MySQL database locally and in Google Drive. A successful upload is not a substitute for a tested restore.</p>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs font-bold">
+              <span className="rounded-full border border-white/20 bg-white/10 px-4 py-2">Local {backupSetting?.localBackupEnabled ? "enabled" : "disabled"}</span>
+              <span className={`rounded-full px-4 py-2 ${driveReady && backupSetting?.googleDriveEnabled ? "bg-emerald-500/20 text-emerald-100" : "bg-white/10 text-bauraCream/80"}`}>
+                Drive {driveReady && backupSetting?.googleDriveEnabled ? "ready" : "not ready"}
+              </span>
+            </div>
+          </div>
+        </section>
+        <section className="rounded-2xl border border-bauraBorder bg-white p-5 md:p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-bauraGold">Cloud backup verification</p>
+              <h3 className="mt-1 text-lg font-bold text-bauraBrown">Google Drive upload test</h3>
+              <p className="mt-1 max-w-2xl text-sm text-bauraMuted">Enable Drive, connect your account, save settings, then use Run Backup Now. Confirm the uploaded SQL file in Google Drive and its successful history record.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <span className={`rounded-full px-3 py-2 text-xs font-bold ${latestDriveBackup?.status === "SUCCESS" ? "bg-emerald-50 text-emerald-700" : latestDriveBackup?.status === "FAILED" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>
+                Last Drive test: {latestDriveBackup?.status?.toLowerCase() || "not run"}
+              </span>
+              {unsavedDriveChanges && <span className="rounded-full bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">Save changes before testing</span>}
+            </div>
+          </div>
+        </section>
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <SummaryCard
@@ -476,6 +515,13 @@ export function SettingsPage() {
               </div>
 
               <div className="rounded-xl border border-bauraBorder bg-white p-4">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-bauraBorder pb-4">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-bauraMuted">Cloud destination</p>
+                    <p className="mt-1 text-sm font-semibold">{driveReady ? "Google authorization active" : backupSetting?.isGoogleDriveConfigured ? "Google authorization required" : "Server credentials required"}</p>
+                  </div>
+                  <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${driveReady ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{driveReady ? "Connected" : "Not connected"}</span>
+                </div>
                 <ToggleRow
                   icon={<Cloud size={20} />}
                   title="Google Drive Backup"
@@ -524,6 +570,7 @@ export function SettingsPage() {
                       onClick={handleConnectGoogleDrive}
                       disabled={
                         !backupForm.googleDriveEnabled ||
+                        backupSetting?.isGoogleDriveConfigured === false ||
                         isConnectingDrive ||
                         isSavingSettings
                       }
@@ -549,6 +596,9 @@ export function SettingsPage() {
                     )}
                   </div>
 
+                  {backupSetting?.isGoogleDriveConfigured === false && (
+                    <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">Google OAuth is not configured on the API server. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI before connecting.</p>
+                  )}
                   {backupSetting?.isGoogleDriveConnected ? (
                     <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
                       Connected to Google Drive

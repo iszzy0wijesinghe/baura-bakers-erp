@@ -7,7 +7,12 @@ import {
   PieChart,
   RefreshCw,
   TrendingUp,
-  Zap
+  Zap,
+  ArrowUpRight,
+  Clock3,
+  Wallet,
+  Activity,
+  ShieldAlert
 } from "lucide-react";
 import { AppLayout } from "../layouts/AppLayout";
 import { apiRequest } from "../lib/api";
@@ -111,14 +116,18 @@ const emptySummary: Summary = {
   activeIngredients: 0
 };
 
+function colomboDateValue(date: Date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Colombo", year: "numeric", month: "2-digit", day: "2-digit"
+  }).format(date);
+}
+
 function todayInputValue() {
-  return new Date().toISOString().slice(0, 10);
+  return colomboDateValue(new Date());
 }
 
 function daysAgoInputValue(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  return date.toISOString().slice(0, 10);
+  return colomboDateValue(new Date(Date.now() - days * 86400000));
 }
 
 function formatCurrency(value: number | string | undefined) {
@@ -206,6 +215,7 @@ export function AnalyticsPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [appliedRange, setAppliedRange] = useState({ from: fromDate, to: toDate });
 
   const summary = analytics?.summary || emptySummary;
 
@@ -217,13 +227,17 @@ export function AnalyticsPage() {
     return analytics?.channelSales.slice(0, 8) || [];
   }, [analytics?.channelSales]);
 
-  async function loadAnalytics() {
+  async function loadAnalytics(from = appliedRange.from, to = appliedRange.to) {
+    if (from > to) {
+      toast.error("Invalid date range", "Start date must be on or before end date.");
+      return;
+    }
     setIsLoading(true);
 
     try {
       const query = new URLSearchParams({
-        from: fromDate,
-        to: toDate
+        from,
+        to
       });
 
       const data = await apiRequest<AnalyticsData>(
@@ -241,18 +255,36 @@ export function AnalyticsPage() {
   }
 
   useEffect(() => {
-    loadAnalytics();
+    void loadAnalytics();
   }, []);
 
   useEffect(() => {
     if (!autoRefresh) return;
 
     const timer = window.setInterval(() => {
-      loadAnalytics();
-    }, 15000);
+      void loadAnalytics();
+    }, 30000);
 
     return () => window.clearInterval(timer);
-  }, [autoRefresh, fromDate, toDate]);
+  }, [autoRefresh, appliedRange.from, appliedRange.to]);
+
+  function applyRange() {
+    if (fromDate > toDate) {
+      toast.error("Invalid date range", "Start date must be on or before end date.");
+      return;
+    }
+    setAppliedRange({ from: fromDate, to: toDate });
+    void loadAnalytics(fromDate, toDate);
+  }
+
+  function setPreset(days: number) {
+    const to = todayInputValue();
+    const from = daysAgoInputValue(days - 1);
+    setFromDate(from);
+    setToDate(to);
+    setAppliedRange({ from, to });
+    void loadAnalytics(from, to);
+  }
 
   return (
     <AppLayout
@@ -274,7 +306,7 @@ export function AnalyticsPage() {
           </button>
 
           <button
-            onClick={loadAnalytics}
+            onClick={() => void loadAnalytics()}
             className="erp-button-secondary"
           >
             <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
@@ -283,78 +315,52 @@ export function AnalyticsPage() {
         </>
       }
     >
-      <div className="grid gap-5">
-        <section className="rounded-xl border border-bauraBorder bg-white p-5 shadow-[0_1px_2px_rgba(45,33,27,0.03)]">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-bauraGold">
-                Analytical Workspace
-              </p>
-              <h3 className="mt-1 text-xl font-bold">
-                Date-range Performance View
-              </h3>
-              <p className="mt-1 text-sm text-bauraMuted">
-                Select period, refresh realtime, and download charts or data.
-              </p>
+      <div className="mx-auto grid w-full min-w-0 max-w-[1600px] gap-5 pb-10 sm:gap-6">
+        <section className="relative isolate overflow-hidden rounded-[24px] bg-bauraBrown px-5 py-6 text-bauraCream shadow-[0_16px_44px_rgba(45,33,27,0.14)] sm:px-8 sm:py-8 lg:px-10">
+          <div className="pointer-events-none absolute -right-16 -top-28 h-80 w-80 rounded-full border-[45px] border-white/[0.04]" />
+          <div className="pointer-events-none absolute bottom-[-130px] right-[25%] h-64 w-64 rounded-full bg-bauraGold/10 blur-3xl" />
+          <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-bauraGold"><Activity size={15} /> Business intelligence</div>
+              <h2 className="mt-3 text-[clamp(1.65rem,3vw,2.6rem)] font-bold leading-tight tracking-tight">Your business, in focus.</h2>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-bauraCream/75">A clear view of sales performance, profitability and inventory health—without the clutter.</p>
             </div>
-
-            <div className="flex flex-col gap-3 md:flex-row md:items-end">
-              <DateInput label="From" value={fromDate} onChange={setFromDate} />
-              <DateInput label="To" value={toDate} onChange={setToDate} />
-
-              <button
-                onClick={loadAnalytics}
-                className="flex items-center justify-center gap-2 rounded-lg bg-bauraBrown px-5 py-3 text-sm font-bold text-bauraCream"
-              >
-                <CalendarDays size={16} />
-                Apply Range
-              </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold"><Clock3 size={14} /> Sri Lanka time</span>
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold"><span className={`h-2 w-2 rounded-full ${autoRefresh ? "bg-emerald-400" : "bg-bauraGold"}`} />{autoRefresh ? "Auto-refreshing" : "On demand"}</span>
             </div>
           </div>
         </section>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <MetricCard
-            label="Revenue"
-            value={isLoading ? "Loading..." : formatCurrency(summary.revenue)}
-            note={`${summary.orderCount} orders`}
-            icon={<BarChart3 size={20} />}
-          />
-          <MetricCard
-            label="Profit"
-            value={isLoading ? "Loading..." : formatCurrency(summary.profit)}
-            note={`${summary.profitMarginPercent}% margin`}
-            icon={<TrendingUp size={20} />}
-            positive={summary.profit >= 0}
-          />
-          <MetricCard
-            label="COGS"
-            value={isLoading ? "Loading..." : formatCurrency(summary.cogs)}
-            note="FIFO ingredient cost"
-            icon={<PieChart size={20} />}
-          />
-          <MetricCard
-            label="Average Order"
-            value={
-              isLoading ? "Loading..." : formatCurrency(summary.avgOrderValue)
-            }
-            note="Net sales / orders"
-            icon={<CalendarDays size={20} />}
-          />
-          <MetricCard
-            label="Stock Alerts"
-            value={
-              isLoading
-                ? "Loading..."
-                : String(summary.lowStockItems + summary.outOfStockItems)
-            }
-            note={`${summary.outOfStockItems} out · ${summary.lowStockItems} low`}
-            icon={<PackageSearch size={20} />}
-            alert={summary.lowStockItems + summary.outOfStockItems > 0}
-          />
+        <section className="min-w-0 rounded-[22px] border border-bauraBorder bg-white p-4 shadow-[0_4px_20px_rgba(45,33,27,0.035)] sm:p-5">
+          <div className="flex flex-col gap-5 2xl:flex-row 2xl:items-end 2xl:justify-between">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-bauraGold">Reporting period</p>
+              <h3 className="mt-1 text-lg font-bold text-bauraBrown">Explore your performance</h3>
+              <p className="mt-1 text-xs text-bauraMuted">All figures reflect the selected reporting period.</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {[{ label: "Today", days: 1 }, { label: "7 days", days: 7 }, { label: "30 days", days: 30 }, { label: "90 days", days: 90 }].map((preset) => (
+                  <button key={preset.days} type="button" onClick={() => setPreset(preset.days)} className="rounded-full border border-bauraBorder bg-[#FFF9F2] px-3 py-1.5 text-xs font-semibold text-bauraBrown transition hover:border-bauraGold hover:bg-bauraGold/10">{preset.label}</button>
+                ))}
+              </div>
+            </div>
+            <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto] 2xl:w-auto">
+              <DateInput label="From" value={fromDate} onChange={setFromDate} />
+              <DateInput label="To" value={toDate} onChange={setToDate} />
+              <button type="button" onClick={applyRange} disabled={isLoading} className="flex min-h-11 items-center justify-center gap-2 self-end rounded-xl bg-bauraBrown px-5 py-3 text-sm font-bold text-bauraCream transition hover:opacity-90 disabled:opacity-60"><CalendarDays size={16} /> Apply</button>
+            </div>
+          </div>
         </section>
 
-        <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
+        <section className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
+          <MetricCard label="Net Revenue" value={isLoading && !analytics ? "Loading…" : formatCurrency(summary.revenue)} note={`${summary.orderCount} orders in period`} icon={<Wallet size={19} />} />
+          <MetricCard label="Gross Profit" value={isLoading && !analytics ? "Loading…" : formatCurrency(summary.profit)} note={`${summary.profitMarginPercent}% gross margin`} icon={<TrendingUp size={19} />} positive={summary.profit >= 0} />
+          <MetricCard label="Cost of Sales" value={isLoading && !analytics ? "Loading…" : formatCurrency(summary.cogs)} note="Reported cost of goods" icon={<PieChart size={19} />} />
+          <MetricCard label="Average Order" value={isLoading && !analytics ? "Loading…" : formatCurrency(summary.avgOrderValue)} note="Revenue per order" icon={<ArrowUpRight size={19} />} />
+          <MetricCard label="Stock Alerts" value={isLoading && !analytics ? "Loading…" : String(summary.lowStockItems + summary.outOfStockItems)} note={`${summary.outOfStockItems} out · ${summary.lowStockItems} low`} icon={<ShieldAlert size={19} />} alert={summary.lowStockItems + summary.outOfStockItems > 0} />
+        </section>
+
+        <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.65fr)]">
           <Panel
             title="Sales & Profit Curve"
             subtitle="Realtime curve from completed POS orders."
@@ -438,7 +444,7 @@ export function AnalyticsPage() {
           </Panel>
         </section>
 
-        <section className="grid gap-5 xl:grid-cols-2">
+        <section className="grid min-w-0 gap-5 xl:grid-cols-2">
           <Panel
             title="Item-wise Sales"
             subtitle="Top products by selected-period revenue."
@@ -496,7 +502,7 @@ export function AnalyticsPage() {
           </Panel>
         </section>
 
-        <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+        <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
           <Panel
             title="Payment Method Analysis"
             subtitle="Revenue split by payment method."
@@ -567,7 +573,7 @@ function DateInput({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="block">
+    <label className="block min-w-0">
       <span className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-bauraMuted">
         {label}
       </span>
@@ -575,7 +581,7 @@ function DateInput({
         type="date"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="erp-input font-semibold"
+        className="erp-input block w-full min-w-0 rounded-xl font-semibold"
       />
     </label>
   );
@@ -598,7 +604,7 @@ function MetricCard({
 }) {
   return (
     <div
-      className={`rounded-xl border p-5 shadow-[0_1px_2px_rgba(45,33,27,0.03)] ${
+      className={`min-w-0 rounded-[20px] border p-5 shadow-[0_4px_18px_rgba(45,33,27,0.035)] transition-shadow hover:shadow-[0_10px_28px_rgba(45,33,27,0.075)] ${
         alert
           ? "border-amber-200 bg-amber-50"
           : "border-bauraBorder bg-white"
@@ -618,7 +624,7 @@ function MetricCard({
       </div>
 
       <h3
-        className={`mt-3 truncate text-2xl font-black ${
+        className={`mt-4 break-words text-[clamp(1.2rem,1.8vw,1.65rem)] font-extrabold tracking-tight ${
           positive === false ? "text-red-700" : "text-bauraBrown"
         }`}
       >
@@ -642,10 +648,10 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-bauraBorder bg-white p-5 shadow-[0_1px_2px_rgba(45,33,27,0.03)]">
+    <div className="min-w-0 overflow-hidden rounded-[22px] border border-bauraBorder bg-white p-4 shadow-[0_4px_20px_rgba(45,33,27,0.035)] sm:p-6">
       <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <h3 className="text-xl font-bold">{title}</h3>
+          <h3 className="text-lg font-bold tracking-tight text-bauraBrown">{title}</h3>
           <p className="mt-1 text-sm text-bauraMuted">{subtitle}</p>
         </div>
 
@@ -667,7 +673,7 @@ function SmallButton({
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-2 rounded-lg border border-bauraBorder bg-white px-3 py-2 text-xs font-bold text-bauraBrown"
+      className="inline-flex items-center justify-center gap-2 rounded-lg border border-bauraBorder bg-[#FFF9F2] px-3 py-2 text-xs font-bold text-bauraBrown transition hover:border-bauraGold hover:bg-bauraGold/10"
     >
       {children}
     </button>
@@ -711,18 +717,18 @@ function SalesProfitCurve({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl bg-white p-4">
+    <div className="min-w-0 overflow-hidden rounded-xl bg-white p-1 sm:p-2">
       {data.length === 0 ? (
         <EmptyState text="No trend data yet." />
       ) : (
-        <div className="baura-scrollbar overflow-x-auto">
+        <div className="w-full min-w-0">
           <svg
             id={svgId}
-            width={width}
-            height={height}
+            width="100%"
+            height="auto"
             viewBox={`0 0 ${width} ${height}`}
             xmlns="http://www.w3.org/2000/svg"
-            className="min-w-[760px]"
+            className="block h-auto w-full" preserveAspectRatio="xMidYMid meet"
           >
             <rect width={width} height={height} rx="24" fill="#FFF8F0" />
 
@@ -845,7 +851,7 @@ function HorizontalBarList({
               key={item.id}
               className="rounded-xl border border-bauraBorder bg-white p-4"
             >
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                 <div className="min-w-0">
                   <p className="text-xs font-bold text-bauraGold">
                     #{index + 1}
@@ -853,12 +859,12 @@ function HorizontalBarList({
                   <h4 className="mt-1 truncate font-bold text-bauraBrown">
                     {item.label}
                   </h4>
-                  <p className="mt-1 truncate text-sm text-bauraMuted">
+                  <p className="mt-1 break-words text-xs text-bauraMuted">
                     {item.subValue}
                   </p>
                 </div>
 
-                <p className="shrink-0 text-sm font-black text-bauraBrown">
+                <p className="break-words text-sm font-black text-bauraBrown sm:shrink-0 sm:text-right">
                   {valueFormatter(item.value)}
                 </p>
               </div>
@@ -888,14 +894,14 @@ function StructureRow({
 }) {
   return (
     <div
-      className={`flex items-center justify-between rounded-xl px-4 py-3 ${
+      className={`flex flex-wrap items-center justify-between gap-2 rounded-xl px-4 py-3 ${
         highlight ? "bg-bauraBrown text-bauraCream" : "bg-white"
       }`}
     >
       <span className={highlight ? "text-bauraCream/70" : "text-bauraMuted"}>
         {label}
       </span>
-      <span className={`font-bold ${highlight ? "text-bauraGold" : ""}`}>
+      <span className={`break-words text-right font-bold ${highlight ? "text-bauraGold" : ""}`}>
         {value}
       </span>
     </div>

@@ -37,58 +37,41 @@ function getIngredientDisplayName(ingredient: {
   return `${brand}${ingredient.name} ${ingredient.packageQty}${ingredient.packageUnit.toLowerCase()}`;
 }
 
-function startOfDay(date: Date) {
-  const value = new Date(date);
-  value.setHours(0, 0, 0, 0);
-  return value;
+// Business reporting uses Sri Lanka calendar dates, regardless of VPS timezone.
+const BUSINESS_TIME_ZONE = "Asia/Colombo";
+const COLOMBO_OFFSET_MS = 330 * 60 * 1000;
+const dayFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: BUSINESS_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit"
+});
+function formatDayKey(date: Date): string {
+  const parts = dayFormatter.formatToParts(date);
+  const value = (part: string) => parts.find(p => p.type === part)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
 }
-
-function startOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
+function dayStart(key: string): Date {
+  return new Date(Date.parse(`${key}T00:00:00.000Z`) - COLOMBO_OFFSET_MS);
 }
-
-function daysAgo(days: number) {
-  const value = new Date();
-  value.setDate(value.getDate() - days);
-  value.setHours(0, 0, 0, 0);
-  return value;
+function addDays(key: string, days: number): string {
+  return new Date(Date.parse(`${key}T00:00:00.000Z`) + days * 86400000).toISOString().slice(0, 10);
 }
-
-function formatDayKey(date: Date) {
-  return date.toISOString().slice(0, 10);
+function startOfDay(date: Date): Date { return dayStart(formatDayKey(date)); }
+function startOfMonth(date: Date): Date { return dayStart(`${formatDayKey(date).slice(0, 7)}-01`); }
+function daysAgo(days: number): Date { return dayStart(addDays(formatDayKey(new Date()), -days)); }
+function parseDateParam(value: unknown, fallback: Date, endOfDay = false): Date {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return fallback;
+  const start = dayStart(value);
+  if (Number.isNaN(start.getTime()) || formatDayKey(start) !== value) return fallback;
+  return endOfDay ? new Date(start.getTime() + 86400000 - 1) : start;
 }
-
-function parseDateParam(value: unknown, fallback: Date, endOfDay = false) {
-  if (typeof value !== "string" || !value.trim()) {
-    return fallback;
+function daysBetween(start: Date, end: Date): Date[] {
+  const result: Date[] = [];
+  let key = formatDayKey(start);
+  const last = formatDayKey(end);
+  while (key <= last && result.length < 120) {
+    result.push(dayStart(key));
+    key = addDays(key, 1);
   }
-
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return fallback;
-  }
-
-  if (endOfDay) {
-    parsed.setHours(23, 59, 59, 999);
-  } else {
-    parsed.setHours(0, 0, 0, 0);
-  }
-
-  return parsed;
-}
-
-function daysBetween(start: Date, end: Date) {
-  const dates: Date[] = [];
-  const cursor = new Date(start);
-  cursor.setHours(0, 0, 0, 0);
-
-  while (cursor <= end && dates.length < 120) {
-    dates.push(new Date(cursor));
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  return dates;
+  return result;
 }
 
 router.get("/dashboard", async (_req, res) => {
@@ -448,12 +431,8 @@ router.get("/dashboard", async (_req, res) => {
 router.get("/advanced", async (req, res) => {
   const now = new Date();
 
-  const defaultFrom = new Date();
-  defaultFrom.setDate(defaultFrom.getDate() - 29);
-  defaultFrom.setHours(0, 0, 0, 0);
-
-  const defaultTo = new Date(now);
-  defaultTo.setHours(23, 59, 59, 999);
+  const defaultFrom = daysAgo(29);
+  const defaultTo = new Date(startOfDay(now).getTime() + 86400000 - 1);
 
   const from = parseDateParam(req.query.from, defaultFrom);
   const to = parseDateParam(req.query.to, defaultTo, true);

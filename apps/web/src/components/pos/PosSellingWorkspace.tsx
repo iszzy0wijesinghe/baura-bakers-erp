@@ -186,9 +186,18 @@ export function PosSellingWorkspace({
 
   const [cart, setCart] = useState<CartItem[]>([]);
 
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [printerSettingsOpen, setPrinterSettingsOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] =
     useState<PosPaymentMethod>("CASH");
 
+  const splitEnabled = import.meta.env.VITE_POS_SPLIT_PAYMENTS_ENABLED === "true";
+  type SplitRow = { id: number; method: PosPaymentMethod; amount: string; tendered: string; reference: string };
+  const [splitMode, setSplitMode] = useState(false);
+  const [splitRows, setSplitRows] = useState<SplitRow[]>([
+    { id: 1, method: "CASH", amount: "", tendered: "", reference: "" },
+    { id: 2, method: "CARD", amount: "", tendered: "", reference: "" },
+  ]);
   const [tendered, setTendered] = useState("");
 
   const [paymentReference, setPaymentReference] =
@@ -516,6 +525,11 @@ export function PosSellingWorkspace({
   function clearSale() {
     setCart([]);
     setPaymentMethod("CASH");
+    setSplitMode(false);
+    setSplitRows([
+      { id: 1, method: "CASH", amount: "", tendered: "", reference: "" },
+      { id: 2, method: "CARD", amount: "", tendered: "", reference: "" },
+    ]);
     setTendered("");
     setPaymentReference("");
     setSelectedCustomer(null);
@@ -637,6 +651,11 @@ export function PosSellingWorkspace({
     setDiscountApproval(null);
   }
 
+  const splitAllocatedCents = splitRows.reduce((sum, row) => sum + Math.round(numberValue(row.amount) * 100), 0);
+  const splitRemainingCents = Math.round(netTotal * 100) - splitAllocatedCents;
+  const updateSplitRow = (id: number, patch: Partial<SplitRow>) =>
+    setSplitRows((rows) => rows.map((row) => row.id === id ? { ...row, ...patch } : row));
+
   async function checkout() {
     if (!isValidBusinessDate) {
       toast.warning(
@@ -673,10 +692,10 @@ export function PosSellingWorkspace({
       return;
     }
 
-    if (
+    if (!splitMode && (
       paymentMethod === "CASH" &&
       tenderedAmount < netTotal
-    ) {
+    )) {
       toast.warning(
         "Insufficient cash",
         "Cash received is less than the total.",
@@ -684,11 +703,11 @@ export function PosSellingWorkspace({
       return;
     }
 
-    if (
+    if (!splitMode && (
       (paymentMethod === "CARD" ||
         paymentMethod === "BANK_TRANSFER") &&
       !paymentReference.trim()
-    ) {
+    )) {
       toast.warning(
         "Reference required",
         paymentMethod === "CARD"
@@ -696,6 +715,26 @@ export function PosSellingWorkspace({
           : "Enter the bank transfer reference.",
       );
       return;
+    }
+
+    if (splitMode) {
+      if (!splitEnabled) return;
+      if (splitRows.length < 2 || splitRows.length > 5 ||
+          splitRows.some((row) => !Number.isFinite(Number(row.amount)) || Number(row.amount) <= 0) ||
+          splitRemainingCents !== 0) {
+        toast.warning("Invalid split payment", "Each payment must be positive and the allocations must equal the sale total exactly.");
+        return;
+      }
+      for (const row of splitRows) {
+        if (row.method === "CASH" && numberValue(row.tendered) + 0.00001 < numberValue(row.amount)) {
+          toast.warning("Insufficient cash", "Cash received must cover the cash allocation.");
+          return;
+        }
+        if (row.method !== "CASH" && !row.reference.trim()) {
+          toast.warning("Reference required", "Enter a payment reference for each non-cash allocation.");
+          return;
+        }
+      }
     }
 
     setProcessing(true);
@@ -717,19 +756,20 @@ export function PosSellingWorkspace({
 
         idempotencyKey: makeIdempotencyKey(),
 
-        payment: {
-          method: paymentMethod,
-
-          tenderedAmount:
-            paymentMethod === "CASH"
-              ? tenderedAmount
-              : null,
-
-          reference:
-            paymentMethod === "CASH"
-              ? null
-              : paymentReference.trim() || null,
-        },
+        ...(splitMode ? {
+          payments: splitRows.map((row) => ({
+            method: row.method,
+            amount: Math.round(Number(row.amount) * 100) / 100,
+            tenderedAmount: row.method === "CASH" ? Number(row.tendered) : null,
+            reference: row.method === "CASH" ? null : row.reference.trim(),
+          })),
+        } : {
+          payment: {
+            method: paymentMethod,
+            tenderedAmount: paymentMethod === "CASH" ? tenderedAmount : null,
+            reference: paymentMethod === "CASH" ? null : paymentReference.trim() || null,
+          },
+        }),
 
         items: cart.map((item) => ({
           productId: item.product.id,
@@ -773,6 +813,7 @@ export function PosSellingWorkspace({
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#f5f5f2] text-bauraInk">
       <header className="relative z-20 flex h-[72px] shrink-0 items-center justify-between gap-4 border-b border-black/[0.07] bg-white px-5 lg:px-7">
+        <button type="button" onClick={() => setPrinterSettingsOpen(true)} title="Printer settings" aria-label="Printer settings" className="absolute right-4 top-4 z-30 rounded-xl border border-black/10 bg-white p-2 text-bauraInk shadow-sm hover:bg-[#f5f5f2]"><Printer size={17}/></button>
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-[50px] w-[118px] shrink-0 items-center justify-start">
             <BauraLogo className="h-full w-full object-left" />
@@ -1187,7 +1228,74 @@ export function PosSellingWorkspace({
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-3 gap-2">
+            <button type="button" disabled={processing || cart.length === 0 || !isValidBusinessDate}
+              onClick={() => setPaymentModalOpen(true)}
+              className="mt-4 flex h-[54px] w-full items-center justify-center gap-3 rounded-2xl bg-bauraPrimary px-5 text-[13px] font-extrabold text-white shadow-lg transition hover:opacity-90 disabled:opacity-40">
+              <CreditCard size={18} /> Pay · Rs. {money(netTotal)}
+            </button>
+          </div>
+        </aside>
+      </main>
+
+      {paymentModalOpen && (
+        <div role="presentation" className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget && !processing) setPaymentModalOpen(false); }}>
+          <section role="dialog" aria-modal="true" aria-label="Complete payment" className="flex max-h-[94vh] w-full max-w-[520px] flex-col overflow-hidden rounded-[26px] bg-white shadow-2xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-black/10 px-6 py-5">
+              <div><p className="text-[10px] font-bold uppercase tracking-widest text-bauraMuted">Secure checkout</p><h2 className="text-[22px] font-black tracking-tight">Complete payment</h2></div>
+              <button type="button" aria-label="Close payment" disabled={processing} onClick={() => setPaymentModalOpen(false)} className="rounded-xl bg-[#f5f5f2] p-3 disabled:opacity-40"><X size={18}/></button>
+            </div>
+            <div className="overflow-y-auto px-6 py-5">
+              <div className="rounded-2xl bg-[#f5f5f2] p-5"><p className="text-[11px] font-semibold text-bauraMuted">Amount due</p><p className="mt-1 text-[32px] font-black tracking-tight">Rs. {money(netTotal)}</p><p className="mt-1 text-[11px] text-bauraMuted">{cartQty} item{cartQty === 1 ? "" : "s"}</p></div>
+            {splitEnabled && (
+              <div className="mt-3 flex items-center justify-between rounded-xl border border-black/10 p-3">
+                <span className="text-[11px] font-bold">Split payment</span>
+                <button type="button" onClick={() => setSplitMode((value) => !value)}
+                  className="rounded-lg bg-bauraPrimary px-3 py-2 text-[10px] font-bold text-white">
+                  {splitMode ? "Single payment" : "Use multiple methods"}
+                </button>
+              </div>
+            )}
+            {splitMode && splitEnabled && (
+              <div className="mt-3 space-y-3 rounded-xl border border-black/10 p-3">
+                {splitRows.map((row, index) => (
+                  <div key={row.id} className="space-y-2 rounded-lg bg-[#f6f6f3] p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold">Payment {index + 1}</span>
+                      {splitRows.length > 2 && <button type="button" className="text-[10px] font-bold text-red-600"
+                        onClick={() => setSplitRows((rows) => rows.filter((item) => item.id !== row.id))}>Remove</button>}
+                    </div>
+                    <select value={row.method} onChange={(event) => updateSplitRow(row.id, { method: event.target.value as PosPaymentMethod, reference: "", tendered: "" })}
+                      className="h-10 w-full rounded-lg border border-black/10 bg-white px-3 text-[11px]">
+                      <option value="CASH">Cash</option><option value="CARD">Card</option>
+                      <option value="BANK_TRANSFER">Bank transfer</option><option value="ONLINE">Online</option>
+                    </select>
+                    <input inputMode="decimal" type="number" min="0.01" step="0.01" placeholder="Allocated amount (LKR)" value={row.amount}
+                      onChange={(event) => updateSplitRow(row.id, { amount: event.target.value })}
+                      className="h-10 w-full rounded-lg border border-black/10 bg-white px-3 text-[11px]" />
+                    {row.method === "CASH" ? (
+                      <>
+                        <input inputMode="decimal" type="number" min="0" step="0.01" placeholder="Cash received (LKR)" value={row.tendered}
+                          onChange={(event) => updateSplitRow(row.id, { tendered: event.target.value })}
+                          className="h-10 w-full rounded-lg border border-black/10 bg-white px-3 text-[11px]" />
+                        <div className="text-[10px]">Change: Rs. {money(Math.max(0, numberValue(row.tendered) - numberValue(row.amount)))}</div>
+                      </>
+                    ) : (
+                      <input placeholder="Payment reference" maxLength={191} value={row.reference}
+                        onChange={(event) => updateSplitRow(row.id, { reference: event.target.value })}
+                        className="h-10 w-full rounded-lg border border-black/10 bg-white px-3 text-[11px]" />
+                    )}
+                  </div>
+                ))}
+                <div className="flex items-center justify-between text-[11px] font-bold">
+                  <span>Remaining</span><span>Rs. {money(splitRemainingCents / 100)}</span>
+                </div>
+                {splitRows.length < 5 && <button type="button" className="rounded-lg border border-black/10 px-3 py-2 text-[10px] font-bold"
+                  onClick={() => setSplitRows((rows) => [...rows, { id: Math.max(...rows.map((row) => row.id)) + 1, method: "CASH", amount: "", tendered: "", reference: "" }])}>
+                  + Add payment method
+                </button>}
+              </div>
+            )}
+            {!splitMode && <div className="mt-4 grid grid-cols-3 gap-2">
               <PaymentButton
                 active={paymentMethod === "CASH"}
                 label="Cash"
@@ -1212,9 +1320,9 @@ export function PosSellingWorkspace({
                   setPaymentMethod("BANK_TRANSFER")
                 }
               />
-            </div>
+            </div>}
 
-            {paymentMethod === "CASH" ? (
+            {!splitMode && (paymentMethod === "CASH" ? (
               <div className="mt-3">
                 <div className="grid grid-cols-[1fr_auto] gap-2">
                   <div className="relative">
@@ -1267,7 +1375,7 @@ export function PosSellingWorkspace({
                 }
                 className="mt-3 h-11 w-full rounded-xl border border-black/[0.08] px-3 text-[10px] font-medium outline-none focus:border-bauraPrimary/40"
               />
-            )}
+            ))}
 
             <div className="relative mt-2">
               <Mail
@@ -1307,13 +1415,15 @@ export function PosSellingWorkspace({
               ) : (
                 <>
                   <CreditCard size={16} />
-                  Pay Rs. {money(netTotal)}
+                  Complete Payment · Rs. {money(netTotal)}
                 </>
               )}
             </button>
-          </div>
-        </aside>
-      </main>
+            </div>
+          </section>
+        </div>
+      )}
+      {printerSettingsOpen && <PrinterSettingsModal onClose={() => setPrinterSettingsOpen(false)} />}
 
       {selectedSizeProduct && (
         <ModalShell
@@ -2269,8 +2379,8 @@ function SaleCompleted({
     : "—";
 
   return (
-    <div className="min-h-screen bg-[#f5f5f2] px-5 py-8 text-bauraInk print:min-h-0 print:bg-white print:p-0">
-      <div className="mx-auto max-w-[440px] print:max-w-none">
+    <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/65 px-4 py-5 text-bauraInk backdrop-blur-sm print:static print:overflow-visible print:bg-white print:p-0">
+      <div className="mx-auto max-w-[480px] rounded-[24px] bg-[#f5f5f2] p-5 shadow-2xl print:max-w-none print:rounded-none print:bg-white print:p-0 print:shadow-none">
         <div className="mb-5 flex items-center justify-between print:hidden">
           <div>
             <p className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-emerald-600">
@@ -2403,6 +2513,11 @@ function SaleCompleted({
 
           <div className="my-5 border-t border-dashed border-black/20 print:my-3" />
 
+          {sale.payments && sale.payments.length > 1 && (
+            <div className="mb-3 space-y-1 border-b border-dashed border-black/20 pb-3">
+              {sale.payments.map((entry, index) => <ReceiptInfo key={index} label={entry.method.replaceAll("_", " ")} value={`Rs. ${money(numberValue(entry.amount))}`} />)}
+            </div>
+          )}
           <ReceiptInfo
             label="Payment"
             value={sale.paymentMethod.replace(
@@ -2593,4 +2708,26 @@ function ReceiptInfo({
       </span>
     </div>
   );
+}
+
+type PosPrinterSettings = { connection: "SYSTEM" | "USB" | "BLUETOOTH" | "NETWORK"; paper: "58" | "80"; autoPrint: boolean; drawer: boolean; copies: number };
+const PRINTER_STORAGE_KEY = "baura-pos-printer-settings-v1";
+function readPrinterSettings(): PosPrinterSettings {
+  const defaults: PosPrinterSettings = { connection: "SYSTEM", paper: "80", autoPrint: false, drawer: false, copies: 1 };
+  try { return { ...defaults, ...JSON.parse(localStorage.getItem(PRINTER_STORAGE_KEY) || "{}") }; } catch { return defaults; }
+}
+function PrinterSettingsModal({ onClose }: { onClose: () => void }) {
+  const [settings, setSettings] = useState<PosPrinterSettings>(readPrinterSettings);
+  function save() { localStorage.setItem(PRINTER_STORAGE_KEY, JSON.stringify(settings)); onClose(); }
+  return <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+    <section role="dialog" aria-modal="true" aria-label="Printer settings" className="w-full max-w-[480px] rounded-[24px] bg-white p-6 shadow-2xl">
+      <div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-extrabold">Printer settings</h2><button type="button" onClick={onClose} aria-label="Close"><X size={20}/></button></div>
+      <p className="mb-5 text-xs text-bauraMuted">Use a printer installed on this computer. USB, Bluetooth and network printers can be selected from the system print dialog. Silent printing and physical cash-drawer control require a compatible local print bridge.</p>
+      <label className="mb-4 block text-xs font-bold">Connection preference<select value={settings.connection} onChange={e => setSettings(v => ({ ...v, connection: e.target.value as PosPrinterSettings["connection"] }))} className="mt-2 h-11 w-full rounded-xl border border-black/15 px-3"><option value="SYSTEM">System printer / browser dialog</option><option value="USB">USB (system paired)</option><option value="BLUETOOTH">Bluetooth (system paired)</option><option value="NETWORK">Wi-Fi / network (system installed)</option></select></label>
+      <label className="mb-4 block text-xs font-bold">Receipt paper width<select value={settings.paper} onChange={e => setSettings(v => ({ ...v, paper: e.target.value as "58" | "80" }))} className="mt-2 h-11 w-full rounded-xl border border-black/15 px-3"><option value="58">58 mm</option><option value="80">80 mm</option></select></label>
+      <label className="mb-4 flex items-center gap-3 text-xs font-semibold"><input type="checkbox" checked={settings.autoPrint} onChange={e => setSettings(v => ({ ...v, autoPrint: e.target.checked }))}/> Request print dialog after completed sale</label>
+      <label className="mb-4 flex items-center gap-3 text-xs font-semibold"><input type="checkbox" checked={settings.drawer} onChange={e => setSettings(v => ({ ...v, drawer: e.target.checked }))}/> Show cash drawer connection status (hardware bridge not configured)</label>
+      <div className="flex gap-3"><button type="button" onClick={() => window.print()} className="flex-1 rounded-xl border border-black/15 py-3 text-xs font-bold">Test print dialog</button><button type="button" onClick={save} className="flex-1 rounded-xl bg-bauraPrimary py-3 text-xs font-bold text-white">Save settings</button></div>
+    </section>
+  </div>;
 }

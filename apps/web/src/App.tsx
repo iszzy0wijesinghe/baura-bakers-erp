@@ -17,6 +17,8 @@ import { ProductionPage } from "./pages/ProductionPage";
 import { ProductsPage } from "./pages/ProductsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
+import { FinanceAccountingSettingsPage } from "./pages/finance/FinanceAccountingSettingsPage";
+import { FinanceReportsPage } from "./pages/finance/FinanceReportsPage";
 import { FinanceOperationsPage } from "./pages/finance/FinanceOperationsPage";
 import { FinanceDashboardPage, ChartOfAccountsPage, GeneralLedgerPage, JournalEntriesPage, AccountingPeriodsPage } from "./pages/finance/FinancePages";
 
@@ -166,7 +168,9 @@ function App() {
         ["/dashboard/finance/ledger", GeneralLedgerPage],
         ["/dashboard/finance/journals", JournalEntriesPage],
         ["/dashboard/finance/periods", AccountingPeriodsPage],
+        ["/dashboard/finance/settings", FinanceAccountingSettingsPage],
         ["/dashboard/finance/operations", FinanceOperationsPage],
+        ["/dashboard/finance/reports", FinanceReportsPage],
       ] as const).map(([path, Component]) => (
         <Route key={path} path={path} element={
           <ProtectedRoute permission="erp.finance.read"><Component /></ProtectedRoute>

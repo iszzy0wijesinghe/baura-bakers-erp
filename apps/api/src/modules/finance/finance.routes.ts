@@ -5,11 +5,15 @@ import { authMiddleware, requirePermission } from "../../middleware/auth.middlew
 
 import controlsRouter from "./finance.controls.routes";
 import operationsRouter from "./finance.operations.routes";
+import reconciliationRouter from "./finance.reconciliation.routes";
+import accountMappingsRouter from "./finance.account-mappings.routes";
 
 const router = Router();
 router.use(authMiddleware);
 router.use(controlsRouter);
 router.use(operationsRouter);
+router.use(reconciliationRouter);
+router.use(accountMappingsRouter);
 const read = requirePermission("erp.finance.read");
 const manage = requirePermission("erp.finance.manage");
 const post = requirePermission("erp.finance.journals.post");
@@ -84,6 +88,34 @@ router.post("/accounts", manage, async (req, res) => {
     }
     res.status(201).json(await prisma.financeAccount.create({ data: { code, name: name.trim(), type, normalBalance, parentId: parentId || null } }));
   } catch (error) { fail(res, error); }
+});
+
+// Safe Chart of Accounts maintenance: never alter account identity, type, or historical journal lines.
+router.patch("/accounts/:id", manage, async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (typeof id !== "string") invalid("Invalid account ID.");
+    if (!/^[0-9a-f-]{36}$/i.test(id)) invalid("Invalid account ID.");
+    const body = req.body ?? {};
+    const keys = Object.keys(body);
+    if (!keys.length || keys.some(key => !["name", "isActive", "allowPosting"].includes(key))) invalid("Only name, active status and posting status can be changed.");
+    const data: { name?: string; isActive?: boolean; allowPosting?: boolean } = {};
+    if ("name" in body) {
+      if (typeof body.name !== "string" || !body.name.trim() || body.name.trim().length > 150) invalid("Invalid account name.");
+      data.name = body.name.trim();
+    }
+    for (const key of ["isActive", "allowPosting"] as const) {
+      if (key in body) {
+        if (typeof body[key] !== "boolean") invalid(`${key} must be true or false.`);
+        data[key] = body[key];
+      }
+    }
+    const account = await prisma.financeAccount.findUnique({ where: { id } });
+    if (!account) return res.status(404).json({ message: "Account not found." });
+    // Deactivation blocks future posting but preserves all existing journal history.
+    const updated = await prisma.financeAccount.update({ where: { id }, data });
+    return res.json(updated);
+  } catch (error) { return fail(res, error); }
 });
 
 router.get("/journals", read, async (req, res) => {

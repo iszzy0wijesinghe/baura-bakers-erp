@@ -13,6 +13,7 @@ import recipeExpensesRoutes from "./modules/products/recipeExpenses.routes";
 import productionRoutes from "./modules/production/production.routes";
 import bakeryStockRoutes from "./modules/bakery-stock/bakeryStock.routes";
 import salesRoutes from "./modules/sales/sales.routes";
+import salesRefundRoutes from "./modules/sales/sales.refunds.routes";
 import posApprovalRoutes from "./modules/pos-approvals/posApprovals.routes";
 import analyticsRoutes from "./modules/analytics/analytics.routes";
 import financeRoutes from "./modules/finance/finance.routes";
@@ -210,6 +211,7 @@ app.use("/api/recipe-expenses", recipeExpensesRoutes);
 
 app.use("/api/production", productionRoutes);
 app.use("/api/bakery-stock", bakeryStockRoutes);
+app.use("/api/sales", salesRefundRoutes);
 app.use("/api/sales", salesRoutes);
 
 /*

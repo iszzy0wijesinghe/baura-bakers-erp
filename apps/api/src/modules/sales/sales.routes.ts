@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../../lib/prisma";
 import { nextDocumentNumber } from "../../lib/documentSequence";
 import { runSerializableTransaction } from "../../lib/transaction";
+import { recordPosSaleFinanceJournal } from "../finance/finance.pos-posting";
 import {
   getOfficialSiteCustomer,
   type OfficialSiteCustomer
@@ -44,7 +45,8 @@ const createSaleSchema = z.object({
   discountTotal: z.coerce.number().finite().min(0).default(0),
   approvalId: z.string().uuid().optional().nullable(),
   idempotencyKey: z.string().trim().min(8).max(191).optional().nullable(),
-  payment: paymentSchema,
+  payment: paymentSchema.optional(),
+  payments: z.array(paymentSchema.extend({ amount: z.coerce.number().finite().positive() })).min(1).max(5).optional(),
   items: z.array(
     z.object({
       productId: z.string().uuid("Valid product is required"),
@@ -598,7 +600,15 @@ router.post(
     }
 
     try {
-      assertPaymentInput(parsed.data.payment);
+      if (Boolean(parsed.data.payment) === Boolean(parsed.data.payments)) {
+        throw new Error("Provide either payment or payments, not both.");
+      }
+      for (const entry of parsed.data.payments ?? (parsed.data.payment ? [parsed.data.payment] : [])) {
+        assertPaymentInput(entry);
+      }
+      if (parsed.data.payments && process.env.POS_SPLIT_PAYMENTS_ENABLED !== "true") {
+        throw new Error("Split payments are not enabled.");
+      }
     } catch (error) {
       return res.status(400).json({
         message: error instanceof Error
@@ -611,7 +621,8 @@ router.post(
     const requestedDiscount = round2(parsed.data.discountTotal || 0);
     const approvalId = parsed.data.approvalId ?? null;
     const idempotencyKey = normalizeNullableText(parsed.data.idempotencyKey);
-    const paymentReference = getPaymentReference(parsed.data.payment.reference);
+    const submittedPayments = parsed.data.payments ?? [{ ...parsed.data.payment!, amount: undefined }];
+    const primaryPayment = submittedPayments[0];
     const canApplyManualDiscount = hasAnyRole(req, "ADMIN", "MANAGER");
 
     if (requestedDiscount > 0 && !canApplyManualDiscount && !approvalId) {
@@ -1116,27 +1127,32 @@ router.post(
 
         const profitTotal = round2(netTotal - cogsTotal);
 
-        /*
-         * Validate cash tendering after calculating the actual total.
-         */
-        let tenderedAmount: number | null = null;
-        let changeAmount: number | null = null;
-
-        if (parsed.data.payment.method === "CASH") {
-          tenderedAmount =
-            parsed.data.payment.tenderedAmount === undefined ||
-            parsed.data.payment.tenderedAmount === null
-              ? netTotal
-              : round2(parsed.data.payment.tenderedAmount);
-
-          if (tenderedAmount < netTotal) {
-            throw new Error(
-              "Cash tendered amount is less than the sale total."
-            );
-          }
-
-          changeAmount = round2(tenderedAmount - netTotal);
+        /* Validate payment allocations in integer cents to avoid rounding drift. */
+        const paymentAllocations = submittedPayments.map((entry) => ({
+          ...entry,
+          amount: "amount" in entry && typeof entry.amount === "number" ? round2(entry.amount) : netTotal,
+        }));
+        if (paymentAllocations.some((entry) => entry.amount <= 0) ||
+            Math.round(paymentAllocations.reduce((sum, entry) => sum + Math.round(entry.amount * 100), 0)) !== Math.round(netTotal * 100)) {
+          throw new Error("Payment allocations must equal the sale total exactly.");
         }
+        const normalizedPayments = paymentAllocations.map((entry) => {
+          const tenderedAmount = entry.method === "CASH"
+            ? round2(entry.tenderedAmount ?? entry.amount)
+            : null;
+          if (tenderedAmount !== null && tenderedAmount < entry.amount) {
+            throw new Error("Cash tendered amount is less than its payment allocation.");
+          }
+          return {
+            method: entry.method,
+            amount: entry.amount,
+            tenderedAmount,
+            changeAmount: tenderedAmount === null ? null : round2(tenderedAmount - entry.amount),
+            reference: getPaymentReference(entry.reference),
+          };
+        });
+        const tenderedAmount = normalizedPayments[0].tenderedAmount;
+        const changeAmount = normalizedPayments[0].changeAmount;
 
         const orderNo = await nextDocumentNumber(
           tx,
@@ -1153,7 +1169,7 @@ router.post(
             orderNo,
             salesChannelId: parsed.data.salesChannelId ?? null,
             posSessionId: posSession.id,
-            paymentMethod: parsed.data.payment.method,
+            paymentMethod: primaryPayment.method,
             saleType: "POS",
             grossTotal,
             discountTotal,
@@ -1182,30 +1198,27 @@ router.post(
         /*
          * Create payment ledger entry.
          */
-        const paymentNo = await nextDocumentNumber(
-          tx,
-          "POS_PAYMENT",
-          "PAY",
-          soldAt
-        );
-
-        const payment = await tx.posPayment.create({
-          data: {
-            paymentNo,
-            salesOrderId: sale.id,
-            method: parsed.data.payment.method,
-            status: "COMPLETED",
-            amount: netTotal,
-            tenderedAmount,
-            changeAmount,
-            reference: paymentReference,
-            idempotencyKey: idempotencyKey
-              ? `${idempotencyKey}:payment`
-              : null,
-            createdById: req.user!.id,
-            completedAt: soldAt
-          }
-        });
+        const payments = [];
+        for (const [index, allocation] of normalizedPayments.entries()) {
+          const paymentNo = await nextDocumentNumber(tx, "POS_PAYMENT", "PAY", soldAt);
+          const payment = await tx.posPayment.create({
+            data: {
+              paymentNo,
+              salesOrderId: sale.id,
+              method: allocation.method,
+              status: "COMPLETED",
+              amount: allocation.amount,
+              tenderedAmount: allocation.tenderedAmount,
+              changeAmount: allocation.changeAmount,
+              reference: allocation.reference,
+              idempotencyKey: idempotencyKey ? `${idempotencyKey}:payment:${index}` : null,
+              createdById: req.user!.id,
+              completedAt: soldAt,
+            },
+          });
+          payments.push(payment);
+        }
+        const payment = payments[0];
 
         /*
          * Create sale items and deduct matching finished-goods stock.
@@ -1334,7 +1347,7 @@ router.post(
         /*
          * Audit payment.
          */
-        await tx.auditLog.create({
+        for (const payment of payments) await tx.auditLog.create({
           data: {
             userId: req.user!.id,
             action: "CREATE",
@@ -1346,10 +1359,10 @@ router.post(
               orderNo,
               posSessionId: posSession.id,
               method: payment.method,
-              amount: netTotal,
-              tenderedAmount,
-              changeAmount,
-              reference: paymentReference,
+              amount: payment.amount,
+              tenderedAmount: payment.tenderedAmount,
+              changeAmount: payment.changeAmount,
+              reference: payment.reference,
               status: "COMPLETED"
             }
           }
@@ -1373,7 +1386,7 @@ router.post(
               netTotal,
               cogsTotal,
               profitTotal,
-              paymentMethod: parsed.data.payment.method,
+              paymentMethod: primaryPayment.method,
               paymentId: payment.id,
               paymentNo: payment.paymentNo,
               manualDiscount: discountTotal > 0,
@@ -1394,6 +1407,13 @@ router.post(
               }))
             }
           }
+        });
+
+        await recordPosSaleFinanceJournal(tx, {
+          id: sale.id, orderNo, soldAt, businessDate: sriLankaDate.date,
+          payments: normalizedPayments.map(({ method, amount }) => ({ method, amount })),
+          netTotal, cogsTotal,
+          createdById: req.user!.id
         });
 
         return sale;

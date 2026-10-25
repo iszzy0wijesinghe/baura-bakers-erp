@@ -1103,9 +1103,22 @@ model FinanceAccount {
   parent        FinanceAccount?      @relation("FinanceAccountHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
   children      FinanceAccount[]     @relation("FinanceAccountHierarchy")
   lines         FinanceJournalLine[]
+  mappings      FinanceAccountMapping[]
 
   @@index([type, isActive])
   @@index([parentId])
+}
+
+model FinanceAccountMapping {
+  id        String         @id @default(uuid()) @db.Char(36)
+  key       String         @unique @db.VarChar(100)
+  accountId String         @db.Char(36)
+  isActive  Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  account   FinanceAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([accountId])
 }
 
 model FinanceJournal {

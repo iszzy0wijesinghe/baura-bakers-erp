@@ -54,7 +54,7 @@ export function FinanceOperationsPage() {
     } catch (e) { setError(err(e)); }
     finally { setBusy(false); }
   };
-  return <AppLayout>
+  return <AppLayout title="Finance Operations">
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
       <div><p className="text-xs font-semibold uppercase tracking-widest text-bauraGold">Finance Management</p><h1 className="mt-1 text-2xl font-bold text-bauraPrimary">Expenses & Cash / Bank Transfers</h1><p className="mt-2 text-sm text-slate-500">Double-entry transactions in LKR. Existing POS and inventory records are not modified.</p></div>
       {!postingEnabled && <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">Posting is locked until accounting tests pass. Read-only transaction history remains available. Enabling requires administrator permission and both backend and frontend posting flags.</div>}

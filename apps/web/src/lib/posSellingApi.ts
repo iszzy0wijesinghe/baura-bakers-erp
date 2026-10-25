@@ -389,13 +389,17 @@ export type CompletePosSalePayload = {
 
   idempotencyKey?: string | null;
 
-  payment: {
+  payment?: {
     method: PosPaymentMethod;
-
     tenderedAmount?: number | null;
-
     reference?: string | null;
   };
+  payments?: Array<{
+    method: PosPaymentMethod;
+    amount: number;
+    tenderedAmount?: number | null;
+    reference?: string | null;
+  }>;
 
   items: PosSaleItemInput[];
 };

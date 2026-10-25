@@ -294,7 +294,9 @@ app.use(
 |--------------------------------------------------------------------------
 */
 
-const server = app.listen(PORT, () => {
+const HOST = process.env.HOST || "127.0.0.1";
+
+const server = app.listen(PORT, HOST, () => {
   console.log(
     `Baura Bakery ERP API running on http://localhost:${PORT}`
   );

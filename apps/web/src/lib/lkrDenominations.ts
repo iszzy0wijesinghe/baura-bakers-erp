@@ -7,7 +7,8 @@ export type LkrDenomination = {
   imageUrl: string | null;
 };
 
-const IMAGE_BASE = "/images/currency/lkr";
+const IMAGE_BASE =
+  `${import.meta.env.BASE_URL}images/currency/lkr`;
 
 export const LKR_DENOMINATIONS: LkrDenomination[] = [
   {

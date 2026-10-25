@@ -49,7 +49,8 @@ type NavigationItem = {
   permissions: string[];
 };
 
-const BAURA_LOGO = "/images/logos/logo.webp";
+const BAURA_LOGO =
+  `${import.meta.env.BASE_URL}images/logos/logo.webp`;
 
 const navigationItems: NavigationItem[] = [
   {

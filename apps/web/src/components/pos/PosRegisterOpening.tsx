@@ -41,7 +41,8 @@ type DenominationRow = {
   quantity: number;
 };
 
-const IMAGE_BASE = "/images/currency/lkr";
+const IMAGE_BASE =
+  `${import.meta.env.BASE_URL}images/currency/lkr`;
 
 const MAX_QUANTITY = 100000;
 const MAX_OPENING_FLOAT = 10000000;

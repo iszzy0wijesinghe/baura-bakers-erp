@@ -62,7 +62,8 @@ import {
   useToast,
 } from "../../ui/ToastProvider";
 
-const BAURA_LOGO = "/images/logos/logo.webp";
+const BAURA_LOGO =
+  `${import.meta.env.BASE_URL}images/logos/logo.webp`;
 
 type CartItem = {
   product: PosProduct;

@@ -44,7 +44,8 @@ type Denomination = {
   quantity: number;
 };
 
-const IMAGE_BASE = "/images/currency/lkr";
+const IMAGE_BASE =
+  `${import.meta.env.BASE_URL}images/currency/lkr`;
 
 const DEFAULT_DENOMINATIONS: Denomination[] = [
   { value: 5000, label: "Rs. 5,000", type: "NOTE", imageUrl: `${IMAGE_BASE}/5000-F.webp`, quantity: 0 },

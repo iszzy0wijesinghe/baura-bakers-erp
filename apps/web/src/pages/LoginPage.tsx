@@ -19,7 +19,7 @@ import { useAuth } from "../auth/AuthContext";
 import { useToast } from "../ui/ToastProvider";
 
 const BAURA_LOGO =
-  "/images/logos/logo.webp";
+  `${import.meta.env.BASE_URL}images/logos/logo.webp`;
 
 export function LoginPage() {
   const navigate =

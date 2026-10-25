@@ -360,13 +360,13 @@ function parseOfficialAuthSuccess(
   };
 }
 
-function officialSiteUrl(
-  path: string,
-): string {
-  return new URL(
-    path,
-    env.OFFICIAL_SITE_API_URL,
-  ).toString();
+function officialSiteUrl(path: string): string {
+  const baseUrl =
+    env.OFFICIAL_SITE_API_URL.replace(/\/+$/, "") + "/";
+
+  const relativePath = path.replace(/^\/+/, "");
+
+  return new URL(relativePath, baseUrl).toString();
 }
 
 async function authenticateWithOfficialSite(
@@ -389,7 +389,7 @@ async function authenticateWithOfficialSite(
     response =
       await fetch(
         officialSiteUrl(
-          "/api/v1/integrations/erp/authenticate",
+          "integrations/erp/authenticate",
         ),
         {
           method:

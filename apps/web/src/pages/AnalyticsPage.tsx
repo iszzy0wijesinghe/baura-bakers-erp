@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  BarChart3,
   CalendarDays,
   Download,
-  PackageSearch,
   PieChart,
   RefreshCw,
   TrendingUp,

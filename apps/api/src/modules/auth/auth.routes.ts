@@ -7,6 +7,7 @@ import jwt from "jsonwebtoken";
 import { env } from "../../config/env";
 import { prisma } from "../../lib/prisma";
 import { authMiddleware } from "../../middleware/auth.middleware";
+import { officialSiteUrl } from "../../lib/officialSiteUrl";
 
 const router = Router();
 
@@ -228,13 +229,6 @@ function parseOfficialAuthSuccess(
   };
 }
 
-function officialSiteUrl(path: string): string {
-  const baseUrl = env.OFFICIAL_SITE_API_URL.replace(/\/+$/, "") + "/";
-
-  const relativePath = path.replace(/^\/+/, "");
-
-  return new URL(relativePath, baseUrl).toString();
-}
 
 async function authenticateWithOfficialSite(
   email: string,

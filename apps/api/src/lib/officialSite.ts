@@ -2,6 +2,8 @@ import {
   env,
 } from "../config/env";
 
+import { officialSiteUrl } from "./officialSiteUrl";
+
 /* =======================================================
    SHARED TYPES
 ======================================================= */
@@ -184,22 +186,8 @@ export class OfficialSiteApiError extends Error {
    HTTP HELPERS
 ======================================================= */
 
-function buildUrl(
-  path: string,
-): string {
-  const base =
-    env.OFFICIAL_SITE_API_URL
-      .replace(
-        /\/+$/,
-        "",
-      );
-
-  const normalizedPath =
-    path.startsWith("/")
-      ? path
-      : `/${path}`;
-
-  return `${base}${normalizedPath}`;
+function buildUrl(path: string): string {
+  return officialSiteUrl(path);
 }
 
 async function readJson(

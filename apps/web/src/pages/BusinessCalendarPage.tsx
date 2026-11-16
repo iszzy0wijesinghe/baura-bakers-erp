@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 
 import { AppLayout } from "../layouts/AppLayout";
-import { useAuth } from "../auth/AuthContext";
+import { useAuth } from "../auth/useAuth";
 
 import {
   businessCalendarApi,
@@ -39,15 +39,7 @@ const WEEKDAYS = [
   "Sunday",
 ];
 
-const SHORT_WEEKDAYS = [
-  "Mon",
-  "Tue",
-  "Wed",
-  "Thu",
-  "Fri",
-  "Sat",
-  "Sun",
-];
+const SHORT_WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const CARD =
   "rounded-[18px] border border-bauraBorder bg-white shadow-[0_6px_22px_rgba(63,46,36,0.035)]";
@@ -187,12 +179,11 @@ function createExceptionForm(date = ""): ExceptionFormState {
 export function BusinessCalendarPage() {
   const { hasPermission } = useAuth();
 
-  const canEdit = hasPermission(
-    "erp.pos.business-calendar.update",
-  );
+  const canEdit = hasPermission("erp.pos.business-calendar.update");
 
-  const [overview, setOverview] =
-    useState<BusinessCalendarOverview | null>(null);
+  const [overview, setOverview] = useState<BusinessCalendarOverview | null>(
+    null,
+  );
 
   const [schedules, setSchedules] = useState<WeeklySchedule[]>([]);
 
@@ -215,8 +206,9 @@ export function BusinessCalendarPage() {
   });
 
   const [exceptionModalOpen, setExceptionModalOpen] = useState(false);
-  const [exceptionForm, setExceptionForm] =
-    useState<ExceptionFormState>(createExceptionForm());
+  const [exceptionForm, setExceptionForm] = useState<ExceptionFormState>(
+    createExceptionForm(),
+  );
 
   const [editingDate, setEditingDate] = useState<string | null>(null);
 
@@ -237,8 +229,31 @@ export function BusinessCalendarPage() {
   }, []);
 
   useEffect(() => {
-    void loadData();
-  }, [loadData]);
+    let active = true;
+
+    businessCalendarApi
+      .overview()
+      .then((data) => {
+        if (!active) return;
+
+        setOverview(data);
+        setSchedules(normalizeSchedules(data.schedules));
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setError(getErrorMessage(error));
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const exceptionsByDate = useMemo(() => {
     const map = new Map<string, CalendarException>();
@@ -267,19 +282,13 @@ export function BusinessCalendarPage() {
     }> = [];
 
     for (let index = 0; index < 42; index++) {
-      const date = new Date(
-        year,
-        month,
-        index - leadingDays + 1,
-      );
+      const date = new Date(year, month, index - leadingDays + 1);
 
       days.push({
         date: localDateKey(date),
         day: date.getDate(),
-        inMonth:
-          date.getMonth() === month &&
-          date.getFullYear() === year,
-        weekday: (date.getDay() + 6) % 7 + 1,
+        inMonth: date.getMonth() === month && date.getFullYear() === year,
+        weekday: ((date.getDay() + 6) % 7) + 1,
       });
     }
 
@@ -295,15 +304,10 @@ export function BusinessCalendarPage() {
     year: "numeric",
   });
 
-  function updateSchedule(
-    weekday: number,
-    changes: Partial<WeeklySchedule>,
-  ) {
+  function updateSchedule(weekday: number, changes: Partial<WeeklySchedule>) {
     setSchedules((current) =>
       current.map((schedule) =>
-        schedule.weekday === weekday
-          ? { ...schedule, ...changes }
-          : schedule,
+        schedule.weekday === weekday ? { ...schedule, ...changes } : schedule,
       ),
     );
   }
@@ -345,10 +349,7 @@ export function BusinessCalendarPage() {
     }
   }
 
-  function openExceptionModal(
-    date = "",
-    existing?: CalendarException,
-  ) {
+  function openExceptionModal(date = "", existing?: CalendarException) {
     setError("");
     setSuccess("");
 
@@ -446,11 +447,7 @@ export function BusinessCalendarPage() {
   function moveMonth(direction: number) {
     setSelectedMonth(
       (current) =>
-        new Date(
-          current.getFullYear(),
-          current.getMonth() + direction,
-          1,
-        ),
+        new Date(current.getFullYear(), current.getMonth() + direction, 1),
     );
   }
 
@@ -478,10 +475,7 @@ export function BusinessCalendarPage() {
           onClick={() => void loadData()}
           disabled={loading}
           className={`${BUTTON} border border-bauraBorder bg-white text-bauraInk hover:bg-bauraCanvas2`}>
-          <RefreshCw
-            size={14}
-            className={loading ? "animate-spin" : ""}
-          />
+          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
           Refresh
         </button>
       }>
@@ -513,7 +507,8 @@ export function BusinessCalendarPage() {
         )}
 
         {loading && !overview ? (
-          <div className={`${CARD} flex min-h-[320px] items-center justify-center`}>
+          <div
+            className={`${CARD} flex min-h-[320px] items-center justify-center`}>
             <div className="flex items-center gap-3 text-[12px] text-bauraMuted">
               <RefreshCw size={18} className="animate-spin" />
               Loading business calendar...
@@ -534,9 +529,7 @@ export function BusinessCalendarPage() {
                     ? formatDate(overview.currentDate)
                     : "—"}
                 </p>
-                <p className="mt-1 text-[10px] text-bauraMuted">
-                  Asia/Colombo
-                </p>
+                <p className="mt-1 text-[10px] text-bauraMuted">Asia/Colombo</p>
               </div>
 
               <div className={`${CARD} p-5`}>
@@ -547,8 +540,7 @@ export function BusinessCalendarPage() {
                   <Clock3 size={16} className="text-bauraGoldDark" />
                 </div>
                 <div className="mt-4">
-                  <StatusPill
-                    tone={todayIsOpen ? "success" : "danger"}>
+                  <StatusPill tone={todayIsOpen ? "success" : "danger"}>
                     {todayIsOpen ? "Currently Open" : "Currently Closed"}
                   </StatusPill>
                 </div>
@@ -695,7 +687,8 @@ export function BusinessCalendarPage() {
                           Holidays & Special Hours
                         </p>
                         <p className="mt-1 text-[10px] text-bauraMuted">
-                          {overview?.exceptions.length ?? 0} configured exceptions
+                          {overview?.exceptions.length ?? 0} configured
+                          exceptions
                         </p>
                       </div>
                       <ChevronRight size={16} className="text-bauraMuted" />
@@ -764,10 +757,10 @@ export function BusinessCalendarPage() {
                             updateSchedule(schedule.weekday, {
                               isOpen: event.target.checked,
                               openingTime: event.target.checked
-                                ? schedule.openingTime ?? "08:00"
+                                ? (schedule.openingTime ?? "08:00")
                                 : null,
                               closingTime: event.target.checked
-                                ? schedule.closingTime ?? "20:00"
+                                ? (schedule.closingTime ?? "20:00")
                                 : null,
                             })
                           }
@@ -864,11 +857,9 @@ export function BusinessCalendarPage() {
                         ? exception.type === "CLOSED"
                         : !weekly?.isOpen;
 
-                      const isSpecial =
-                        exception?.type === "SPECIAL_HOURS";
+                      const isSpecial = exception?.type === "SPECIAL_HOURS";
 
-                      const isToday =
-                        day.date === overview?.currentDate;
+                      const isToday = day.date === overview?.currentDate;
 
                       return (
                         <button
@@ -987,9 +978,7 @@ export function BusinessCalendarPage() {
                                 <button
                                   type="button"
                                   disabled={deletingDate === date}
-                                  onClick={() =>
-                                    void deleteException(date)
-                                  }
+                                  onClick={() => void deleteException(date)}
                                   className="rounded-lg p-2 text-bauraDanger hover:bg-bauraDangerSoft">
                                   <Trash2 size={13} />
                                 </button>
@@ -1038,47 +1027,43 @@ export function BusinessCalendarPage() {
                     </thead>
 
                     <tbody>
-                      {(overview?.unfinishedSessions ?? []).map(
-                        (session) => (
-                          <tr
-                            key={session.id}
-                            className="border-b border-bauraBorder/70">
-                            <td className="py-4 text-[11px] font-semibold text-bauraInk">
-                              {session.sessionNo}
-                            </td>
+                      {(overview?.unfinishedSessions ?? []).map((session) => (
+                        <tr
+                          key={session.id}
+                          className="border-b border-bauraBorder/70">
+                          <td className="py-4 text-[11px] font-semibold text-bauraInk">
+                            {session.sessionNo}
+                          </td>
 
-                            <td className="py-4 text-[10px] text-bauraInk">
-                              {formatDate(session.businessDateKey)}
-                            </td>
+                          <td className="py-4 text-[10px] text-bauraInk">
+                            {formatDate(session.businessDateKey)}
+                          </td>
 
-                            <td className="py-4">
-                              <StatusPill>
-                                {session.status.replaceAll("_", " ")}
+                          <td className="py-4">
+                            <StatusPill>
+                              {session.status.replaceAll("_", " ")}
+                            </StatusPill>
+                          </td>
+
+                          <td className="py-4">
+                            {session.isOverdue ? (
+                              <StatusPill tone="danger">Overdue</StatusPill>
+                            ) : session.isFutureDated ? (
+                              <StatusPill tone="warning">
+                                Future Date
                               </StatusPill>
-                            </td>
+                            ) : (
+                              <StatusPill tone="success">
+                                Current Date
+                              </StatusPill>
+                            )}
+                          </td>
 
-                            <td className="py-4">
-                              {session.isOverdue ? (
-                                <StatusPill tone="danger">
-                                  Overdue
-                                </StatusPill>
-                              ) : session.isFutureDated ? (
-                                <StatusPill tone="warning">
-                                  Future Date
-                                </StatusPill>
-                              ) : (
-                                <StatusPill tone="success">
-                                  Current Date
-                                </StatusPill>
-                              )}
-                            </td>
-
-                            <td className="py-4 text-[10px] font-medium text-bauraInk">
-                              {session.nextAction.replaceAll("_", " ")}
-                            </td>
-                          </tr>
-                        ),
-                      )}
+                          <td className="py-4 text-[10px] font-medium text-bauraInk">
+                            {session.nextAction.replaceAll("_", " ")}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
 
@@ -1098,8 +1083,8 @@ export function BusinessCalendarPage() {
                   <p className="text-[10px] leading-5 text-bauraMuted">
                     Overdue sessions retain their original business dates.
                     Cashiers must complete Day End and a different authorized
-                    manager must approve the reconciliation before the
-                    session is closed.
+                    manager must approve the reconciliation before the session
+                    is closed.
                   </p>
                 </div>
               </div>
@@ -1162,16 +1147,12 @@ export function BusinessCalendarPage() {
                   onChange={(event) =>
                     setExceptionForm((current) => ({
                       ...current,
-                      type: event.target.value as
-                        | "CLOSED"
-                        | "SPECIAL_HOURS",
+                      type: event.target.value as "CLOSED" | "SPECIAL_HOURS",
                     }))
                   }
                   className={INPUT}>
                   <option value="CLOSED">Holiday / Closed</option>
-                  <option value="SPECIAL_HOURS">
-                    Special Opening Hours
-                  </option>
+                  <option value="SPECIAL_HOURS">Special Opening Hours</option>
                 </select>
               </div>
 

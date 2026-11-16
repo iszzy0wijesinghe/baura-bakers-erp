@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+/** @format */
+
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   Download,
@@ -10,11 +12,11 @@ import {
   Clock3,
   Wallet,
   Activity,
-  ShieldAlert
+  ShieldAlert,
 } from "lucide-react";
 import { AppLayout } from "../layouts/AppLayout";
 import { apiRequest } from "../lib/api";
-import { useToast } from "../ui/ToastProvider";
+import { useToast } from "../ui/useToast";
 
 type BaseUnit = "G" | "ML" | "UNIT";
 
@@ -111,12 +113,15 @@ const emptySummary: Summary = {
   lowStockItems: 0,
   outOfStockItems: 0,
   activeProducts: 0,
-  activeIngredients: 0
+  activeIngredients: 0,
 };
 
 function colomboDateValue(date: Date) {
   return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Colombo", year: "numeric", month: "2-digit", day: "2-digit"
+    timeZone: "Asia/Colombo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
   }).format(date);
 }
 
@@ -133,7 +138,7 @@ function formatCurrency(value: number | string | undefined) {
 
   return `Rs. ${amount.toLocaleString("en-LK", {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2
+    maximumFractionDigits: 2,
   })}`;
 }
 
@@ -141,7 +146,7 @@ function formatQty(value: number | string | undefined, unit?: string) {
   const amount = Number(value || 0);
 
   const cleanAmount = amount.toLocaleString("en-LK", {
-    maximumFractionDigits: 3
+    maximumFractionDigits: 3,
   });
 
   return unit ? `${cleanAmount} ${unit}` : cleanAmount;
@@ -150,7 +155,7 @@ function formatQty(value: number | string | undefined, unit?: string) {
 function formatDateLabel(value: string) {
   return new Date(value).toLocaleDateString("en-LK", {
     month: "short",
-    day: "2-digit"
+    day: "2-digit",
   });
 }
 
@@ -166,11 +171,13 @@ function downloadCsv(filename: string, rows: Record<string, unknown>[]) {
 
   const csv = [
     headers.map(toCsvValue).join(","),
-    ...rows.map((row) => headers.map((header) => toCsvValue(row[header])).join(","))
+    ...rows.map((row) =>
+      headers.map((header) => toCsvValue(row[header])).join(","),
+    ),
   ].join("\n");
 
   const blob = new Blob([csv], {
-    type: "text/csv;charset=utf-8;"
+    type: "text/csv;charset=utf-8;",
   });
 
   const url = URL.createObjectURL(blob);
@@ -192,7 +199,7 @@ function downloadSvg(svgId: string, filename: string) {
   const source = serializer.serializeToString(svg);
 
   const blob = new Blob([source], {
-    type: "image/svg+xml;charset=utf-8"
+    type: "image/svg+xml;charset=utf-8",
   });
 
   const url = URL.createObjectURL(blob);
@@ -213,7 +220,10 @@ export function AnalyticsPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const [appliedRange, setAppliedRange] = useState({ from: fromDate, to: toDate });
+  const [appliedRange, setAppliedRange] = useState({
+    from: fromDate,
+    to: toDate,
+  });
 
   const summary = analytics?.summary || emptySummary;
 
@@ -225,50 +235,87 @@ export function AnalyticsPage() {
     return analytics?.channelSales.slice(0, 8) || [];
   }, [analytics?.channelSales]);
 
-  async function loadAnalytics(from = appliedRange.from, to = appliedRange.to) {
-    if (from > to) {
-      toast.error("Invalid date range", "Start date must be on or before end date.");
-      return;
-    }
-    setIsLoading(true);
+  const loadAnalytics = useCallback(
+    async (from: string, to: string) => {
+      if (from > to) {
+        toast.error(
+          "Invalid date range",
+          "Start date must be on or before end date.",
+        );
+        return;
+      }
 
-    try {
-      const query = new URLSearchParams({
-        from,
-        to
-      });
+      setIsLoading(true);
 
-      const data = await apiRequest<AnalyticsData>(
-        `/analytics/advanced?${query.toString()}`
-      );
+      try {
+        const query = new URLSearchParams({ from, to });
 
-      setAnalytics(data);
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to load analytics";
-      toast.error("Failed to load analytics", message);
-    } finally {
-      setIsLoading(false);
-    }
-  }
+        const data = await apiRequest<AnalyticsData>(
+          `/analytics/advanced?${query.toString()}`,
+        );
+
+        setAnalytics(data);
+      } catch (error) {
+        toast.error(
+          "Failed to load analytics",
+          error instanceof Error ? error.message : "Failed to load analytics",
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [toast],
+  );
 
   useEffect(() => {
-    void loadAnalytics();
-  }, []);
+    let active = true;
+
+    const query = new URLSearchParams({
+      from: appliedRange.from,
+      to: appliedRange.to,
+    });
+
+    apiRequest<AnalyticsData>(`/analytics/advanced?${query.toString()}`)
+      .then((data) => {
+        if (active) {
+          setAnalytics(data);
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          toast.error(
+            "Failed to load analytics",
+            error instanceof Error ? error.message : "Failed to load analytics",
+          );
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [appliedRange.from, appliedRange.to, toast]);
 
   useEffect(() => {
     if (!autoRefresh) return;
 
     const timer = window.setInterval(() => {
-      void loadAnalytics();
+      void loadAnalytics(appliedRange.from, appliedRange.to);
     }, 30000);
 
     return () => window.clearInterval(timer);
-  }, [autoRefresh, appliedRange.from, appliedRange.to]);
+  }, [autoRefresh, appliedRange.from, appliedRange.to, loadAnalytics]);
 
   function applyRange() {
     if (fromDate > toDate) {
-      toast.error("Invalid date range", "Start date must be on or before end date.");
+      toast.error(
+        "Invalid date range",
+        "Start date must be on or before end date.",
+      );
       return;
     }
     setAppliedRange({ from: fromDate, to: toDate });
@@ -297,35 +344,48 @@ export function AnalyticsPage() {
               autoRefresh
                 ? "bg-green-100 text-green-700"
                 : "border border-bauraBorder bg-white"
-            }`}
-          >
+            }`}>
             <Zap size={16} />
             {autoRefresh ? "Realtime On" : "Realtime Off"}
           </button>
 
           <button
-            onClick={() => void loadAnalytics()}
-            className="erp-button-secondary"
-          >
+            onClick={() =>
+              void loadAnalytics(appliedRange.from, appliedRange.to)
+            }
+            className="erp-button-secondary">
             <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
             Refresh
           </button>
         </>
-      }
-    >
+      }>
       <div className="mx-auto grid w-full min-w-0 max-w-[1600px] gap-5 pb-10 sm:gap-6">
         <section className="relative isolate overflow-hidden rounded-[24px] bg-bauraBrown px-5 py-6 text-bauraCream shadow-[0_16px_44px_rgba(45,33,27,0.14)] sm:px-8 sm:py-8 lg:px-10">
           <div className="pointer-events-none absolute -right-16 -top-28 h-80 w-80 rounded-full border-[45px] border-white/[0.04]" />
           <div className="pointer-events-none absolute bottom-[-130px] right-[25%] h-64 w-64 rounded-full bg-bauraGold/10 blur-3xl" />
           <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
-              <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-bauraGold"><Activity size={15} /> Business intelligence</div>
-              <h2 className="mt-3 text-[clamp(1.65rem,3vw,2.6rem)] font-bold leading-tight tracking-tight">Your business, in focus.</h2>
-              <p className="mt-3 max-w-xl text-sm leading-6 text-bauraCream/75">A clear view of sales performance, profitability and inventory health—without the clutter.</p>
+              <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-bauraGold">
+                <Activity size={15} /> Business intelligence
+              </div>
+              <h2 className="mt-3 text-[clamp(1.65rem,3vw,2.6rem)] font-bold leading-tight tracking-tight">
+                Your business, in focus.
+              </h2>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-bauraCream/75">
+                A clear view of sales performance, profitability and inventory
+                health—without the clutter.
+              </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold"><Clock3 size={14} /> Sri Lanka time</span>
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold"><span className={`h-2 w-2 rounded-full ${autoRefresh ? "bg-emerald-400" : "bg-bauraGold"}`} />{autoRefresh ? "Auto-refreshing" : "On demand"}</span>
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold">
+                <Clock3 size={14} /> Sri Lanka time
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold">
+                <span
+                  className={`h-2 w-2 rounded-full ${autoRefresh ? "bg-emerald-400" : "bg-bauraGold"}`}
+                />
+                {autoRefresh ? "Auto-refreshing" : "On demand"}
+              </span>
             </div>
           </div>
         </section>
@@ -333,29 +393,99 @@ export function AnalyticsPage() {
         <section className="min-w-0 rounded-[22px] border border-bauraBorder bg-white p-4 shadow-[0_4px_20px_rgba(45,33,27,0.035)] sm:p-5">
           <div className="flex flex-col gap-5 2xl:flex-row 2xl:items-end 2xl:justify-between">
             <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-bauraGold">Reporting period</p>
-              <h3 className="mt-1 text-lg font-bold text-bauraBrown">Explore your performance</h3>
-              <p className="mt-1 text-xs text-bauraMuted">All figures reflect the selected reporting period.</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-bauraGold">
+                Reporting period
+              </p>
+              <h3 className="mt-1 text-lg font-bold text-bauraBrown">
+                Explore your performance
+              </h3>
+              <p className="mt-1 text-xs text-bauraMuted">
+                All figures reflect the selected reporting period.
+              </p>
               <div className="mt-4 flex flex-wrap gap-2">
-                {[{ label: "Today", days: 1 }, { label: "7 days", days: 7 }, { label: "30 days", days: 30 }, { label: "90 days", days: 90 }].map((preset) => (
-                  <button key={preset.days} type="button" onClick={() => setPreset(preset.days)} className="rounded-full border border-bauraBorder bg-[#FFF9F2] px-3 py-1.5 text-xs font-semibold text-bauraBrown transition hover:border-bauraGold hover:bg-bauraGold/10">{preset.label}</button>
+                {[
+                  { label: "Today", days: 1 },
+                  { label: "7 days", days: 7 },
+                  { label: "30 days", days: 30 },
+                  { label: "90 days", days: 90 },
+                ].map((preset) => (
+                  <button
+                    key={preset.days}
+                    type="button"
+                    onClick={() => setPreset(preset.days)}
+                    className="rounded-full border border-bauraBorder bg-[#FFF9F2] px-3 py-1.5 text-xs font-semibold text-bauraBrown transition hover:border-bauraGold hover:bg-bauraGold/10">
+                    {preset.label}
+                  </button>
                 ))}
               </div>
             </div>
             <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto] 2xl:w-auto">
               <DateInput label="From" value={fromDate} onChange={setFromDate} />
               <DateInput label="To" value={toDate} onChange={setToDate} />
-              <button type="button" onClick={applyRange} disabled={isLoading} className="flex min-h-11 items-center justify-center gap-2 self-end rounded-xl bg-bauraBrown px-5 py-3 text-sm font-bold text-bauraCream transition hover:opacity-90 disabled:opacity-60"><CalendarDays size={16} /> Apply</button>
+              <button
+                type="button"
+                onClick={applyRange}
+                disabled={isLoading}
+                className="flex min-h-11 items-center justify-center gap-2 self-end rounded-xl bg-bauraBrown px-5 py-3 text-sm font-bold text-bauraCream transition hover:opacity-90 disabled:opacity-60">
+                <CalendarDays size={16} /> Apply
+              </button>
             </div>
           </div>
         </section>
 
         <section className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
-          <MetricCard label="Net Revenue" value={isLoading && !analytics ? "Loading…" : formatCurrency(summary.revenue)} note={`${summary.orderCount} orders in period`} icon={<Wallet size={19} />} />
-          <MetricCard label="Gross Profit" value={isLoading && !analytics ? "Loading…" : formatCurrency(summary.profit)} note={`${summary.profitMarginPercent}% gross margin`} icon={<TrendingUp size={19} />} positive={summary.profit >= 0} />
-          <MetricCard label="Cost of Sales" value={isLoading && !analytics ? "Loading…" : formatCurrency(summary.cogs)} note="Reported cost of goods" icon={<PieChart size={19} />} />
-          <MetricCard label="Average Order" value={isLoading && !analytics ? "Loading…" : formatCurrency(summary.avgOrderValue)} note="Revenue per order" icon={<ArrowUpRight size={19} />} />
-          <MetricCard label="Stock Alerts" value={isLoading && !analytics ? "Loading…" : String(summary.lowStockItems + summary.outOfStockItems)} note={`${summary.outOfStockItems} out · ${summary.lowStockItems} low`} icon={<ShieldAlert size={19} />} alert={summary.lowStockItems + summary.outOfStockItems > 0} />
+          <MetricCard
+            label="Net Revenue"
+            value={
+              isLoading && !analytics
+                ? "Loading…"
+                : formatCurrency(summary.revenue)
+            }
+            note={`${summary.orderCount} orders in period`}
+            icon={<Wallet size={19} />}
+          />
+          <MetricCard
+            label="Gross Profit"
+            value={
+              isLoading && !analytics
+                ? "Loading…"
+                : formatCurrency(summary.profit)
+            }
+            note={`${summary.profitMarginPercent}% gross margin`}
+            icon={<TrendingUp size={19} />}
+            positive={summary.profit >= 0}
+          />
+          <MetricCard
+            label="Cost of Sales"
+            value={
+              isLoading && !analytics
+                ? "Loading…"
+                : formatCurrency(summary.cogs)
+            }
+            note="Reported cost of goods"
+            icon={<PieChart size={19} />}
+          />
+          <MetricCard
+            label="Average Order"
+            value={
+              isLoading && !analytics
+                ? "Loading…"
+                : formatCurrency(summary.avgOrderValue)
+            }
+            note="Revenue per order"
+            icon={<ArrowUpRight size={19} />}
+          />
+          <MetricCard
+            label="Stock Alerts"
+            value={
+              isLoading && !analytics
+                ? "Loading…"
+                : String(summary.lowStockItems + summary.outOfStockItems)
+            }
+            note={`${summary.outOfStockItems} out · ${summary.lowStockItems} low`}
+            icon={<ShieldAlert size={19} />}
+            alert={summary.lowStockItems + summary.outOfStockItems > 0}
+          />
         </section>
 
         <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.65fr)]">
@@ -367,22 +497,19 @@ export function AnalyticsPage() {
                 <SmallButton
                   onClick={() =>
                     downloadCsv("sales-trend.csv", analytics?.trend || [])
-                  }
-                >
+                  }>
                   <Download size={14} />
                   CSV
                 </SmallButton>
                 <SmallButton
                   onClick={() =>
                     downloadSvg("sales-profit-curve", "sales-profit-curve.svg")
-                  }
-                >
+                  }>
                   <Download size={14} />
                   SVG
                 </SmallButton>
               </div>
-            }
-          >
+            }>
             <SalesProfitCurve
               svgId="sales-profit-curve"
               data={analytics?.trend || []}
@@ -403,16 +530,14 @@ export function AnalyticsPage() {
                       cogs: summary.cogs,
                       profit: summary.profit,
                       marginPercent: summary.profitMarginPercent,
-                      inventoryValue: summary.inventoryValue
-                    }
+                      inventoryValue: summary.inventoryValue,
+                    },
                   ])
-                }
-              >
+                }>
                 <Download size={14} />
                 CSV
               </SmallButton>
-            }
-          >
+            }>
             <div className="grid gap-3">
               <StructureRow
                 label="Gross Revenue"
@@ -449,22 +574,23 @@ export function AnalyticsPage() {
             action={
               <SmallButton
                 onClick={() =>
-                  downloadCsv("item-wise-sales.csv", analytics?.productSales || [])
-                }
-              >
+                  downloadCsv(
+                    "item-wise-sales.csv",
+                    analytics?.productSales || [],
+                  )
+                }>
                 <Download size={14} />
                 CSV
               </SmallButton>
-            }
-          >
+            }>
             <HorizontalBarList
               data={topProducts.map((item) => ({
                 id: item.productId,
                 label: item.displayName,
                 value: item.revenue,
                 subValue: `${formatQty(item.qty)} sold · Profit ${formatCurrency(
-                  item.profit
-                )} · ${item.marginPercent}%`
+                  item.profit,
+                )} · ${item.marginPercent}%`,
               }))}
               valueFormatter={formatCurrency}
               emptyText="No item-wise sales data yet."
@@ -477,22 +603,23 @@ export function AnalyticsPage() {
             action={
               <SmallButton
                 onClick={() =>
-                  downloadCsv("platform-wise-sales.csv", analytics?.channelSales || [])
-                }
-              >
+                  downloadCsv(
+                    "platform-wise-sales.csv",
+                    analytics?.channelSales || [],
+                  )
+                }>
                 <Download size={14} />
                 CSV
               </SmallButton>
-            }
-          >
+            }>
             <HorizontalBarList
               data={topChannels.map((item) => ({
                 id: item.channelName,
                 label: item.channelName,
                 value: item.revenue,
                 subValue: `${item.orderCount} orders · Profit ${formatCurrency(
-                  item.profit
-                )} · ${item.marginPercent}%`
+                  item.profit,
+                )} · ${item.marginPercent}%`,
               }))}
               valueFormatter={formatCurrency}
               emptyText="No platform-wise sales data yet."
@@ -507,22 +634,23 @@ export function AnalyticsPage() {
             action={
               <SmallButton
                 onClick={() =>
-                  downloadCsv("payment-method-sales.csv", analytics?.paymentSales || [])
-                }
-              >
+                  downloadCsv(
+                    "payment-method-sales.csv",
+                    analytics?.paymentSales || [],
+                  )
+                }>
                 <Download size={14} />
                 CSV
               </SmallButton>
-            }
-          >
+            }>
             <HorizontalBarList
               data={(analytics?.paymentSales || []).map((item) => ({
                 id: item.paymentMethod,
                 label: item.paymentMethod,
                 value: item.revenue,
                 subValue: `${item.orderCount} orders · Profit ${formatCurrency(
-                  item.profit
-                )}`
+                  item.profit,
+                )}`,
               }))}
               valueFormatter={formatCurrency}
               emptyText="No payment sales data yet."
@@ -535,14 +663,15 @@ export function AnalyticsPage() {
             action={
               <SmallButton
                 onClick={() =>
-                  downloadCsv("inventory-risk.csv", analytics?.inventoryRisk || [])
-                }
-              >
+                  downloadCsv(
+                    "inventory-risk.csv",
+                    analytics?.inventoryRisk || [],
+                  )
+                }>
                 <Download size={14} />
                 CSV
               </SmallButton>
-            }
-          >
+            }>
             {!analytics?.inventoryRisk.length ? (
               <EmptyState text="No inventory data yet." />
             ) : (
@@ -564,7 +693,7 @@ export function AnalyticsPage() {
 function DateInput({
   label,
   value,
-  onChange
+  onChange,
 }: {
   label: string;
   value: string;
@@ -591,7 +720,7 @@ function MetricCard({
   note,
   icon,
   positive,
-  alert = false
+  alert = false,
 }: {
   label: string;
   value: string;
@@ -603,11 +732,8 @@ function MetricCard({
   return (
     <div
       className={`min-w-0 rounded-[20px] border p-5 shadow-[0_4px_18px_rgba(45,33,27,0.035)] transition-shadow hover:shadow-[0_10px_28px_rgba(45,33,27,0.075)] ${
-        alert
-          ? "border-amber-200 bg-amber-50"
-          : "border-bauraBorder bg-white"
-      }`}
-    >
+        alert ? "border-amber-200 bg-amber-50" : "border-bauraBorder bg-white"
+      }`}>
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-semibold text-bauraMuted">{label}</p>
         <div
@@ -615,8 +741,7 @@ function MetricCard({
             alert
               ? "bg-amber-100 text-amber-700"
               : "bg-bauraBrown text-bauraGold"
-          }`}
-        >
+          }`}>
           {icon}
         </div>
       </div>
@@ -624,8 +749,7 @@ function MetricCard({
       <h3
         className={`mt-4 break-words text-[clamp(1.2rem,1.8vw,1.65rem)] font-extrabold tracking-tight ${
           positive === false ? "text-red-700" : "text-bauraBrown"
-        }`}
-      >
+        }`}>
         {value}
       </h3>
 
@@ -638,7 +762,7 @@ function Panel({
   title,
   subtitle,
   action,
-  children
+  children,
 }: {
   title: string;
   subtitle: string;
@@ -649,7 +773,9 @@ function Panel({
     <div className="min-w-0 overflow-hidden rounded-[22px] border border-bauraBorder bg-white p-4 shadow-[0_4px_20px_rgba(45,33,27,0.035)] sm:p-6">
       <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <h3 className="text-lg font-bold tracking-tight text-bauraBrown">{title}</h3>
+          <h3 className="text-lg font-bold tracking-tight text-bauraBrown">
+            {title}
+          </h3>
           <p className="mt-1 text-sm text-bauraMuted">{subtitle}</p>
         </div>
 
@@ -663,7 +789,7 @@ function Panel({
 
 function SmallButton({
   children,
-  onClick
+  onClick,
 }: {
   children: React.ReactNode;
   onClick: () => void;
@@ -671,8 +797,7 @@ function SmallButton({
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center justify-center gap-2 rounded-lg border border-bauraBorder bg-[#FFF9F2] px-3 py-2 text-xs font-bold text-bauraBrown transition hover:border-bauraGold hover:bg-bauraGold/10"
-    >
+      className="inline-flex items-center justify-center gap-2 rounded-lg border border-bauraBorder bg-[#FFF9F2] px-3 py-2 text-xs font-bold text-bauraBrown transition hover:border-bauraGold hover:bg-bauraGold/10">
       {children}
     </button>
   );
@@ -680,7 +805,7 @@ function SmallButton({
 
 function SalesProfitCurve({
   svgId,
-  data
+  data,
 }: {
   svgId: string;
   data: TrendItem[];
@@ -691,7 +816,7 @@ function SalesProfitCurve({
 
   const maxValue = Math.max(
     1,
-    ...data.map((item) => Math.max(item.revenue, item.profit, item.cogs))
+    ...data.map((item) => Math.max(item.revenue, item.profit, item.cogs)),
   );
 
   function getX(index: number) {
@@ -726,8 +851,8 @@ function SalesProfitCurve({
             height="auto"
             viewBox={`0 0 ${width} ${height}`}
             xmlns="http://www.w3.org/2000/svg"
-            className="block h-auto w-full" preserveAspectRatio="xMidYMid meet"
-          >
+            className="block h-auto w-full"
+            preserveAspectRatio="xMidYMid meet">
             <rect width={width} height={height} rx="24" fill="#FFF8F0" />
 
             {[0, 0.25, 0.5, 0.75, 1].map((tick) => {
@@ -788,8 +913,7 @@ function SalesProfitCurve({
                   textAnchor="middle"
                   fontSize="11"
                   fill="#5A2E18"
-                  opacity="0.75"
-                >
+                  opacity="0.75">
                   {formatDateLabel(item.date)}
                 </text>
               </g>
@@ -821,7 +945,7 @@ function SalesProfitCurve({
 function HorizontalBarList({
   data,
   valueFormatter,
-  emptyText
+  emptyText,
 }: {
   data: Array<{
     id: string;
@@ -847,8 +971,7 @@ function HorizontalBarList({
           return (
             <div
               key={item.id}
-              className="rounded-xl border border-bauraBorder bg-white p-4"
-            >
+              className="rounded-xl border border-bauraBorder bg-white p-4">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                 <div className="min-w-0">
                   <p className="text-xs font-bold text-bauraGold">
@@ -884,7 +1007,7 @@ function HorizontalBarList({
 function StructureRow({
   label,
   value,
-  highlight = false
+  highlight = false,
 }: {
   label: string;
   value: string;
@@ -894,12 +1017,12 @@ function StructureRow({
     <div
       className={`flex flex-wrap items-center justify-between gap-2 rounded-xl px-4 py-3 ${
         highlight ? "bg-bauraBrown text-bauraCream" : "bg-white"
-      }`}
-    >
+      }`}>
       <span className={highlight ? "text-bauraCream/70" : "text-bauraMuted"}>
         {label}
       </span>
-      <span className={`break-words text-right font-bold ${highlight ? "text-bauraGold" : ""}`}>
+      <span
+        className={`break-words text-right font-bold ${highlight ? "text-bauraGold" : ""}`}>
         {value}
       </span>
     </div>
@@ -913,10 +1036,9 @@ function InventoryRiskRow({ item }: { item: InventoryRiskItem }) {
         item.isOutOfStock
           ? "border-red-200 bg-red-50"
           : item.isLowStock
-          ? "border-amber-200 bg-amber-50"
-          : "border-bauraBorder bg-white"
-      }`}
-    >
+            ? "border-amber-200 bg-amber-50"
+            : "border-bauraBorder bg-white"
+      }`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h4 className="truncate font-bold text-bauraBrown">
@@ -933,10 +1055,9 @@ function InventoryRiskRow({ item }: { item: InventoryRiskItem }) {
             item.isOutOfStock
               ? "bg-red-100 text-red-700"
               : item.isLowStock
-              ? "bg-amber-100 text-amber-700"
-              : "bg-green-100 text-green-700"
-          }`}
-        >
+                ? "bg-amber-100 text-amber-700"
+                : "bg-green-100 text-green-700"
+          }`}>
           {item.isOutOfStock ? "Out" : item.isLowStock ? "Low" : "OK"}
         </span>
       </div>

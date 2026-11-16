@@ -1,3 +1,5 @@
+/** @format */
+
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import {
@@ -14,7 +16,7 @@ import {
 import { AppLayout } from "../layouts/AppLayout";
 import { apiRequest } from "../lib/api";
 import { Modal } from "../ui/Modal";
-import { useToast } from "../ui/ToastProvider";
+import { useToast } from "../ui/useToast";
 
 type BaseUnit = "G" | "ML" | "UNIT";
 
@@ -51,7 +53,14 @@ type InventoryStats = {
   totalStockValue: number;
 };
 
-type CarterExpense = { id: string; itemId: string | null; category: string; treatment: "INVENTORY" | "OPERATING"; amount: string; description?: string | null; };
+type CarterExpense = {
+  id: string;
+  itemId: string | null;
+  category: string;
+  treatment: "INVENTORY" | "OPERATING";
+  amount: string;
+  description?: string | null;
+};
 type CarterItem = {
   expenses?: CarterExpense[];
   expenseAllocations?: { amount: string }[];
@@ -176,16 +185,22 @@ export function CartersPage() {
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isSavingCarter, setIsSavingCarter] = useState(false);
   const [isSavingItem, setIsSavingItem] = useState(false);
-  const [expenseTarget, setExpenseTarget] = useState<string | "CARTER" | null>(null);
+  const [expenseTarget, setExpenseTarget] = useState<string | "CARTER" | null>(
+    null,
+  );
   const [expenseCategory, setExpenseCategory] = useState("TRANSPORT");
-  const [expenseTreatment, setExpenseTreatment] = useState<"INVENTORY" | "OPERATING">("INVENTORY");
+  const [expenseTreatment, setExpenseTreatment] = useState<
+    "INVENTORY" | "OPERATING"
+  >("INVENTORY");
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseDescription, setExpenseDescription] = useState("");
   const [isSavingExpense, setIsSavingExpense] = useState(false);
   const [clearingItemId, setClearingItemId] = useState<string | null>(null);
   const [clearReason, setClearReason] = useState("");
   const [isClearing, setIsClearing] = useState(false);
-  const [invalidatingItemId, setInvalidatingItemId] = useState<string | null>(null);
+  const [invalidatingItemId, setInvalidatingItemId] = useState<string | null>(
+    null,
+  );
   const [invalidReason, setInvalidReason] = useState("");
   const [isInvalidating, setIsInvalidating] = useState(false);
   const [, setError] = useState("");
@@ -199,9 +214,7 @@ export function CartersPage() {
         stats?: InventoryStats;
       }>("/inventory");
 
-      const apiInventory = Array.isArray(data.inventory)
-        ? data.inventory
-        : [];
+      const apiInventory = Array.isArray(data.inventory) ? data.inventory : [];
 
       setInventory(apiInventory);
 
@@ -290,9 +303,7 @@ export function CartersPage() {
     setError("");
 
     try {
-      const data = await apiRequest<{ carter: Carter }>(
-        `/carters/${carterId}`,
-      );
+      const data = await apiRequest<{ carter: Carter }>(`/carters/${carterId}`);
 
       setSelectedCarter(data.carter);
     } catch (err) {
@@ -307,11 +318,7 @@ export function CartersPage() {
   }
 
   async function refreshPage(showToast = false) {
-    await Promise.all([
-      loadCarters(),
-      loadIngredients(),
-      loadInventory(),
-    ]);
+    await Promise.all([loadCarters(), loadIngredients(), loadInventory()]);
 
     if (showToast) {
       toast.success("Carter inventory refreshed");
@@ -319,8 +326,87 @@ export function CartersPage() {
   }
 
   useEffect(() => {
-    refreshPage();
-  }, []);
+    let active = true;
+
+    async function initialize() {
+      const [cartersResult, ingredientsResult, inventoryResult] =
+        await Promise.allSettled([
+          apiRequest<{ carters: Carter[] }>("/carters"),
+          apiRequest<{ ingredients: Ingredient[] }>("/ingredients"),
+          apiRequest<{
+            inventory: InventoryItem[];
+            stats?: InventoryStats;
+          }>("/inventory"),
+        ]);
+
+      if (!active) return;
+
+      if (cartersResult.status === "fulfilled") {
+        const items = cartersResult.value.carters;
+        setCarters(items);
+
+        if (items.length > 0) {
+          const detailResult = await Promise.allSettled([
+            apiRequest<{ carter: Carter }>(`/carters/${items[0].id}`),
+          ]);
+
+          if (active && detailResult[0].status === "fulfilled") {
+            setSelectedCarter(detailResult[0].value.carter);
+          }
+        }
+      } else {
+        toast.error("Failed to load Carters");
+      }
+
+      if (ingredientsResult.status === "fulfilled") {
+        setIngredients(
+          ingredientsResult.value.ingredients.filter(
+            (ingredient) => ingredient.isActive,
+          ),
+        );
+      } else {
+        toast.error("Failed to load ingredients");
+      }
+
+      if (inventoryResult.status === "fulfilled") {
+        const items = inventoryResult.value.inventory ?? [];
+
+        setInventory(items);
+        setInventoryStats(
+          inventoryResult.value.stats ?? {
+            totalActiveIngredients: items.length,
+            outOfStockItems: items.filter(
+              (item) => item.isOutOfStock || Number(item.qtyOnHand) <= 0,
+            ).length,
+            lowStockItems: items.filter(
+              (item) => !item.isOutOfStock && item.isLowStock,
+            ).length,
+            healthyStockItems: items.filter(
+              (item) =>
+                !item.isOutOfStock &&
+                !item.isLowStock &&
+                Number(item.qtyOnHand) > 0,
+            ).length,
+            totalStockValue: items.reduce(
+              (sum, item) => sum + Number(item.stockValue || 0),
+              0,
+            ),
+          },
+        );
+      } else {
+        toast.error("Failed to load live stock");
+      }
+
+      setIsLoading(false);
+      setIsInventoryLoading(false);
+    }
+
+    void initialize();
+
+    return () => {
+      active = false;
+    };
+  }, [toast]);
 
   const ingredientImageMap = useMemo(() => {
     return new Map(
@@ -429,10 +515,7 @@ export function CartersPage() {
         }),
       });
 
-      toast.success(
-        "Carter created",
-        `${data.carter.carterNo} was created.`,
-      );
+      toast.success("Carter created", `${data.carter.carterNo} was created.`);
 
       setIsCarterModalOpen(false);
       setCarterForm(initialCarterForm);
@@ -465,16 +548,19 @@ export function CartersPage() {
           ingredientId: itemForm.ingredientId,
           loadedQty: Number(itemForm.loadedQty),
           pricePerPackage: Number(itemForm.pricePerPackage),
-          expenses: Number(itemForm.transportCost) > 0 ? [{
-            category: "TRANSPORT", amount: Number(itemForm.transportCost)
-          }] : [],
+          expenses:
+            Number(itemForm.transportCost) > 0
+              ? [
+                  {
+                    category: "TRANSPORT",
+                    amount: Number(itemForm.transportCost),
+                  },
+                ]
+              : [],
         }),
       });
 
-      toast.success(
-        "Stock added",
-        "Ingredient stock lot was created.",
-      );
+      toast.success("Stock added", "Ingredient stock lot was created.");
 
       setIsItemModalOpen(false);
       setItemForm(initialItemForm);
@@ -483,8 +569,7 @@ export function CartersPage() {
       await loadCarters();
       await loadInventory();
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to add item";
+      const message = err instanceof Error ? err.message : "Failed to add item";
 
       setError(message);
       toast.error("Add stock failed", message);
@@ -498,38 +583,75 @@ export function CartersPage() {
     if (!selectedCarter || !expenseTarget || Number(expenseAmount) <= 0) return;
     setIsSavingExpense(true);
     try {
-      const url = expenseTarget === "CARTER"
-        ? `/carters/${selectedCarter.id}/expenses`
-        : `/carters/${selectedCarter.id}/items/${expenseTarget}/expenses`;
-      await apiRequest(url, { method: "POST", body: JSON.stringify({
-        category: expenseCategory, treatment: expenseTreatment,
-        amount: Number(expenseAmount), description: expenseDescription.trim()
-      }) });
-      toast.success("Expense recorded", expenseTreatment === "INVENTORY" ? "Inventory cost updated." : "Operating expense recorded.");
+      const url =
+        expenseTarget === "CARTER"
+          ? `/carters/${selectedCarter.id}/expenses`
+          : `/carters/${selectedCarter.id}/items/${expenseTarget}/expenses`;
+      await apiRequest(url, {
+        method: "POST",
+        body: JSON.stringify({
+          category: expenseCategory,
+          treatment: expenseTreatment,
+          amount: Number(expenseAmount),
+          description: expenseDescription.trim(),
+        }),
+      });
+      toast.success(
+        "Expense recorded",
+        expenseTreatment === "INVENTORY"
+          ? "Inventory cost updated."
+          : "Operating expense recorded.",
+      );
       setExpenseTarget(null);
       setExpenseAmount("");
       setExpenseDescription("");
-      await Promise.all([loadCarterDetail(selectedCarter.id), loadCarters(), loadInventory()]);
+      await Promise.all([
+        loadCarterDetail(selectedCarter.id),
+        loadCarters(),
+        loadInventory(),
+      ]);
     } catch (err) {
-      toast.error("Expense not saved", err instanceof Error ? err.message : "Please retry");
-    } finally { setIsSavingExpense(false); }
+      toast.error(
+        "Expense not saved",
+        err instanceof Error ? err.message : "Please retry",
+      );
+    } finally {
+      setIsSavingExpense(false);
+    }
   }
 
   async function handleClearItemStock(event: FormEvent) {
     event.preventDefault();
-    if (!selectedCarter || !clearingItemId || clearReason.trim().length < 5) return;
+    if (!selectedCarter || !clearingItemId || clearReason.trim().length < 5)
+      return;
     setIsClearing(true);
     try {
-      const result = await apiRequest<{ removedQuantity: string; unit: string }>(
-        `/carters/${selectedCarter.id}/items/${clearingItemId}/clear-stock`,
-        { method: "POST", body: JSON.stringify({ reason: clearReason.trim(), confirmation: "CLEAR STOCK" }) }
+      const result = await apiRequest<{
+        removedQuantity: string;
+        unit: string;
+      }>(`/carters/${selectedCarter.id}/items/${clearingItemId}/clear-stock`, {
+        method: "POST",
+        body: JSON.stringify({
+          reason: clearReason.trim(),
+          confirmation: "CLEAR STOCK",
+        }),
+      });
+      toast.success(
+        "Carter item stock cleared",
+        `${result.removedQuantity} ${result.unit} removed from this item only.`,
       );
-      toast.success("Carter item stock cleared", `${result.removedQuantity} ${result.unit} removed from this item only.`);
       setClearingItemId(null);
       setClearReason("");
-      await Promise.all([loadCarterDetail(selectedCarter.id), loadInventory(), loadCarters()]);
+      await Promise.all([
+        loadCarterDetail(selectedCarter.id),
+        loadInventory(),
+        loadCarters(),
+      ]);
     } catch (err) {
-      toast.error("Stock adjustment failed", err instanceof Error ? err.message : "Please retry");
+      toast.error(
+        "Stock adjustment failed",
+        err instanceof Error ? err.message : "Please retry",
+      );
     } finally {
       setIsClearing(false);
     }
@@ -537,19 +659,43 @@ export function CartersPage() {
 
   async function handleInvalidateItem(event: FormEvent) {
     event.preventDefault();
-    if (!selectedCarter || !invalidatingItemId || invalidReason.trim().length < 5) return;
+    if (
+      !selectedCarter ||
+      !invalidatingItemId ||
+      invalidReason.trim().length < 5
+    )
+      return;
     setIsInvalidating(true);
     try {
-      await apiRequest(`/carters/${selectedCarter.id}/items/${invalidatingItemId}/invalidate`, {
-        method: "POST", body: JSON.stringify({ reason: invalidReason.trim(), confirmation: "INVALIDATE ITEM" })
-      });
-      toast.success("Carter item invalidated", "The unconsumed stock was reversed and the record retained.");
+      await apiRequest(
+        `/carters/${selectedCarter.id}/items/${invalidatingItemId}/invalidate`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            reason: invalidReason.trim(),
+            confirmation: "INVALIDATE ITEM",
+          }),
+        },
+      );
+      toast.success(
+        "Carter item invalidated",
+        "The unconsumed stock was reversed and the record retained.",
+      );
       setInvalidatingItemId(null);
       setInvalidReason("");
-      await Promise.all([loadCarterDetail(selectedCarter.id), loadInventory(), loadCarters()]);
+      await Promise.all([
+        loadCarterDetail(selectedCarter.id),
+        loadInventory(),
+        loadCarters(),
+      ]);
     } catch (err) {
-      toast.error("Invalidation blocked", err instanceof Error ? err.message : "Please retry");
-    } finally { setIsInvalidating(false); }
+      toast.error(
+        "Invalidation blocked",
+        err instanceof Error ? err.message : "Please retry",
+      );
+    } finally {
+      setIsInvalidating(false);
+    }
   }
 
   const selectedIngredient = ingredients.find(
@@ -568,15 +714,12 @@ export function CartersPage() {
     const loadedQty = Number(itemForm.loadedQty);
     const pricePerPackage = Number(itemForm.pricePerPackage);
 
-    const totalBaseQty =
-      Number(selectedIngredient.baseQty) * loadedQty;
+    const totalBaseQty = Number(selectedIngredient.baseQty) * loadedQty;
 
-    const totalPrice = loadedQty * pricePerPackage + Number(itemForm.transportCost || 0);
+    const totalPrice =
+      loadedQty * pricePerPackage + Number(itemForm.transportCost || 0);
 
-    const unitCost =
-      totalBaseQty > 0
-        ? totalPrice / totalBaseQty
-        : 0;
+    const unitCost = totalBaseQty > 0 ? totalPrice / totalBaseQty : 0;
 
     return {
       totalBaseQty,
@@ -599,22 +742,17 @@ export function CartersPage() {
         <>
           <button
             onClick={() => refreshPage(true)}
-            className="erp-button-secondary"
-          >
+            className="erp-button-secondary">
             <RefreshCw size={16} />
             Refresh
           </button>
 
-          <button
-            onClick={openCarterModal}
-            className="erp-button-primary"
-          >
+          <button onClick={openCarterModal} className="erp-button-primary">
             <Plus size={16} />
             New Carter
           </button>
         </>
-      }
-    >
+      }>
       <section className="mb-5 rounded-xl border border-bauraBorder bg-white p-5 shadow-[0_1px_2px_rgba(45,33,27,0.03)]">
         <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -622,9 +760,7 @@ export function CartersPage() {
               Live Stock On Hand
             </p>
 
-            <h3 className="mt-1 font-bold">
-              Ingredient-wise Inventory
-            </h3>
+            <h3 className="mt-1 font-bold">Ingredient-wise Inventory</h3>
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -651,17 +787,12 @@ export function CartersPage() {
             </div>
 
             <div className="flex items-center gap-3 rounded-lg border border-bauraBorder bg-white px-4 py-3 sm:w-72">
-              <Search
-                size={17}
-                className="text-bauraMuted"
-              />
+              <Search size={17} className="text-bauraMuted" />
 
               <input
                 className="w-full bg-transparent text-sm outline-none"
                 value={stockSearch}
-                onChange={(event) =>
-                  setStockSearch(event.target.value)
-                }
+                onChange={(event) => setStockSearch(event.target.value)}
                 placeholder="Search live stock..."
               />
             </div>
@@ -699,9 +830,7 @@ export function CartersPage() {
         <section className="rounded-xl border border-bauraBorder bg-white p-5 shadow-[0_1px_2px_rgba(45,33,27,0.03)]">
           <div className="mb-5 flex flex-col gap-4">
             <div>
-              <h3 className="font-bold">
-                Purchase Carters
-              </h3>
+              <h3 className="font-bold">Purchase Carters</h3>
 
               <p className="text-sm text-bauraMuted">
                 {filteredCarters.length} shown · {carters.length} total
@@ -709,17 +838,12 @@ export function CartersPage() {
             </div>
 
             <div className="flex items-center gap-3 rounded-lg border border-bauraBorder bg-white px-4 py-3">
-              <Search
-                size={17}
-                className="text-bauraMuted"
-              />
+              <Search size={17} className="text-bauraMuted" />
 
               <input
                 className="w-full bg-transparent text-sm outline-none"
                 value={search}
-                onChange={(event) =>
-                  setSearch(event.target.value)
-                }
+                onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search Carter..."
               />
             </div>
@@ -733,26 +857,20 @@ export function CartersPage() {
             ) : (
               <div className="grid gap-3">
                 {filteredCarters.map((carter) => {
-                  const isSelected =
-                    selectedCarter?.id === carter.id;
+                  const isSelected = selectedCarter?.id === carter.id;
 
                   return (
                     <button
                       key={carter.id}
-                      onClick={() =>
-                        loadCarterDetail(carter.id)
-                      }
+                      onClick={() => loadCarterDetail(carter.id)}
                       className={`rounded-xl border p-4 text-left transition ${
                         isSelected
                           ? "border-bauraGold bg-bauraGoldSoft"
                           : "border-bauraBorder bg-white hover:border-bauraGold/40"
-                      }`}
-                    >
+                      }`}>
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <h4 className="font-bold">
-                            {carter.carterNo}
-                          </h4>
+                          <h4 className="font-bold">{carter.carterNo}</h4>
 
                           <p className="mt-1 flex items-center gap-2 text-sm text-bauraMuted">
                             <CalendarDays size={15} />
@@ -790,9 +908,7 @@ export function CartersPage() {
                   <ShoppingBasket size={26} />
                 </div>
 
-                <h3 className="mt-4 font-bold">
-                  No Carter selected
-                </h3>
+                <h3 className="mt-4 font-bold">No Carter selected</h3>
 
                 <p className="mt-2 text-sm text-bauraMuted">
                   Create or select a Carter to add purchased ingredient stock.
@@ -817,23 +933,30 @@ export function CartersPage() {
                   </p>
                 </div>
 
-                <button type="button" className="erp-button-secondary" onClick={() => setExpenseTarget("CARTER")}>
+                <button
+                  type="button"
+                  className="erp-button-secondary"
+                  onClick={() => setExpenseTarget("CARTER")}>
                   <Plus size={16} /> Carter Expense
                 </button>
-                <button
-                  onClick={openItemModal}
-                  className="erp-button-primary"
-                >
+                <button onClick={openItemModal} className="erp-button-primary">
                   <PackagePlus size={16} />
                   Add Ingredient Stock
                 </button>
               </div>
 
-              {selectedCarter.expenses && selectedCarter.expenses.length > 0 && (
-                <div className="mb-4 rounded-xl border border-bauraBorder p-3 text-xs text-bauraMuted">
-                  Expenses: {selectedCarter.expenses.map(e => `${e.category} ${formatCurrency(e.amount)} (${e.treatment.toLowerCase()})`).join(" · ")}
-                </div>
-              )}
+              {selectedCarter.expenses &&
+                selectedCarter.expenses.length > 0 && (
+                  <div className="mb-4 rounded-xl border border-bauraBorder p-3 text-xs text-bauraMuted">
+                    Expenses:{" "}
+                    {selectedCarter.expenses
+                      .map(
+                        (e) =>
+                          `${e.category} ${formatCurrency(e.amount)} (${e.treatment.toLowerCase()})`,
+                      )
+                      .join(" · ")}
+                  </div>
+                )}
               <div className="mb-5 grid gap-3 md:grid-cols-3">
                 <MiniStat
                   label="Items"
@@ -845,10 +968,7 @@ export function CartersPage() {
                   value={formatCurrency(selectedCarter.totalCost)}
                 />
 
-                <MiniStat
-                  label="Notes"
-                  value={selectedCarter.notes || "—"}
-                />
+                <MiniStat label="Notes" value={selectedCarter.notes || "—"} />
               </div>
 
               <div className="baura-scrollbar max-h-[calc(100vh-580px)] min-h-[360px] overflow-auto pr-1">
@@ -860,8 +980,7 @@ export function CartersPage() {
                 ) : (
                   <div className="grid gap-3">
                     {selectedCarter.items.map((item) => {
-                      const ingredientId =
-                        getCarterItemIngredientId(item);
+                      const ingredientId = getCarterItemIngredientId(item);
 
                       const imageUrl =
                         item.imageUrl ||
@@ -874,8 +993,7 @@ export function CartersPage() {
                       return (
                         <div
                           key={item.id}
-                          className="rounded-xl border border-bauraBorder bg-white p-4"
-                        >
+                          className="rounded-xl border border-bauraBorder bg-white p-4">
                           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                             <div className="flex min-w-0 items-start gap-3">
                               <IngredientThumbnail
@@ -916,14 +1034,54 @@ export function CartersPage() {
                             </div>
                           </div>
                           <div className="mt-3 flex items-center justify-between border-t border-bauraBorder pt-3">
-                            <span className="text-xs text-bauraMuted">Remaining in this Carter item: {formatQty(item.stockLots?.reduce((sum, lot) => sum + Number(lot.remainingBaseQty), 0) ?? 0, item.stockLots?.[0]?.baseUnit)}</span>
+                            <span className="text-xs text-bauraMuted">
+                              Remaining in this Carter item:{" "}
+                              {formatQty(
+                                item.stockLots?.reduce(
+                                  (sum, lot) =>
+                                    sum + Number(lot.remainingBaseQty),
+                                  0,
+                                ) ?? 0,
+                                item.stockLots?.[0]?.baseUnit,
+                              )}
+                            </span>
                             {item.invalidatedAt ? (
-                              <span className="text-xs font-semibold text-red-700" title={item.invalidReason || "Invalidated"}>Invalidated</span>
+                              <span
+                                className="text-xs font-semibold text-red-700"
+                                title={item.invalidReason || "Invalidated"}>
+                                Invalidated
+                              </span>
                             ) : (
                               <div className="flex flex-wrap gap-2">
-                                <button type="button" className="rounded-lg border border-bauraBorder px-3 py-2 text-xs font-semibold" onClick={() => setExpenseTarget(item.id)}>Add expense</button>
-                                <button type="button" className="rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800" onClick={() => { setInvalidatingItemId(item.id); setInvalidReason(""); }}>Mark invalid</button>
-                                                        <button type="button" className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50" disabled={!item.stockLots?.some(lot => Number(lot.remainingBaseQty) > 0)} onClick={() => { setClearingItemId(item.id); setClearReason(""); }}>Clear this item's stock</button>
+                                <button
+                                  type="button"
+                                  className="rounded-lg border border-bauraBorder px-3 py-2 text-xs font-semibold"
+                                  onClick={() => setExpenseTarget(item.id)}>
+                                  Add expense
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800"
+                                  onClick={() => {
+                                    setInvalidatingItemId(item.id);
+                                    setInvalidReason("");
+                                  }}>
+                                  Mark invalid
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
+                                  disabled={
+                                    !item.stockLots?.some(
+                                      (lot) => Number(lot.remainingBaseQty) > 0,
+                                    )
+                                  }
+                                  onClick={() => {
+                                    setClearingItemId(item.id);
+                                    setClearReason("");
+                                  }}>
+                                  Clear this item's stock
+                                </button>
                               </div>
                             )}
                           </div>
@@ -938,50 +1096,160 @@ export function CartersPage() {
         </section>
       </div>
 
-      <Modal open={Boolean(expenseTarget)} onClose={() => { if (!isSavingExpense) setExpenseTarget(null); }} title={expenseTarget === "CARTER" ? "Add Carter Expense" : "Add Ingredient Expense"} subtitle="Inventory expenses can only be capitalized while stock is untouched. Operating expenses do not alter inventory valuation.">
+      <Modal
+        open={Boolean(expenseTarget)}
+        onClose={() => {
+          if (!isSavingExpense) setExpenseTarget(null);
+        }}
+        title={
+          expenseTarget === "CARTER"
+            ? "Add Carter Expense"
+            : "Add Ingredient Expense"
+        }
+        subtitle="Inventory expenses can only be capitalized while stock is untouched. Operating expenses do not alter inventory valuation.">
         <form onSubmit={handleAddExpense} className="grid gap-4">
-          <label className="block text-sm font-semibold">Category
-            <select className="erp-input mt-2 w-full" value={expenseCategory} onChange={event => setExpenseCategory(event.target.value)}>
-              {["TRANSPORT", "DELIVERY", "PACKAGING", "HANDLING", "OTHER"].map(value => <option key={value} value={value}>{value}</option>)}
+          <label className="block text-sm font-semibold">
+            Category
+            <select
+              className="erp-input mt-2 w-full"
+              value={expenseCategory}
+              onChange={(event) => setExpenseCategory(event.target.value)}>
+              {["TRANSPORT", "DELIVERY", "PACKAGING", "HANDLING", "OTHER"].map(
+                (value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ),
+              )}
             </select>
           </label>
-          <label className="block text-sm font-semibold">Treatment
-            <select className="erp-input mt-2 w-full" value={expenseTreatment} onChange={event => setExpenseTreatment(event.target.value as "INVENTORY" | "OPERATING")}>
+          <label className="block text-sm font-semibold">
+            Treatment
+            <select
+              className="erp-input mt-2 w-full"
+              value={expenseTreatment}
+              onChange={(event) =>
+                setExpenseTreatment(
+                  event.target.value as "INVENTORY" | "OPERATING",
+                )
+              }>
               <option value="INVENTORY">Inventory landed cost</option>
-              <option value="OPERATING">Operating expense (no stock revaluation)</option>
+              <option value="OPERATING">
+                Operating expense (no stock revaluation)
+              </option>
             </select>
           </label>
-          <Input label="Amount (Rs.)" type="number" value={expenseAmount} onChange={setExpenseAmount} placeholder="100.00" />
-          <Input label="Description" value={expenseDescription} onChange={setExpenseDescription} required={false} placeholder="Optional details" />
+          <Input
+            label="Amount (Rs.)"
+            type="number"
+            value={expenseAmount}
+            onChange={setExpenseAmount}
+            placeholder="100.00"
+          />
+          <Input
+            label="Description"
+            value={expenseDescription}
+            onChange={setExpenseDescription}
+            required={false}
+            placeholder="Optional details"
+          />
           <div className="flex justify-end gap-2">
-            <button type="button" className="erp-button-secondary" disabled={isSavingExpense} onClick={() => setExpenseTarget(null)}>Cancel</button>
-            <button type="submit" className="erp-button-primary" disabled={isSavingExpense || Number(expenseAmount) <= 0}>{isSavingExpense ? "Saving..." : "Save Expense"}</button>
+            <button
+              type="button"
+              className="erp-button-secondary"
+              disabled={isSavingExpense}
+              onClick={() => setExpenseTarget(null)}>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="erp-button-primary"
+              disabled={isSavingExpense || Number(expenseAmount) <= 0}>
+              {isSavingExpense ? "Saving..." : "Save Expense"}
+            </button>
           </div>
         </form>
       </Modal>
 
-      <Modal open={Boolean(invalidatingItemId)} onClose={() => { if (!isInvalidating) setInvalidatingItemId(null); }} title="Mark Carter item invalid" subtitle="Allowed only when no stock has been consumed or adjusted. The purchase record is retained.">
+      <Modal
+        open={Boolean(invalidatingItemId)}
+        onClose={() => {
+          if (!isInvalidating) setInvalidatingItemId(null);
+        }}
+        title="Mark Carter item invalid"
+        subtitle="Allowed only when no stock has been consumed or adjusted. The purchase record is retained.">
         <form className="grid gap-4" onSubmit={handleInvalidateItem}>
-          <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">This reverses all untouched stock from the selected item. Previously used or adjusted stock cannot be invalidated.</p>
-          <label className="block text-sm font-semibold">Reason
-            <textarea className="erp-input mt-2 min-h-24 w-full" required minLength={5} maxLength={500} value={invalidReason} onChange={event => setInvalidReason(event.target.value)} />
+          <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            This reverses all untouched stock from the selected item. Previously
+            used or adjusted stock cannot be invalidated.
+          </p>
+          <label className="block text-sm font-semibold">
+            Reason
+            <textarea
+              className="erp-input mt-2 min-h-24 w-full"
+              required
+              minLength={5}
+              maxLength={500}
+              value={invalidReason}
+              onChange={(event) => setInvalidReason(event.target.value)}
+            />
           </label>
           <div className="flex justify-end gap-2">
-            <button type="button" className="erp-button-secondary" disabled={isInvalidating} onClick={() => setInvalidatingItemId(null)}>Cancel</button>
-            <button type="submit" className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={isInvalidating || invalidReason.trim().length < 5}>{isInvalidating ? "Invalidating..." : "Confirm invalidation"}</button>
+            <button
+              type="button"
+              className="erp-button-secondary"
+              disabled={isInvalidating}
+              onClick={() => setInvalidatingItemId(null)}>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              disabled={isInvalidating || invalidReason.trim().length < 5}>
+              {isInvalidating ? "Invalidating..." : "Confirm invalidation"}
+            </button>
           </div>
         </form>
       </Modal>
 
-      <Modal open={Boolean(clearingItemId)} onClose={() => { if (!isClearing) setClearingItemId(null); }} title="Clear Carter item stock" subtitle="Only remaining stock from this purchase item will be written off. Production history stays unchanged.">
+      <Modal
+        open={Boolean(clearingItemId)}
+        onClose={() => {
+          if (!isClearing) setClearingItemId(null);
+        }}
+        title="Clear Carter item stock"
+        subtitle="Only remaining stock from this purchase item will be written off. Production history stays unchanged.">
         <form className="grid gap-4" onSubmit={handleClearItemStock}>
-          <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">This is an inventory write-off, not a deletion. It cannot be undone automatically.</p>
-          <label className="block text-sm font-semibold">Reason for adjustment
-            <textarea className="erp-input mt-2 min-h-24 w-full" required minLength={5} maxLength={500} value={clearReason} onChange={event => setClearReason(event.target.value)} placeholder="Expired, damaged, incorrect stock entry..." />
+          <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+            This is an inventory write-off, not a deletion. It cannot be undone
+            automatically.
+          </p>
+          <label className="block text-sm font-semibold">
+            Reason for adjustment
+            <textarea
+              className="erp-input mt-2 min-h-24 w-full"
+              required
+              minLength={5}
+              maxLength={500}
+              value={clearReason}
+              onChange={(event) => setClearReason(event.target.value)}
+              placeholder="Expired, damaged, incorrect stock entry..."
+            />
           </label>
           <div className="flex justify-end gap-2">
-            <button type="button" className="erp-button-secondary" disabled={isClearing} onClick={() => setClearingItemId(null)}>Cancel</button>
-            <button type="submit" className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={isClearing || clearReason.trim().length < 5}>{isClearing ? "Clearing..." : "Confirm stock write-off"}</button>
+            <button
+              type="button"
+              className="erp-button-secondary"
+              disabled={isClearing}
+              onClick={() => setClearingItemId(null)}>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              disabled={isClearing || clearReason.trim().length < 5}>
+              {isClearing ? "Clearing..." : "Confirm stock write-off"}
+            </button>
           </div>
         </form>
       </Modal>
@@ -990,12 +1258,8 @@ export function CartersPage() {
         open={isCarterModalOpen}
         onClose={closeCarterModal}
         title="Create Carter"
-        subtitle="Create a new purchase Carter before adding bought ingredients."
-      >
-        <form
-          onSubmit={handleCreateCarter}
-          className="grid gap-4"
-        >
+        subtitle="Create a new purchase Carter before adding bought ingredients.">
+        <form onSubmit={handleCreateCarter} className="grid gap-4">
           <Input
             label="Purchased Date"
             type="date"
@@ -1022,9 +1286,7 @@ export function CartersPage() {
           />
 
           <label className="block">
-            <span className="mb-2 block text-sm font-semibold">
-              Notes
-            </span>
+            <span className="mb-2 block text-sm font-semibold">Notes</span>
 
             <textarea
               className="min-h-24 w-full resize-none rounded-lg border border-bauraBorder bg-white px-4 py-3 text-sm outline-none transition focus:border-bauraGold"
@@ -1055,16 +1317,10 @@ export function CartersPage() {
           selectedCarter
             ? `Add purchased ingredient stock to ${selectedCarter.carterNo}.`
             : ""
-        }
-      >
-        <form
-          onSubmit={handleAddItem}
-          className="grid gap-4"
-        >
+        }>
+        <form onSubmit={handleAddItem} className="grid gap-4">
           <label className="block">
-            <span className="mb-2 block text-sm font-semibold">
-              Ingredient
-            </span>
+            <span className="mb-2 block text-sm font-semibold">Ingredient</span>
 
             <select
               className="erp-input"
@@ -1075,17 +1331,11 @@ export function CartersPage() {
                   ingredientId: event.target.value,
                 }))
               }
-              required
-            >
-              <option value="">
-                Select ingredient
-              </option>
+              required>
+              <option value="">Select ingredient</option>
 
               {ingredients.map((ingredient) => (
-                <option
-                  key={ingredient.id}
-                  value={ingredient.id}
-                >
+                <option key={ingredient.id} value={ingredient.id}>
                   {ingredient.displayName}
                 </option>
               ))}
@@ -1144,12 +1394,19 @@ export function CartersPage() {
             />
           </div>
 
-          <Input label="Transportation Cost (optional)" type="number" value={itemForm.transportCost} onChange={value => setItemForm(prev => ({ ...prev, transportCost: value }))} required={false} placeholder="0.00" />
+          <Input
+            label="Transportation Cost (optional)"
+            type="number"
+            value={itemForm.transportCost}
+            onChange={(value) =>
+              setItemForm((prev) => ({ ...prev, transportCost: value }))
+            }
+            required={false}
+            placeholder="0.00"
+          />
           {itemPreview && selectedIngredient && (
             <div className="rounded-xl border border-bauraBorder bg-white p-4">
-              <p className="text-sm font-bold">
-                Stock Preview
-              </p>
+              <p className="text-sm font-bold">Stock Preview</p>
 
               <div className="mt-3 grid gap-3 text-sm md:grid-cols-3">
                 <PreviewStat
@@ -1192,40 +1449,29 @@ function IngredientThumbnail({
   name: string;
   size?: "small" | "medium" | "large";
 }) {
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    setFailed(false);
-  }, [imageUrl]);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const failed = Boolean(imageUrl && failedUrl === imageUrl);
 
   const sizeClass =
-    size === "small"
-      ? "h-9 w-9"
-      : size === "large"
-        ? "h-14 w-14"
-        : "h-11 w-11";
+    size === "small" ? "h-9 w-9" : size === "large" ? "h-14 w-14" : "h-11 w-11";
 
   if (!imageUrl || failed) {
     return (
       <div
-        className={`${sizeClass} flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-bauraBrown text-bauraGold`}
-      >
-        <ClipboardList
-          size={size === "large" ? 22 : 19}
-        />
+        className={`${sizeClass} flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-bauraBrown text-bauraGold`}>
+        <ClipboardList size={size === "large" ? 22 : 19} />
       </div>
     );
   }
 
   return (
     <div
-      className={`${sizeClass} shrink-0 overflow-hidden rounded-lg border border-bauraBorder bg-white`}
-    >
+      className={`${sizeClass} shrink-0 overflow-hidden rounded-lg border border-bauraBorder bg-white`}>
       <img
         src={imageUrl}
         alt={name}
         loading="lazy"
-        onError={() => setFailed(true)}
+        onError={() => setFailedUrl(imageUrl ?? null)}
         className="h-full w-full object-cover"
       />
     </div>
@@ -1239,9 +1485,7 @@ function LiveStockCard({
   item: InventoryItem;
   imageUrl?: string | null;
 }) {
-  const isOutOfStock =
-    item.isOutOfStock ||
-    Number(item.qtyOnHand) <= 0;
+  const isOutOfStock = item.isOutOfStock || Number(item.qtyOnHand) <= 0;
 
   return (
     <div
@@ -1251,8 +1495,7 @@ function LiveStockCard({
           : item.isLowStock
             ? "border-amber-200 bg-amber-50"
             : "border-bauraBorder bg-white"
-      }`}
-    >
+      }`}>
       <div className="flex items-start justify-between gap-3">
         {imageUrl ? (
           <IngredientThumbnail
@@ -1268,8 +1511,7 @@ function LiveStockCard({
                 : item.isLowStock
                   ? "bg-amber-100 text-amber-700"
                   : "bg-bauraBrown text-bauraGold"
-            }`}
-          >
+            }`}>
             {isOutOfStock || item.isLowStock ? (
               <AlertTriangle size={20} />
             ) : (
@@ -1285,13 +1527,8 @@ function LiveStockCard({
               : item.isLowStock
                 ? "bg-amber-100 text-amber-700"
                 : "bg-green-100 text-green-700"
-          }`}
-        >
-          {isOutOfStock
-            ? "Out"
-            : item.isLowStock
-              ? "Low"
-              : "OK"}
+          }`}>
+          {isOutOfStock ? "Out" : item.isLowStock ? "Low" : "OK"}
         </span>
       </div>
 
@@ -1309,19 +1546,13 @@ function LiveStockCard({
 
       <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
         <div className="rounded-lg bg-white p-3">
-          <p className="text-bauraMuted">
-            Lots
-          </p>
+          <p className="text-bauraMuted">Lots</p>
 
-          <p className="mt-1 font-bold text-bauraBrown">
-            {item.stockLotCount}
-          </p>
+          <p className="mt-1 font-bold text-bauraBrown">{item.stockLotCount}</p>
         </div>
 
         <div className="rounded-lg bg-white p-3">
-          <p className="text-bauraMuted">
-            Value
-          </p>
+          <p className="text-bauraMuted">Value</p>
 
           <p className="mt-1 truncate font-bold text-bauraBrown">
             {formatCurrency(item.stockValue)}
@@ -1331,24 +1562,14 @@ function LiveStockCard({
 
       {item.lowStockAlertQty !== null && (
         <p className="mt-3 text-xs text-bauraMuted">
-          Low alert:{" "}
-          {formatQty(
-            item.lowStockAlertQty,
-            item.baseUnit,
-          )}
+          Low alert: {formatQty(item.lowStockAlertQty, item.baseUnit)}
         </p>
       )}
     </div>
   );
 }
 
-function LiveStockMiniStat({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function LiveStockMiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-white px-4 py-3">
       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-bauraMuted">
@@ -1362,11 +1583,7 @@ function LiveStockMiniStat({
   );
 }
 
-function EmptyState({
-  text,
-}: {
-  text: string;
-}) {
+function EmptyState({ text }: { text: string }) {
   return (
     <div className="rounded-xl bg-white p-6 text-center text-sm text-bauraMuted">
       {text}
@@ -1374,42 +1591,24 @@ function EmptyState({
   );
 }
 
-function MiniStat({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl bg-white p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-bauraMuted">
         {label}
       </p>
 
-      <p className="mt-2 truncate text-sm font-bold">
-        {value}
-      </p>
+      <p className="mt-2 truncate text-sm font-bold">{value}</p>
     </div>
   );
 }
 
-function PreviewStat({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function PreviewStat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs text-bauraMuted">
-        {label}
-      </p>
+      <p className="text-xs text-bauraMuted">{label}</p>
 
-      <p className="mt-1 font-bold text-bauraBrown">
-        {value}
-      </p>
+      <p className="mt-1 font-bold text-bauraBrown">{value}</p>
     </div>
   );
 }
@@ -1431,16 +1630,12 @@ function Input({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-sm font-semibold">
-        {label}
-      </span>
+      <span className="mb-2 block text-sm font-semibold">{label}</span>
 
       <input
         className="erp-input"
         value={value}
-        onChange={(event) =>
-          onChange(event.target.value)
-        }
+        onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         type={type}
         required={required}
@@ -1464,18 +1659,12 @@ function ModalActions({
         type="button"
         onClick={onCancel}
         disabled={isLoading}
-        className="erp-button-secondary"
-      >
+        className="erp-button-secondary">
         Cancel
       </button>
 
-      <button
-        disabled={isLoading}
-        className="erp-button-primary"
-      >
-        {isLoading
-          ? "Saving..."
-          : submitText}
+      <button disabled={isLoading} className="erp-button-primary">
+        {isLoading ? "Saving..." : submitText}
       </button>
     </div>
   );

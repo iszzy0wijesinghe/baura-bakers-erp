@@ -24,7 +24,7 @@ import {
 
 import { AppLayout } from "../layouts/AppLayout";
 
-import { useAuth } from "../auth/AuthContext";
+import { useAuth } from "../auth/useAuth";
 
 import {
   approvePosDayEnd,
@@ -35,7 +35,7 @@ import {
   type PosSession,
 } from "../lib/posSessionApi";
 
-import { useToast } from "../ui/ToastProvider";
+import { useToast } from "../ui/useToast";
 
 type PendingDayEnd = PosDayEnd & {
   posSession?: PosSession | null;
@@ -114,38 +114,28 @@ function SummaryRow({
       <span
         className={`text-[11px] ${
           strong ? "font-semibold text-bauraInk" : "text-bauraMuted"
-        }`}
-      >
+        }`}>
         {label}
       </span>
 
       <span
         className={`text-right text-[11px] ${
           strong ? "font-extrabold" : "font-semibold"
-        } text-bauraInk`}
-      >
+        } text-bauraInk`}>
         Rs. {money(value)}
       </span>
     </div>
   );
 }
 
-function DetailLabel({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function DetailLabel({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-bauraMuted">
         {label}
       </p>
 
-      <p className="mt-1 text-[11px] font-semibold text-bauraInk">
-        {value}
-      </p>
+      <p className="mt-1 text-[11px] font-semibold text-bauraInk">{value}</p>
     </div>
   );
 }
@@ -166,48 +156,88 @@ export function PosDayEndApprovalsPage() {
   const [managerNote, setManagerNote] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async (silent = false) => {
-    if (silent) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
-
-    try {
-      const response = await getPendingPosDayEnds();
-
-      const items = (response.dayEnds ?? []) as PendingDayEnd[];
-
-      setDayEnds(items);
-      setError(null);
-
-      setSelectedId((current) => {
-        if (current && items.some((item) => item.id === current)) {
-          return current;
-        }
-
-        return items[0]?.id ?? null;
-      });
-    } catch (caught) {
-      const message =
-        caught instanceof Error
-          ? caught.message
-          : "Unable to load pending Day Ends.";
-
-      setError(message);
-
+  const load = useCallback(
+    async (silent = false) => {
       if (silent) {
-        toast.error("Refresh failed", message);
+        setRefreshing(true);
+      } else {
+        setLoading(true);
       }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [toast]);
+
+      try {
+        const response = await getPendingPosDayEnds();
+
+        const items = (response.dayEnds ?? []) as PendingDayEnd[];
+
+        setDayEnds(items);
+        setError(null);
+
+        setSelectedId((current) => {
+          if (current && items.some((item) => item.id === current)) {
+            return current;
+          }
+
+          return items[0]?.id ?? null;
+        });
+      } catch (caught) {
+        const message =
+          caught instanceof Error
+            ? caught.message
+            : "Unable to load pending Day Ends.";
+
+        setError(message);
+
+        if (silent) {
+          toast.error("Refresh failed", message);
+        }
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [toast],
+  );
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let active = true;
+
+    getPendingPosDayEnds()
+      .then((response) => {
+        if (!active) return;
+
+        const items = (response.dayEnds ?? []) as PendingDayEnd[];
+
+        setDayEnds(items);
+        setError(null);
+
+        setSelectedId((current) => {
+          if (current && items.some((item) => item.id === current)) {
+            return current;
+          }
+
+          return items[0]?.id ?? null;
+        });
+      })
+      .catch((caught: unknown) => {
+        if (!active) return;
+
+        const message =
+          caught instanceof Error
+            ? caught.message
+            : "Unable to load pending Day Ends.";
+
+        setError(message);
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -231,9 +261,7 @@ export function PosDayEndApprovalsPage() {
   }, [dayEnds, search]);
 
   const selected =
-    filtered.find((item) => item.id === selectedId) ??
-    filtered[0] ??
-    null;
+    filtered.find((item) => item.id === selectedId) ?? filtered[0] ?? null;
 
   const selectedSession = selected ? getSession(selected) : null;
 
@@ -242,8 +270,7 @@ export function PosDayEndApprovalsPage() {
   const hasVariance = Math.abs(variance) >= 0.01;
 
   const isOwnSubmission =
-    Boolean(selected?.submittedById) &&
-    selected?.submittedById === user?.id;
+    Boolean(selected?.submittedById) && selected?.submittedById === user?.id;
 
   const pendingCount = dayEnds.length;
 
@@ -338,16 +365,11 @@ export function PosDayEndApprovalsPage() {
           type="button"
           onClick={() => void load(true)}
           disabled={refreshing || loading}
-          className="inline-flex h-10 items-center gap-2 rounded-xl border border-bauraBorder bg-white px-4 text-[11px] font-semibold text-bauraInk transition hover:bg-bauraCanvas2 disabled:opacity-50"
-        >
-          <RefreshCw
-            size={14}
-            className={refreshing ? "animate-spin" : ""}
-          />
+          className="inline-flex h-10 items-center gap-2 rounded-xl border border-bauraBorder bg-white px-4 text-[11px] font-semibold text-bauraInk transition hover:bg-bauraCanvas2 disabled:opacity-50">
+          <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
           Refresh
         </button>
-      }
-    >
+      }>
       <div className="space-y-5">
         {/* OVERVIEW */}
 
@@ -389,10 +411,7 @@ export function PosDayEndApprovalsPage() {
 
         {error && (
           <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
-            <AlertCircle
-              size={17}
-              className="mt-0.5 shrink-0 text-red-600"
-            />
+            <AlertCircle size={17} className="mt-0.5 shrink-0 text-red-600" />
 
             <div className="flex-1">
               <p className="text-[12px] font-bold text-red-800">
@@ -405,8 +424,7 @@ export function PosDayEndApprovalsPage() {
             <button
               type="button"
               onClick={() => void load(true)}
-              className="text-[11px] font-bold text-red-800"
-            >
+              className="text-[11px] font-bold text-red-800">
               Retry
             </button>
           </div>
@@ -491,8 +509,7 @@ export function PosDayEndApprovalsPage() {
                           active
                             ? "bg-bauraGoldSoft/40"
                             : "hover:bg-bauraCanvas2"
-                        }`}
-                      >
+                        }`}>
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <p className="truncate text-[12px] font-extrabold text-bauraInk">
@@ -512,9 +529,7 @@ export function PosDayEndApprovalsPage() {
                           <ChevronRight
                             size={16}
                             className={
-                              active
-                                ? "text-bauraPrimary"
-                                : "text-bauraMuted"
+                              active ? "text-bauraPrimary" : "text-bauraMuted"
                             }
                           />
                         </div>
@@ -535,8 +550,7 @@ export function PosDayEndApprovalsPage() {
                               Math.abs(itemVariance) < 0.01
                                 ? "bg-emerald-50 text-emerald-700"
                                 : "bg-amber-50 text-amber-700"
-                            }`}
-                          >
+                            }`}>
                             {itemVariance > 0
                               ? "+"
                               : itemVariance < 0
@@ -645,8 +659,7 @@ export function PosDayEndApprovalsPage() {
                         hasVariance
                           ? "border-amber-200 bg-amber-50"
                           : "border-emerald-200 bg-emerald-50"
-                      }`}
-                    >
+                      }`}>
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="text-[10px] font-bold uppercase tracking-[0.08em]">
@@ -658,13 +671,8 @@ export function PosDayEndApprovalsPage() {
                               hasVariance
                                 ? "text-amber-700"
                                 : "text-emerald-700"
-                            }`}
-                          >
-                            {variance > 0
-                              ? "+"
-                              : variance < 0
-                                ? "−"
-                                : ""}
+                            }`}>
+                            {variance > 0 ? "+" : variance < 0 ? "−" : ""}
                             Rs. {money(Math.abs(variance))}
                           </p>
 
@@ -749,10 +757,7 @@ export function PosDayEndApprovalsPage() {
                         value={selected.refundTotal}
                       />
 
-                      <SummaryRow
-                        label="Voids"
-                        value={selected.voidTotal}
-                      />
+                      <SummaryRow label="Voids" value={selected.voidTotal} />
                     </div>
                   </div>
 
@@ -781,8 +786,7 @@ export function PosDayEndApprovalsPage() {
                           .map((count) => (
                             <div
                               key={count.id}
-                              className="grid grid-cols-3 border-t border-bauraBorder px-4 py-3 text-[11px]"
-                            >
+                              className="grid grid-cols-3 border-t border-bauraBorder px-4 py-3 text-[11px]">
                               <span className="font-semibold">
                                 Rs. {money(count.denominationValue)}
                               </span>
@@ -802,8 +806,8 @@ export function PosDayEndApprovalsPage() {
                         <p className="text-[10px] leading-5 text-bauraMuted">
                           The pending-approvals response does not include
                           denomination records. The counted total is available,
-                          but the individual notes and coins cannot be
-                          verified from this response.
+                          but the individual notes and coins cannot be verified
+                          from this response.
                         </p>
                       </div>
                     )}
@@ -849,18 +853,17 @@ export function PosDayEndApprovalsPage() {
                       />
 
                       <p className="text-[10px] leading-5 text-bauraMuted">
-                        Approval permanently closes this POS session.
-                        Rejection returns it to cash reconciliation.
-                        All existing transactions and business dates remain
-                        unchanged.
+                        Approval permanently closes this POS session. Rejection
+                        returns it to cash reconciliation. All existing
+                        transactions and business dates remain unchanged.
                       </p>
                     </div>
 
                     {isOwnSubmission && (
                       <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
                         <p className="text-[10px] font-semibold text-amber-800">
-                          You submitted this Day End. Another authorized
-                          manager must review it.
+                          You submitted this Day End. Another authorized manager
+                          must review it.
                         </p>
                       </div>
                     )}
@@ -870,8 +873,7 @@ export function PosDayEndApprovalsPage() {
                         type="button"
                         disabled={processing || isOwnSubmission}
                         onClick={() => openDecision("REJECT")}
-                        className="flex h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-white text-[11px] font-bold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
+                        className="flex h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-white text-[11px] font-bold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40">
                         <XCircle size={16} />
                         Reject Day End
                       </button>
@@ -880,8 +882,7 @@ export function PosDayEndApprovalsPage() {
                         type="button"
                         disabled={processing || isOwnSubmission}
                         onClick={() => openDecision("APPROVE")}
-                        className="flex h-11 items-center justify-center gap-2 rounded-xl bg-bauraPrimary text-[11px] font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
+                        className="flex h-11 items-center justify-center gap-2 rounded-xl bg-bauraPrimary text-[11px] font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">
                         <CheckCircle2 size={16} />
                         Approve Day End
                       </button>
@@ -921,22 +922,19 @@ export function PosDayEndApprovalsPage() {
             if (event.target === event.currentTarget && !processing) {
               setDecision(null);
             }
-          }}
-        >
+          }}>
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="decision-title"
-            className="w-full max-w-[440px] overflow-hidden rounded-[22px] bg-white shadow-[0_25px_80px_rgba(0,0,0,0.18)]"
-          >
+            className="w-full max-w-[440px] overflow-hidden rounded-[22px] bg-white shadow-[0_25px_80px_rgba(0,0,0,0.18)]">
             <div className="flex items-start justify-between p-6 pb-4">
               <div
                 className={`flex h-12 w-12 items-center justify-center rounded-2xl ${
                   decision === "APPROVE"
                     ? "bg-emerald-50 text-emerald-700"
                     : "bg-red-50 text-red-700"
-                }`}
-              >
+                }`}>
                 {decision === "APPROVE" ? (
                   <CheckCircle2 size={22} />
                 ) : (
@@ -949,8 +947,7 @@ export function PosDayEndApprovalsPage() {
                 disabled={processing}
                 onClick={() => setDecision(null)}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-bauraMuted hover:bg-bauraCanvas2"
-                aria-label="Close"
-              >
+                aria-label="Close">
                 <X size={17} />
               </button>
             </div>
@@ -958,8 +955,7 @@ export function PosDayEndApprovalsPage() {
             <div className="px-6">
               <h2
                 id="decision-title"
-                className="text-[19px] font-extrabold tracking-[-0.03em]"
-              >
+                className="text-[19px] font-extrabold tracking-[-0.03em]">
                 {decision === "APPROVE"
                   ? "Approve Day End?"
                   : "Reject Day End?"}
@@ -985,8 +981,7 @@ export function PosDayEndApprovalsPage() {
 
               <label
                 htmlFor="manager-note"
-                className="mt-5 block text-[10px] font-bold text-bauraInk"
-              >
+                className="mt-5 block text-[10px] font-bold text-bauraInk">
                 Manager Note {decision === "REJECT" ? "*" : "(optional)"}
               </label>
 
@@ -1010,24 +1005,19 @@ export function PosDayEndApprovalsPage() {
                 type="button"
                 disabled={processing}
                 onClick={() => setDecision(null)}
-                className="h-11 flex-1 rounded-xl border border-bauraBorder text-[11px] font-bold text-bauraInk transition hover:bg-bauraCanvas2"
-              >
+                className="h-11 flex-1 rounded-xl border border-bauraBorder text-[11px] font-bold text-bauraInk transition hover:bg-bauraCanvas2">
                 Cancel
               </button>
 
               <button
                 type="button"
                 disabled={
-                  processing ||
-                  (decision === "REJECT" && !managerNote.trim())
+                  processing || (decision === "REJECT" && !managerNote.trim())
                 }
                 onClick={() => void confirmDecision()}
                 className={`flex h-11 flex-1 items-center justify-center gap-2 rounded-xl text-[11px] font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                  decision === "APPROVE"
-                    ? "bg-bauraPrimary"
-                    : "bg-red-600"
-                }`}
-              >
+                  decision === "APPROVE" ? "bg-bauraPrimary" : "bg-red-600"
+                }`}>
                 {processing ? (
                   <>
                     <Loader2 size={15} className="animate-spin" />

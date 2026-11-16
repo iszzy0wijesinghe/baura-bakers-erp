@@ -1,8 +1,6 @@
-import {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+/** @format */
+
+import { useEffect, useMemo, useState } from "react";
 
 import {
   ArrowRight,
@@ -17,264 +15,126 @@ import {
   WalletCards,
 } from "lucide-react";
 
-import {
-  useNavigate,
-} from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
-import {
-  useAuth,
-} from "../../auth/AuthContext";
+import { useAuth } from "../../auth/useAuth";
 
-import {
-  getCurrentPosSession,
-  openPosSession,
-} from "../../lib/posApi";
+import { getCurrentPosSession, openPosSession } from "../../lib/posApi";
 
-import {
-  useToast,
-} from "../../ui/ToastProvider";
+import { useToast } from "../../ui/useToast";
 
-const LKR_DENOMINATIONS = [
-  5000,
-  2000,
-  1000,
-  500,
-  100,
-  50,
-  20,
-  10,
-  5,
-  2,
-  1,
-];
+const LKR_DENOMINATIONS = [5000, 2000, 1000, 500, 100, 50, 20, 10, 5, 2, 1];
 
-type Counts = Record<
-  number,
-  number
->;
+type Counts = Record<number, number>;
 
-function formatCurrency(
-  value: number,
-) {
-  return `Rs. ${value.toLocaleString(
-    "en-LK",
-    {
-      minimumFractionDigits:
-        2,
+function formatCurrency(value: number) {
+  return `Rs. ${value.toLocaleString("en-LK", {
+    minimumFractionDigits: 2,
 
-      maximumFractionDigits:
-        2,
-    },
-  )}`;
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 export function PosRegisterPage() {
-  const navigate =
-    useNavigate();
+  const navigate = useNavigate();
 
-  const toast =
-    useToast();
+  const toast = useToast();
 
-  const {
-    user,
-    logout,
-  } = useAuth();
+  const { user, logout } = useAuth();
 
-  const [
-    counts,
-    setCounts,
-  ] =
-    useState<Counts>(
-      {},
-    );
+  const [counts, setCounts] = useState<Counts>({});
 
-  const [
-    openingNote,
-    setOpeningNote,
-  ] =
-    useState("");
+  const [openingNote, setOpeningNote] = useState("");
 
-  const [
-    isLoading,
-    setIsLoading,
-  ] =
-    useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const [
-    isOpening,
-    setIsOpening,
-  ] =
-    useState(false);
+  const [isOpening, setIsOpening] = useState(false);
 
-  const [
-    businessDate,
-    setBusinessDate,
-  ] =
-    useState("");
+  const [businessDate, setBusinessDate] = useState("");
 
-  const [
-    businessOpen,
-    setBusinessOpen,
-  ] =
-    useState(true);
+  const [businessOpen, setBusinessOpen] = useState(true);
 
-  const [
-    withinHours,
-    setWithinHours,
-  ] =
-    useState(true);
+  const [withinHours, setWithinHours] = useState(true);
 
-  const [
-    businessReason,
-    setBusinessReason,
-  ] =
-    useState<
-      string | null
-    >(null);
+  const [businessReason, setBusinessReason] = useState<string | null>(null);
 
-  const total =
-    useMemo(
-      () =>
-        LKR_DENOMINATIONS.reduce(
-          (
-            sum,
-            denomination,
-          ) =>
-            sum +
-            denomination *
-              (counts[
-                denomination
-              ] || 0),
-          0,
-        ),
-      [
-        counts,
-      ],
-    );
-
-  async function loadSession() {
-    setIsLoading(
-      true,
-    );
-
-    try {
-      const data =
-        await getCurrentPosSession();
-
-      setBusinessDate(
-        data.business
-          .businessDate ||
-          "",
-      );
-
-      setBusinessOpen(
-        data.business
-          .isOpenDay,
-      );
-
-      setWithinHours(
-        data.business
-          .isWithinOpeningHours,
-      );
-
-      setBusinessReason(
-        typeof data.business
-          .reason ===
-          "string"
-          ? data.business
-              .reason
-          : null,
-      );
-
-      if (
-        data.session
-      ) {
-        navigate(
-          "/pos",
-          {
-            replace:
-              true,
-          },
-        );
-      }
-    } catch (error) {
-      toast.error(
-        "Unable to load register",
-        error instanceof
-          Error
-          ? error.message
-          : "Could not check the POS session.",
-      );
-    } finally {
-      setIsLoading(
-        false,
-      );
-    }
-  }
-
-  useEffect(
-    () => {
-      void loadSession();
-    },
-    [],
+  const total = useMemo(
+    () =>
+      LKR_DENOMINATIONS.reduce(
+        (sum, denomination) => sum + denomination * (counts[denomination] || 0),
+        0,
+      ),
+    [counts],
   );
 
-  function updateCount(
-    denomination:
-      number,
-    rawValue:
-      string,
-  ) {
-    const parsed =
-      Number.parseInt(
-        rawValue,
-        10,
-      );
+  useEffect(() => {
+    let active = true;
 
-    const quantity =
-      Number.isFinite(
-        parsed,
-      )
-        ? Math.max(
-            0,
-            parsed,
-          )
-        : 0;
+    getCurrentPosSession()
+      .then((data) => {
+        if (!active) return;
 
-    setCounts(
-      (
-        current,
-      ) => ({
-        ...current,
+        setBusinessDate(data.business.businessDate || "");
+        setBusinessOpen(data.business.isOpenDay);
+        setWithinHours(data.business.isWithinOpeningHours);
+        setBusinessReason(
+          typeof data.business.reason === "string"
+            ? data.business.reason
+            : null,
+        );
 
-        [denomination]:
-          quantity,
-      }),
-    );
+        if (data.session) {
+          navigate("/pos", { replace: true });
+        }
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+
+        toast.error(
+          "Unable to load register",
+          error instanceof Error
+            ? error.message
+            : "Could not check the POS session.",
+        );
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [navigate, toast]);
+
+  function updateCount(denomination: number, rawValue: string) {
+    const parsed = Number.parseInt(rawValue, 10);
+
+    const quantity = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+
+    setCounts((current) => ({
+      ...current,
+
+      [denomination]: quantity,
+    }));
   }
 
   function clearCount() {
-    setCounts(
-      {},
-    );
+    setCounts({});
   }
 
   async function openRegister() {
-    if (
-      !businessOpen
-    ) {
+    if (!businessOpen) {
       toast.warning(
         "Business day closed",
-        businessReason ||
-          "The shop is closed for this business date.",
+        businessReason || "The shop is closed for this business date.",
       );
 
       return;
     }
 
-    if (
-      !withinHours
-    ) {
+    if (!withinHours) {
       toast.warning(
         "Outside business hours",
         "The register cannot be opened outside configured business hours.",
@@ -283,94 +143,61 @@ export function PosRegisterPage() {
       return;
     }
 
-    setIsOpening(
-      true,
-    );
+    setIsOpening(true);
 
     try {
-      const denominations =
-        LKR_DENOMINATIONS.map(
-          (
-            denominationValue,
-          ) => ({
-            denominationValue,
+      const denominations = LKR_DENOMINATIONS.map((denominationValue) => ({
+        denominationValue,
 
-            quantity:
-              counts[
-                denominationValue
-              ] || 0,
-          }),
-        );
+        quantity: counts[denominationValue] || 0,
+      }));
 
-      const result =
-        await openPosSession({
-          openingNote:
-            openingNote.trim() ||
-            null,
+      const result = await openPosSession({
+        openingNote: openingNote.trim() || null,
 
-          denominations,
-        });
+        denominations,
+      });
 
       toast.success(
         "Register opened",
         `${result.session.sessionNo} is ready for sales.`,
       );
 
-      navigate(
-        "/pos",
-        {
-          replace:
-            true,
-        },
-      );
+      navigate("/pos", {
+        replace: true,
+      });
     } catch (error) {
       toast.error(
         "Unable to open register",
-        error instanceof
-          Error
+        error instanceof Error
           ? error.message
           : "Could not open the POS register.",
       );
     } finally {
-      setIsOpening(
-        false,
-      );
+      setIsOpening(false);
     }
   }
 
   function signOut() {
     logout();
 
-    navigate(
-      "/pos/login",
-      {
-        replace:
-          true,
-      },
-    );
+    navigate("/pos/login", {
+      replace: true,
+    });
   }
 
-  if (
-    isLoading
-  ) {
+  if (isLoading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#f7f6f2]">
         <div className="flex items-center gap-3 text-[12px] font-semibold text-bauraMuted">
-          <RefreshCw
-            size={17}
-            className="animate-spin"
-          />
-
+          <RefreshCw size={17} className="animate-spin" />
           Checking register...
         </div>
       </main>
     );
   }
 
-  const canOpen =
-    businessOpen &&
-    withinHours &&
-    !isOpening;
+  const canOpen = businessOpen && withinHours && !isOpening;
 
   return (
     <main className="min-h-screen bg-[#f7f6f2] text-bauraInk">
@@ -392,36 +219,27 @@ export function PosRegisterPage() {
                 </span>
               </div>
 
-              <p className="text-[9px] text-bauraMuted">
-                Register opening
-              </p>
+              <p className="text-[9px] text-bauraMuted">Register opening</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             <div className="hidden text-right sm:block">
               <p className="text-[10px] font-semibold">
-                {user?.firstName}{" "}
-                {user?.lastName}
+                {user?.firstName} {user?.lastName}
               </p>
 
               <p className="text-[8px] text-bauraMuted">
-                {user?.roleName ||
-                  "POS Staff"}
+                {user?.roleName || "POS Staff"}
               </p>
             </div>
 
             <button
               type="button"
-              onClick={
-                signOut
-              }
+              onClick={signOut}
               className="flex h-10 w-10 items-center justify-center rounded-xl border border-black/[0.07] bg-white text-bauraMuted transition hover:bg-[#f7f6f2] hover:text-bauraInk"
-              aria-label="Sign out"
-            >
-              <LogOut
-                size={16}
-              />
+              aria-label="Sign out">
+              <LogOut size={16} />
             </button>
           </div>
         </div>
@@ -439,113 +257,74 @@ export function PosRegisterPage() {
             </h1>
 
             <p className="mt-2 max-w-2xl text-[11px] leading-5 text-bauraMuted">
-              Count the physical cash currently in the drawer before accepting the first sale. The opening float is calculated automatically from the denominations below.
+              Count the physical cash currently in the drawer before accepting
+              the first sale. The opening float is calculated automatically from
+              the denominations below.
             </p>
           </div>
 
           <div className="overflow-hidden rounded-[22px] border border-black/[0.06] bg-white shadow-sm">
             <div className="grid grid-cols-[1fr_130px_150px] border-b border-black/[0.06] bg-[#fafaf8] px-5 py-3 text-[8px] font-bold uppercase tracking-[0.09em] text-bauraMuted">
-              <span>
-                Denomination
-              </span>
+              <span>Denomination</span>
 
-              <span className="text-center">
-                Quantity
-              </span>
+              <span className="text-center">Quantity</span>
 
-              <span className="text-right">
-                Amount
-              </span>
+              <span className="text-right">Amount</span>
             </div>
 
-            {LKR_DENOMINATIONS.map(
-              (
-                denomination,
-              ) => {
-                const quantity =
-                  counts[
-                    denomination
-                  ] || 0;
+            {LKR_DENOMINATIONS.map((denomination) => {
+              const quantity = counts[denomination] || 0;
 
-                const amount =
-                  denomination *
-                  quantity;
+              const amount = denomination * quantity;
 
-                return (
-                  <div
-                    key={
-                      denomination
-                    }
-                    className="grid grid-cols-[1fr_130px_150px] items-center border-b border-black/[0.045] px-5 py-3.5 last:border-b-0"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-bauraGoldSoft text-bauraGoldDark">
-                        <Banknote
-                          size={16}
-                        />
-                      </div>
-
-                      <div>
-                        <p className="text-[12px] font-bold">
-                          Rs.{" "}
-                          {denomination.toLocaleString(
-                            "en-LK",
-                          )}
-                        </p>
-
-                        <p className="mt-0.5 text-[8px] text-bauraMuted">
-                          {denomination >=
-                          20
-                            ? "Note"
-                            : "Coin"}
-                        </p>
-                      </div>
+              return (
+                <div
+                  key={denomination}
+                  className="grid grid-cols-[1fr_130px_150px] items-center border-b border-black/[0.045] px-5 py-3.5 last:border-b-0">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-bauraGoldSoft text-bauraGoldDark">
+                      <Banknote size={16} />
                     </div>
 
-                    <div className="flex justify-center">
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        inputMode="numeric"
-                        value={
-                          quantity ||
-                          ""
-                        }
-                        onChange={(
-                          event,
-                        ) =>
-                          updateCount(
-                            denomination,
-                            event
-                              .target
-                              .value,
-                          )
-                        }
-                        className="h-10 w-[88px] rounded-xl border border-black/[0.08] bg-[#fafaf8] px-3 text-center text-[12px] font-bold outline-none transition focus:border-bauraGold focus:bg-white"
-                        placeholder="0"
-                      />
-                    </div>
+                    <div>
+                      <p className="text-[12px] font-bold">
+                        Rs. {denomination.toLocaleString("en-LK")}
+                      </p>
 
-                    <p className="text-right text-[11px] font-bold">
-                      {formatCurrency(
-                        amount,
-                      )}
-                    </p>
+                      <p className="mt-0.5 text-[8px] text-bauraMuted">
+                        {denomination >= 20 ? "Note" : "Coin"}
+                      </p>
+                    </div>
                   </div>
-                );
-              },
-            )}
+
+                  <div className="flex justify-center">
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      inputMode="numeric"
+                      value={quantity || ""}
+                      onChange={(event) =>
+                        updateCount(denomination, event.target.value)
+                      }
+                      className="h-10 w-[88px] rounded-xl border border-black/[0.08] bg-[#fafaf8] px-3 text-center text-[12px] font-bold outline-none transition focus:border-bauraGold focus:bg-white"
+                      placeholder="0"
+                    />
+                  </div>
+
+                  <p className="text-right text-[11px] font-bold">
+                    {formatCurrency(amount)}
+                  </p>
+                </div>
+              );
+            })}
           </div>
 
           <div className="mt-4 flex justify-end">
             <button
               type="button"
-              onClick={
-                clearCount
-              }
-              className="text-[9px] font-semibold text-bauraMuted transition hover:text-bauraInk"
-            >
+              onClick={clearCount}
+              className="text-[9px] font-semibold text-bauraMuted transition hover:text-bauraInk">
               Clear count
             </button>
           </div>
@@ -554,9 +333,7 @@ export function PosRegisterPage() {
         <aside className="space-y-5">
           <div className="rounded-[22px] bg-bauraPrimary p-6 text-white shadow-sm">
             <div className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-white/10">
-              <WalletCards
-                size={20}
-              />
+              <WalletCards size={20} />
             </div>
 
             <p className="mt-6 text-[9px] font-bold uppercase tracking-[0.12em] text-white/50">
@@ -564,29 +341,15 @@ export function PosRegisterPage() {
             </p>
 
             <p className="mt-1 text-[28px] font-bold tracking-[-0.04em]">
-              {formatCurrency(
-                total,
-              )}
+              {formatCurrency(total)}
             </p>
 
             <div className="mt-6 border-t border-white/10 pt-5">
               <div className="flex items-center justify-between">
-                <span className="text-[9px] text-white/55">
-                  Units counted
-                </span>
+                <span className="text-[9px] text-white/55">Units counted</span>
 
                 <span className="text-[10px] font-bold">
-                  {Object.values(
-                    counts,
-                  ).reduce(
-                    (
-                      sum,
-                      value,
-                    ) =>
-                      sum +
-                      value,
-                    0,
-                  )}
+                  {Object.values(counts).reduce((sum, value) => sum + value, 0)}
                 </span>
               </div>
             </div>
@@ -594,15 +357,10 @@ export function PosRegisterPage() {
 
           <div className="rounded-[22px] border border-black/[0.06] bg-white p-5 shadow-sm">
             <div className="flex items-center gap-3">
-              <Store
-                size={17}
-                className="text-bauraGoldDark"
-              />
+              <Store size={17} className="text-bauraGoldDark" />
 
               <div>
-                <p className="text-[10px] font-bold">
-                  Business day
-                </p>
+                <p className="text-[10px] font-bold">Business day</p>
 
                 <p className="mt-0.5 text-[9px] text-bauraMuted">
                   Register availability
@@ -613,108 +371,64 @@ export function PosRegisterPage() {
             <div className="mt-5 space-y-3">
               <div className="flex items-center justify-between rounded-xl bg-[#fafaf8] px-3.5 py-3">
                 <div className="flex items-center gap-2">
-                  <CalendarDays
-                    size={14}
-                    className="text-bauraMuted"
-                  />
+                  <CalendarDays size={14} className="text-bauraMuted" />
 
-                  <span className="text-[9px] text-bauraMuted">
-                    Date
-                  </span>
+                  <span className="text-[9px] text-bauraMuted">Date</span>
                 </div>
 
                 <span className="text-[9px] font-bold">
-                  {businessDate ||
-                    "—"}
+                  {businessDate || "—"}
                 </span>
               </div>
 
               <div className="flex items-center justify-between rounded-xl bg-[#fafaf8] px-3.5 py-3">
                 <div className="flex items-center gap-2">
-                  <Clock3
-                    size={14}
-                    className="text-bauraMuted"
-                  />
+                  <Clock3 size={14} className="text-bauraMuted" />
 
-                  <span className="text-[9px] text-bauraMuted">
-                    Hours
-                  </span>
+                  <span className="text-[9px] text-bauraMuted">Hours</span>
                 </div>
 
                 <span
                   className={`text-[9px] font-bold ${
-                    withinHours
-                      ? "text-emerald-600"
-                      : "text-amber-600"
-                  }`}
-                >
-                  {withinHours
-                    ? "Open"
-                    : "Outside hours"}
+                    withinHours ? "text-emerald-600" : "text-amber-600"
+                  }`}>
+                  {withinHours ? "Open" : "Outside hours"}
                 </span>
               </div>
 
               <div className="flex items-center justify-between rounded-xl bg-[#fafaf8] px-3.5 py-3">
                 <div className="flex items-center gap-2">
-                  <ShieldCheck
-                    size={14}
-                    className="text-bauraMuted"
-                  />
+                  <ShieldCheck size={14} className="text-bauraMuted" />
 
-                  <span className="text-[9px] text-bauraMuted">
-                    Day status
-                  </span>
+                  <span className="text-[9px] text-bauraMuted">Day status</span>
                 </div>
 
                 <span
                   className={`text-[9px] font-bold ${
-                    businessOpen
-                      ? "text-emerald-600"
-                      : "text-red-600"
-                  }`}
-                >
-                  {businessOpen
-                    ? "Trading day"
-                    : "Closed"}
+                    businessOpen ? "text-emerald-600" : "text-red-600"
+                  }`}>
+                  {businessOpen ? "Trading day" : "Closed"}
                 </span>
               </div>
             </div>
 
             {businessReason && (
               <p className="mt-4 rounded-xl bg-amber-50 px-3.5 py-3 text-[9px] leading-4 text-amber-800">
-                {
-                  businessReason
-                }
+                {businessReason}
               </p>
             )}
           </div>
 
           <div className="rounded-[22px] border border-black/[0.06] bg-white p-5 shadow-sm">
             <label className="block">
-              <span className="text-[9px] font-bold">
-                Opening note
-              </span>
+              <span className="text-[9px] font-bold">Opening note</span>
 
-              <span className="ml-1 text-[8px] text-bauraMuted">
-                optional
-              </span>
+              <span className="ml-1 text-[8px] text-bauraMuted">optional</span>
 
               <textarea
-                value={
-                  openingNote
-                }
-                onChange={(
-                  event,
-                ) =>
-                  setOpeningNote(
-                    event
-                      .target
-                      .value,
-                  )
-                }
-                maxLength={
-                  500
-                }
+                value={openingNote}
+                onChange={(event) => setOpeningNote(event.target.value)}
+                maxLength={500}
                 rows={3}
                 placeholder="Add a note about the opening drawer..."
                 className="mt-2 w-full resize-none rounded-[14px] border border-black/[0.08] bg-[#fafaf8] p-3.5 text-[10px] leading-5 outline-none transition placeholder:text-bauraMuted2 focus:border-bauraGold focus:bg-white"
@@ -723,34 +437,19 @@ export function PosRegisterPage() {
 
             <button
               type="button"
-              disabled={
-                !canOpen
-              }
-              onClick={
-                openRegister
-              }
-              className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-[14px] bg-bauraPrimary px-4 text-[10px] font-bold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-40"
-            >
+              disabled={!canOpen}
+              onClick={openRegister}
+              className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-[14px] bg-bauraPrimary px-4 text-[10px] font-bold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-40">
               {isOpening ? (
                 <>
-                  <RefreshCw
-                    size={15}
-                    className="animate-spin"
-                  />
-
+                  <RefreshCw size={15} className="animate-spin" />
                   Opening register...
                 </>
               ) : (
                 <>
-                  <CheckCircle2
-                    size={15}
-                  />
-
+                  <CheckCircle2 size={15} />
                   Open register
-
-                  <ArrowRight
-                    size={14}
-                  />
+                  <ArrowRight size={14} />
                 </>
               )}
             </button>

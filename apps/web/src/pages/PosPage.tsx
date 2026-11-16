@@ -1,3 +1,5 @@
+/** @format */
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
@@ -11,19 +13,14 @@ import {
   Search,
   ShoppingCart,
   Trash2,
-  X
+  X,
 } from "lucide-react";
 import { AppLayout } from "../layouts/AppLayout";
 import { apiRequest } from "../lib/api";
 import { Modal } from "../ui/Modal";
-import { useToast } from "../ui/ToastProvider";
+import { useToast } from "../ui/useToast";
 
-type PaymentMethod =
-  | "CASH"
-  | "CARD"
-  | "BANK_TRANSFER"
-  | "ONLINE"
-  | "OTHER";
+type PaymentMethod = "CASH" | "CARD" | "BANK_TRANSFER" | "ONLINE" | "OTHER";
 
 type ProductSize = {
   id: string;
@@ -120,7 +117,7 @@ const paymentMethods: PaymentMethod[] = [
   "CARD",
   "BANK_TRANSFER",
   "ONLINE",
-  "OTHER"
+  "OTHER",
 ];
 
 function round2(value: number) {
@@ -136,13 +133,13 @@ function formatCurrency(value: number | string | null | undefined) {
 
   return `Rs. ${amount.toLocaleString("en-LK", {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2
+    maximumFractionDigits: 2,
   })}`;
 }
 
 function formatQty(value: number | string | null | undefined) {
   return Number(value ?? 0).toLocaleString("en-LK", {
-    maximumFractionDigits: 3
+    maximumFractionDigits: 3,
   });
 }
 
@@ -158,17 +155,19 @@ function getCartKey(productId: string, productSizeId: string | null) {
 }
 
 function getProductName(product: PosProduct) {
-  return product.displayName ||
+  return (
+    product.displayName ||
     (product.variantName
       ? `${product.name} - ${product.variantName}`
-      : product.name);
+      : product.name)
+  );
 }
 
 function productRequiresSize(product: PosProduct) {
   return Boolean(
     product.requiresSize ||
     product.hasSizes ||
-    (product.sizes && product.sizes.length > 0)
+    (product.sizes && product.sizes.length > 0),
   );
 }
 
@@ -204,8 +203,12 @@ export function PosPage() {
   const [discountTotal, setDiscountTotal] = useState("");
   const [tenderedAmount, setTenderedAmount] = useState("");
   const [paymentReference, setPaymentReference] = useState("");
-  const [selectedProduct, setSelectedProduct] = useState<PosProduct | null>(null);
-  const [completedSale, setCompletedSale] = useState<CompletedSale | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<PosProduct | null>(
+    null,
+  );
+  const [completedSale, setCompletedSale] = useState<CompletedSale | null>(
+    null,
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [isCompletingSale, setIsCompletingSale] = useState(false);
 
@@ -222,7 +225,7 @@ export function PosPage() {
         .includes(keyword);
 
       const sizeMatches = product.sizes?.some((size) =>
-        size.label.toLowerCase().includes(keyword)
+        size.label.toLowerCase().includes(keyword),
       );
 
       return nameMatches || sizeMatches;
@@ -230,13 +233,11 @@ export function PosPage() {
   }, [products, search]);
 
   const grossTotal = useMemo(
-    () => round2(
-      cart.reduce(
-        (total, item) => total + item.qty * item.unitSellPrice,
-        0
-      )
-    ),
-    [cart]
+    () =>
+      round2(
+        cart.reduce((total, item) => total + item.qty * item.unitSellPrice, 0),
+      ),
+    [cart],
   );
 
   const enteredDiscount = Number(discountTotal || 0);
@@ -250,23 +251,23 @@ export function PosPage() {
 
   const totalCartQty = useMemo(
     () => round3(cart.reduce((total, item) => total + item.qty, 0)),
-    [cart]
+    [cart],
   );
 
   const availableProductCount = useMemo(
     () => products.filter((product) => Number(product.availableQty) > 0).length,
-    [products]
+    [products],
   );
 
   const tenderedValue = Number(tenderedAmount || 0);
 
-  const changeAmount = paymentMethod === "CASH" && tenderedAmount.trim()
-    ? round2(Math.max(0, tenderedValue - netTotal))
-    : 0;
+  const changeAmount =
+    paymentMethod === "CASH" && tenderedAmount.trim()
+      ? round2(Math.max(0, tenderedValue - netTotal))
+      : 0;
 
   const requiresReference =
-    paymentMethod === "CARD" ||
-    paymentMethod === "BANK_TRANSFER";
+    paymentMethod === "CARD" || paymentMethod === "BANK_TRANSFER";
 
   async function loadPosData(showToast = false) {
     setIsLoading(true);
@@ -274,7 +275,7 @@ export function PosPage() {
     try {
       const [productsData, channelsData] = await Promise.all([
         apiRequest<{ products: PosProduct[] }>("/sales/products"),
-        apiRequest<{ channels: SalesChannel[] }>("/sales/channels")
+        apiRequest<{ channels: SalesChannel[] }>("/sales/channels"),
       ]);
 
       const latestProducts = productsData.products;
@@ -286,7 +287,7 @@ export function PosPage() {
         current
           .map((item): CartItem | null => {
             const product = latestProducts.find(
-              (entry) => entry.id === item.productId
+              (entry) => entry.id === item.productId,
             );
 
             if (!product) return null;
@@ -295,7 +296,7 @@ export function PosPage() {
               if (!item.productSizeId) return null;
 
               const size = product.sizes?.find(
-                (entry) => entry.id === item.productSizeId
+                (entry) => entry.id === item.productSizeId,
               );
 
               if (!size) return null;
@@ -311,7 +312,7 @@ export function PosPage() {
                 displayName: `${getProductName(product)} - ${size.label}`,
                 unitSellPrice: getSizePrice(size),
                 availableQty,
-                qty: Math.min(item.qty, availableQty)
+                qty: Math.min(item.qty, availableQty),
               };
             }
 
@@ -328,27 +329,29 @@ export function PosPage() {
               displayName: getProductName(product),
               unitSellPrice: Number(product.sellPrice),
               availableQty,
-              qty: Math.min(item.qty, availableQty)
+              qty: Math.min(item.qty, availableQty),
             };
           })
-          .filter((item): item is CartItem => item !== null)
+          .filter((item): item is CartItem => item !== null),
       );
 
       setSelectedProduct((current) => {
         if (!current) return null;
-        return latestProducts.find((product) => product.id === current.id) ?? null;
+        return (
+          latestProducts.find((product) => product.id === current.id) ?? null
+        );
       });
 
       if (showToast) {
         toast.success(
           "POS refreshed",
-          "Latest size-specific Bakery Stock is now available."
+          "Latest size-specific Bakery Stock is now available.",
         );
       }
     } catch (error) {
       toast.error(
         "Failed to load POS",
-        error instanceof Error ? error.message : "Unable to load POS data."
+        error instanceof Error ? error.message : "Unable to load POS data.",
       );
     } finally {
       setIsLoading(false);
@@ -356,8 +359,39 @@ export function PosPage() {
   }
 
   useEffect(() => {
-    void loadPosData();
-  }, []);
+    let active = true;
+
+    Promise.all([
+      apiRequest<{ products: PosProduct[] }>("/sales/products"),
+      apiRequest<{ channels: SalesChannel[] }>("/sales/channels"),
+    ])
+      .then(([productsData, channelsData]) => {
+        if (!active) return;
+
+        setProducts(productsData.products);
+
+        setChannels(
+          channelsData.channels.filter((channel) => channel.isActive),
+        );
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+
+        toast.error(
+          "Failed to load POS",
+          error instanceof Error ? error.message : "Unable to load POS data.",
+        );
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [toast]);
 
   function addToCart(product: PosProduct, size: ProductSize | null = null) {
     const requiresSize = productRequiresSize(product);
@@ -369,28 +403,27 @@ export function PosPage() {
 
     const productSizeId = size?.id ?? null;
     const availableQty = Number(
-      size ? size.availableQty : product.availableQty
+      size ? size.availableQty : product.availableQty,
     );
 
-    const unitSellPrice = size
-      ? getSizePrice(size)
-      : Number(product.sellPrice);
+    const unitSellPrice = size ? getSizePrice(size) : Number(product.sellPrice);
 
     const productName = getProductName(product);
-    const displayName = size
-      ? `${productName} - ${size.label}`
-      : productName;
+    const displayName = size ? `${productName} - ${size.label}` : productName;
 
     if (!Number.isFinite(availableQty) || availableQty < 1) {
       toast.warning(
         "Out of stock",
-        `${displayName} is not available in Bakery Stock.`
+        `${displayName} is not available in Bakery Stock.`,
       );
       return;
     }
 
     if (!Number.isFinite(unitSellPrice) || unitSellPrice < 0) {
-      toast.error("Invalid price", `${displayName} has an invalid selling price.`);
+      toast.error(
+        "Invalid price",
+        `${displayName} has an invalid selling price.`,
+      );
       return;
     }
 
@@ -400,7 +433,7 @@ export function PosPage() {
     if (existing && existing.qty + 1 > availableQty) {
       toast.warning(
         "Stock limit reached",
-        `Only ${formatQty(availableQty)} ${displayName} available.`
+        `Only ${formatQty(availableQty)} ${displayName} available.`,
       );
       return;
     }
@@ -415,9 +448,9 @@ export function PosPage() {
                 ...item,
                 qty: Math.min(item.qty + 1, availableQty),
                 availableQty,
-                unitSellPrice
+                unitSellPrice,
               }
-            : item
+            : item,
         );
       }
 
@@ -432,8 +465,8 @@ export function PosPage() {
           displayName,
           qty: 1,
           unitSellPrice,
-          availableQty
-        }
+          availableQty,
+        },
       ];
     });
 
@@ -448,17 +481,15 @@ export function PosPage() {
     if (item.qty + 1 > item.availableQty) {
       toast.warning(
         "Stock limit reached",
-        `Only ${formatQty(item.availableQty)} ${item.displayName} available.`
+        `Only ${formatQty(item.availableQty)} ${item.displayName} available.`,
       );
       return;
     }
 
     setCart((current) =>
       current.map((entry) =>
-        entry.key === key
-          ? { ...entry, qty: round3(entry.qty + 1) }
-          : entry
-      )
+        entry.key === key ? { ...entry, qty: round3(entry.qty + 1) } : entry,
+      ),
     );
   }
 
@@ -468,9 +499,9 @@ export function PosPage() {
         .map((item) =>
           item.key === key
             ? { ...item, qty: round3(Math.max(item.qty - 1, 0)) }
-            : item
+            : item,
         )
-        .filter((item) => item.qty > 0)
+        .filter((item) => item.qty > 0),
     );
   }
 
@@ -487,11 +518,11 @@ export function PosPage() {
           item.key === key
             ? {
                 ...item,
-                qty: Math.min(normalized, item.availableQty)
+                qty: Math.min(normalized, item.availableQty),
               }
-            : item
+            : item,
         )
-        .filter((item) => item.qty > 0)
+        .filter((item) => item.qty > 0),
     );
   }
 
@@ -518,7 +549,7 @@ export function PosPage() {
     if (netTotal <= 0) {
       toast.warning(
         "Invalid sale total",
-        "Net total must be greater than zero."
+        "Net total must be greater than zero.",
       );
       return;
     }
@@ -530,7 +561,7 @@ export function PosPage() {
     ) {
       toast.warning(
         "Invalid discount",
-        "Enter a discount between zero and the gross total."
+        "Enter a discount between zero and the gross total.",
       );
       return;
     }
@@ -539,13 +570,13 @@ export function PosPage() {
       (item) =>
         item.qty <= 0 ||
         item.qty > item.availableQty ||
-        !Number.isFinite(item.qty)
+        !Number.isFinite(item.qty),
     );
 
     if (invalidStockItem) {
       toast.warning(
         "Stock changed",
-        `${invalidStockItem.displayName} has insufficient available stock.`
+        `${invalidStockItem.displayName} has insufficient available stock.`,
       );
       return;
     }
@@ -554,7 +585,7 @@ export function PosPage() {
       if (!Number.isFinite(tenderedValue) || tenderedValue < netTotal) {
         toast.warning(
           "Insufficient cash",
-          "Tendered cash must cover the net sale total."
+          "Tendered cash must cover the net sale total.",
         );
         return;
       }
@@ -563,15 +594,14 @@ export function PosPage() {
     if (requiresReference && !paymentReference.trim()) {
       toast.warning(
         "Payment reference required",
-        `Enter the ${formatPaymentMethod(paymentMethod).toLowerCase()} reference.`
+        `Enter the ${formatPaymentMethod(paymentMethod).toLowerCase()} reference.`,
       );
       return;
     }
 
     if (isCompletingSale) return;
 
-    const idempotencyKey =
-      checkoutKeyRef.current ?? crypto.randomUUID();
+    const idempotencyKey = checkoutKeyRef.current ?? crypto.randomUUID();
 
     checkoutKeyRef.current = idempotencyKey;
 
@@ -594,22 +624,17 @@ export function PosPage() {
                 ? round2(tenderedValue)
                 : null,
             reference:
-              paymentMethod === "CASH"
-                ? null
-                : paymentReference.trim() || null
+              paymentMethod === "CASH" ? null : paymentReference.trim() || null,
           },
           items: cart.map((item) => ({
             productId: item.productId,
             productSizeId: item.productSizeId,
-            qty: item.qty
-          }))
-        })
+            qty: item.qty,
+          })),
+        }),
       });
 
-      toast.success(
-        "Sale completed",
-        "Bakery Stock was reduced successfully."
-      );
+      toast.success("Sale completed", "Bakery Stock was reduced successfully.");
 
       setCompletedSale(data.sale);
       clearSale();
@@ -617,7 +642,7 @@ export function PosPage() {
     } catch (error) {
       toast.error(
         "Sale failed",
-        error instanceof Error ? error.message : "Failed to complete sale."
+        error instanceof Error ? error.message : "Failed to complete sale.",
       );
 
       /*
@@ -641,12 +666,8 @@ export function PosPage() {
             type="button"
             onClick={() => void loadPosData(true)}
             disabled={isLoading || isCompletingSale}
-            className="erp-button-secondary"
-          >
-            <RefreshCw
-              size={14}
-              className={isLoading ? "animate-spin" : ""}
-            />
+            className="erp-button-secondary">
+            <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
             Refresh
           </button>
 
@@ -654,14 +675,12 @@ export function PosPage() {
             type="button"
             onClick={clearSale}
             disabled={cart.length === 0 || isCompletingSale}
-            className="erp-button-danger"
-          >
+            className="erp-button-danger">
             <X size={14} />
             Clear Sale
           </button>
         </>
-      }
-    >
+      }>
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
         <PosMetric
           label="Active Products"
@@ -686,7 +705,8 @@ export function PosPage() {
             <div>
               <h2 className="erp-section-title">Products</h2>
               <p className="erp-section-subtitle">
-                {filteredProducts.length} shown · {products.length} active products
+                {filteredProducts.length} shown · {products.length} active
+                products
               </p>
             </div>
 
@@ -713,11 +733,13 @@ export function PosPage() {
                   const isAvailable = availableQty > 0;
                   const requiresSize = productRequiresSize(product);
 
-                  const threshold = product.finishedStockAlertQty === null
-                    ? null
-                    : Number(product.finishedStockAlertQty);
+                  const threshold =
+                    product.finishedStockAlertQty === null
+                      ? null
+                      : Number(product.finishedStockAlertQty);
 
-                  const lowStock = isAvailable &&
+                  const lowStock =
+                    isAvailable &&
                     threshold !== null &&
                     availableQty <= threshold;
 
@@ -741,8 +763,7 @@ export function PosPage() {
                         isAvailable
                           ? "border-bauraBorder bg-white hover:border-bauraGold/60 hover:shadow-bauraCardHover"
                           : "cursor-not-allowed border-bauraBorder bg-bauraCanvas2 opacity-65"
-                      }`}
-                    >
+                      }`}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-bauraGoldSoft text-bauraGoldDark">
                           <PackageCheck size={20} />
@@ -766,7 +787,8 @@ export function PosPage() {
 
                       {requiresSize && (
                         <p className="mt-1 text-[9px] text-bauraMuted">
-                          {activeSizes.length} size{activeSizes.length === 1 ? "" : "s"} · Select size
+                          {activeSizes.length} size
+                          {activeSizes.length === 1 ? "" : "s"} · Select size
                         </p>
                       )}
 
@@ -820,8 +842,7 @@ export function PosPage() {
                 value={salesChannelId}
                 onChange={(event) => setSalesChannelId(event.target.value)}
                 disabled={isCompletingSale}
-                className="erp-input"
-              >
+                className="erp-input">
                 <option value="">Direct / Shop Sale</option>
                 {channels.map((channel) => (
                   <option key={channel.id} value={channel.id}>
@@ -842,8 +863,7 @@ export function PosPage() {
                   checkoutKeyRef.current = null;
                 }}
                 disabled={isCompletingSale}
-                className="erp-input"
-              >
+                className="erp-input">
                 {paymentMethods.map((method) => (
                   <option key={method} value={method}>
                     {formatPaymentMethod(method)}
@@ -873,8 +893,7 @@ export function PosPage() {
                 {cart.map((item) => (
                   <div
                     key={item.key}
-                    className="rounded-[14px] border border-bauraBorder bg-white p-3.5"
-                  >
+                    className="rounded-[14px] border border-bauraBorder bg-white p-3.5">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <h3 className="text-[11px] font-semibold text-bauraInk">
@@ -890,8 +909,7 @@ export function PosPage() {
                         type="button"
                         onClick={() => removeFromCart(item.key)}
                         disabled={isCompletingSale}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-bauraDangerSoft text-bauraDanger transition hover:bg-red-100 disabled:opacity-50"
-                      >
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-bauraDangerSoft text-bauraDanger transition hover:bg-red-100 disabled:opacity-50">
                         <Trash2 size={13} />
                       </button>
                     </div>
@@ -902,8 +920,7 @@ export function PosPage() {
                           type="button"
                           onClick={() => decreaseQty(item.key)}
                           disabled={isCompletingSale}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-bauraBorder bg-white text-bauraInk transition hover:bg-bauraCanvas2 disabled:opacity-50"
-                        >
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-bauraBorder bg-white text-bauraInk transition hover:bg-bauraCanvas2 disabled:opacity-50">
                           <Minus size={13} />
                         </button>
 
@@ -923,12 +940,10 @@ export function PosPage() {
                         <button
                           type="button"
                           disabled={
-                            isCompletingSale ||
-                            item.qty + 1 > item.availableQty
+                            isCompletingSale || item.qty + 1 > item.availableQty
                           }
                           onClick={() => increaseQty(item.key)}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-bauraBorder bg-white text-bauraInk transition hover:bg-bauraCanvas2 disabled:cursor-not-allowed disabled:opacity-40"
-                        >
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-bauraBorder bg-white text-bauraInk transition hover:bg-bauraCanvas2 disabled:cursor-not-allowed disabled:opacity-40">
                           <Plus size={13} />
                         </button>
                       </div>
@@ -952,9 +967,7 @@ export function PosPage() {
                 />
 
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-[10px] text-bauraMuted">
-                    Discount
-                  </span>
+                  <span className="text-[10px] text-bauraMuted">Discount</span>
                   <input
                     type="number"
                     min="0"
@@ -1033,8 +1046,7 @@ export function PosPage() {
                 cart.length === 0 ||
                 netTotal <= 0
               }
-              className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-bauraPrimary px-5 text-[11px] font-semibold text-white shadow-bauraButton transition hover:bg-bauraPrimaryDark disabled:cursor-not-allowed disabled:opacity-50"
-            >
+              className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-bauraPrimary px-5 text-[11px] font-semibold text-white shadow-bauraButton transition hover:bg-bauraPrimaryDark disabled:cursor-not-allowed disabled:opacity-50">
               {isCompletingSale ? (
                 <>
                   <RefreshCw size={15} className="animate-spin" />
@@ -1055,11 +1067,12 @@ export function PosPage() {
         open={Boolean(selectedProduct)}
         onClose={() => setSelectedProduct(null)}
         title="Select Product Size"
-        subtitle={selectedProduct
-          ? `Choose the size for ${getProductName(selectedProduct)}.`
-          : ""}
-        widthClassName="max-w-lg"
-      >
+        subtitle={
+          selectedProduct
+            ? `Choose the size for ${getProductName(selectedProduct)}.`
+            : ""
+        }
+        widthClassName="max-w-lg">
         {selectedProduct && (
           <div className="grid gap-3">
             {(selectedProduct.sizes ?? []).length === 0 ? (
@@ -1069,9 +1082,8 @@ export function PosPage() {
                 const availableQty = Number(size.availableQty || 0);
                 const isAvailable = availableQty >= 1;
                 const key = getCartKey(selectedProduct.id, size.id);
-                const existingQty = cart.find(
-                  (item) => item.key === key
-                )?.qty ?? 0;
+                const existingQty =
+                  cart.find((item) => item.key === key)?.qty ?? 0;
 
                 return (
                   <button
@@ -1083,8 +1095,7 @@ export function PosPage() {
                       isAvailable
                         ? "border-bauraBorder bg-white hover:border-bauraGold/60 hover:bg-bauraCanvas2"
                         : "cursor-not-allowed border-bauraBorder bg-bauraCanvas2 opacity-60"
-                    }`}
-                  >
+                    }`}>
                     <div className="min-w-0">
                       <p className="text-[12px] font-semibold text-bauraInk">
                         {size.label}
@@ -1094,12 +1105,16 @@ export function PosPage() {
                       </p>
                       <p className="mt-1 text-[9px] text-bauraMuted">
                         {formatQty(availableQty)} available
-                        {existingQty > 0 && ` · ${formatQty(existingQty)} in cart`}
+                        {existingQty > 0 &&
+                          ` · ${formatQty(existingQty)} in cart`}
                       </p>
                     </div>
 
                     {isAvailable ? (
-                      <ChevronRight size={17} className="shrink-0 text-bauraGoldDark" />
+                      <ChevronRight
+                        size={17}
+                        className="shrink-0 text-bauraGoldDark"
+                      />
                     ) : (
                       <span className="erp-badge bg-bauraDangerSoft text-bauraDanger">
                         Out of Stock
@@ -1118,8 +1133,7 @@ export function PosPage() {
         onClose={() => setCompletedSale(null)}
         title="Sale Completed"
         subtitle="Finished Bakery Stock was reduced and the sale was recorded."
-        widthClassName="max-w-xl"
-      >
+        widthClassName="max-w-xl">
         {completedSale && (
           <div className="grid gap-4">
             <div className="rounded-[14px] border border-green-100 bg-bauraSuccessSoft p-4">
@@ -1149,8 +1163,7 @@ export function PosPage() {
                   {completedSale.items.map((item) => (
                     <div
                       key={item.id}
-                      className="flex items-start justify-between gap-3 border-b border-bauraBorder pb-3 last:border-0 last:pb-0"
-                    >
+                      className="flex items-start justify-between gap-3 border-b border-bauraBorder pb-3 last:border-0 last:pb-0">
                       <div className="min-w-0">
                         <p className="text-[10px] font-semibold text-bauraInk">
                           {getCompletedItemName(item)}
@@ -1205,8 +1218,7 @@ export function PosPage() {
             <button
               type="button"
               onClick={() => setCompletedSale(null)}
-              className="erp-button-primary w-full"
-            >
+              className="erp-button-primary w-full">
               Done
             </button>
           </div>
@@ -1219,7 +1231,7 @@ export function PosPage() {
 function PosMetric({
   label,
   value,
-  note
+  note,
 }: {
   label: string;
   value: string;
@@ -1233,9 +1245,7 @@ function PosMetric({
       <p className="mt-2 text-[20px] font-semibold tracking-[-0.04em] text-bauraInk">
         {value}
       </p>
-      <p className="mt-1 text-[9px] text-bauraMuted">
-        {note}
-      </p>
+      <p className="mt-1 text-[9px] text-bauraMuted">{note}</p>
     </div>
   );
 }
@@ -1251,7 +1261,7 @@ function EmptyState({ text }: { text: string }) {
 function SummaryRow({
   label,
   value,
-  large = false
+  large = false,
 }: {
   label: string;
   value: string;
@@ -1264,8 +1274,7 @@ function SummaryRow({
           large
             ? "text-[11px] font-semibold text-bauraInk"
             : "text-[10px] text-bauraMuted"
-        }
-      >
+        }>
         {label}
       </span>
       <span
@@ -1273,21 +1282,14 @@ function SummaryRow({
           large
             ? "text-[18px] font-semibold tracking-[-0.03em] text-bauraPrimary"
             : "text-[11px] font-semibold text-bauraInk"
-        }
-      >
+        }>
         {value}
       </span>
     </div>
   );
 }
 
-function PreviewStat({
-  label,
-  value
-}: {
-  label: string;
-  value: string;
-}) {
+function PreviewStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-[14px] border border-bauraBorder bg-bauraCanvas2 p-4">
       <p className="text-[8px] font-semibold uppercase tracking-[0.09em] text-bauraMuted">

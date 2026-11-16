@@ -11,9 +11,7 @@ import {
 import {
   uploadImageToCloudinary
 } from "../lib/cloudinary";
-import {
-  useToast
-} from "../ui/ToastProvider";
+import { useToast } from "../ui/useToast";
 
 type ImageUploadFieldProps = {
   label: string;

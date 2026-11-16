@@ -1,3 +1,5 @@
+/** @format */
+
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -10,13 +12,13 @@ import {
   RefreshCw,
   ShoppingCart,
   Sparkles,
-  TrendingUp
+  TrendingUp,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "../layouts/AppLayout";
-import { useAuth } from "../auth/AuthContext";
+import { useAuth } from "../auth/useAuth";
 import { apiRequest } from "../lib/api";
-import { useToast } from "../ui/ToastProvider";
+import { useToast } from "../ui/useToast";
 
 type DashboardSummary = {
   todaySales: number;
@@ -120,13 +122,13 @@ const emptySummary: DashboardSummary = {
   lowStockItems: 0,
   outOfStockItems: 0,
   activeProducts: 0,
-  activeIngredients: 0
+  activeIngredients: 0,
 };
 
 function formatCurrency(value: number | string | undefined) {
   return `Rs. ${Number(value || 0).toLocaleString("en-LK", {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2
+    maximumFractionDigits: 2,
   })}`;
 }
 
@@ -144,12 +146,9 @@ function formatCompactCurrency(value: number | string | undefined) {
   return formatCurrency(amount);
 }
 
-function formatQty(
-  value: number | string | undefined,
-  unit?: string
-) {
+function formatQty(value: number | string | undefined, unit?: string) {
   const formatted = Number(value || 0).toLocaleString("en-LK", {
-    maximumFractionDigits: 3
+    maximumFractionDigits: 3,
   });
 
   return unit ? `${formatted} ${unit}` : formatted;
@@ -160,14 +159,14 @@ function formatDate(value: string) {
     month: "short",
     day: "2-digit",
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
   });
 }
 
 function formatTrendDate(value: string) {
   return new Date(value).toLocaleDateString("en-LK", {
     month: "short",
-    day: "2-digit"
+    day: "2-digit",
   });
 }
 
@@ -176,25 +175,21 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const toast = useToast();
 
-  const [analytics, setAnalytics] =
-    useState<DashboardAnalytics | null>(null);
+  const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
 
-  const [bakeryStock, setBakeryStock] =
-    useState<BakeryStockData | null>(null);
+  const [bakeryStock, setBakeryStock] = useState<BakeryStockData | null>(null);
 
-  const [productionBatches, setProductionBatches] =
-    useState<ProductionBatch[]>([]);
+  const [productionBatches, setProductionBatches] = useState<ProductionBatch[]>(
+    [],
+  );
 
   const [isLoading, setIsLoading] = useState(true);
 
   const summary = analytics?.summary || emptySummary;
 
   const draftBatches = useMemo(
-    () =>
-      productionBatches.filter(
-        (batch) => batch.status === "DRAFT"
-      ).length,
-    [productionBatches]
+    () => productionBatches.filter((batch) => batch.status === "DRAFT").length,
+    [productionBatches],
   );
 
   const maxTrendSales = useMemo(() => {
@@ -202,10 +197,8 @@ export function DashboardPage() {
       return 0;
     }
 
-    return Math.max(
-      ...analytics.salesTrend.map((item) => item.sales)
-    );
-  }, [analytics?.salesTrend]);
+    return Math.max(...analytics.salesTrend.map((item) => item.sales));
+  }, [analytics]);
 
   const totalAlerts =
     summary.lowStockItems +
@@ -217,45 +210,37 @@ export function DashboardPage() {
     setIsLoading(true);
 
     try {
-      const analyticsData =
-        await apiRequest<DashboardAnalytics>(
-          "/analytics/dashboard"
-        );
+      const analyticsData = await apiRequest<DashboardAnalytics>(
+        "/analytics/dashboard",
+      );
 
       setAnalytics(analyticsData);
 
-      const [stockResult, productionResult] =
-        await Promise.allSettled([
-          apiRequest<BakeryStockData>(
-            "/bakery-stock"
-          ),
-          apiRequest<{
-            batches: ProductionBatch[];
-          }>("/production")
-        ]);
+      const [stockResult, productionResult] = await Promise.allSettled([
+        apiRequest<BakeryStockData>("/bakery-stock"),
+        apiRequest<{
+          batches: ProductionBatch[];
+        }>("/production"),
+      ]);
 
       if (stockResult.status === "fulfilled") {
         setBakeryStock(stockResult.value);
       }
 
       if (productionResult.status === "fulfilled") {
-        setProductionBatches(
-          productionResult.value.batches
-        );
+        setProductionBatches(productionResult.value.batches);
       }
 
       if (showToast) {
         toast.success(
           "Dashboard refreshed",
-          "Latest bakery operations are now displayed."
+          "Latest bakery operations are now displayed.",
         );
       }
     } catch (error) {
       toast.error(
         "Unable to load dashboard",
-        error instanceof Error
-          ? error.message
-          : "Please try again."
+        error instanceof Error ? error.message : "Please try again.",
       );
     } finally {
       setIsLoading(false);
@@ -263,8 +248,52 @@ export function DashboardPage() {
   }
 
   useEffect(() => {
-    loadDashboard();
-  }, []);
+    let active = true;
+
+    async function fetchDashboard() {
+      try {
+        const analyticsData = await apiRequest<DashboardAnalytics>(
+          "/analytics/dashboard",
+        );
+
+        if (!active) return;
+
+        setAnalytics(analyticsData);
+
+        const [stockResult, productionResult] = await Promise.allSettled([
+          apiRequest<BakeryStockData>("/bakery-stock"),
+          apiRequest<{ batches: ProductionBatch[] }>("/production"),
+        ]);
+
+        if (!active) return;
+
+        if (stockResult.status === "fulfilled") {
+          setBakeryStock(stockResult.value);
+        }
+
+        if (productionResult.status === "fulfilled") {
+          setProductionBatches(productionResult.value.batches);
+        }
+      } catch (error) {
+        if (!active) return;
+
+        toast.error(
+          "Unable to load dashboard",
+          error instanceof Error ? error.message : "Please try again.",
+        );
+      } finally {
+        if (active) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void fetchDashboard();
+
+    return () => {
+      active = false;
+    };
+  }, [toast]);
 
   return (
     <AppLayout
@@ -276,26 +305,20 @@ export function DashboardPage() {
           <button
             type="button"
             onClick={() => loadDashboard(true)}
-            className="erp-button-secondary"
-          >
-            <RefreshCw
-              size={14}
-              className={isLoading ? "animate-spin" : ""}
-            />
+            className="erp-button-secondary">
+            <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
             Refresh
           </button>
 
           <button
             type="button"
             onClick={() => navigate("/pos")}
-            className="erp-button-primary"
-          >
+            className="erp-button-primary">
             <ShoppingCart size={14} />
             Open POS
           </button>
         </>
-      }
-    >
+      }>
       <div className="grid gap-4">
         <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
           <KpiCard
@@ -319,9 +342,7 @@ export function DashboardPage() {
                 ? "Loading..."
                 : formatCompactCurrency(summary.monthProfit)
             }
-            note={`Sales ${formatCompactCurrency(
-              summary.monthSales
-            )}`}
+            note={`Sales ${formatCompactCurrency(summary.monthSales)}`}
             icon={<TrendingUp size={19} />}
             accent="brown"
           />
@@ -331,9 +352,7 @@ export function DashboardPage() {
             value={
               isLoading
                 ? "Loading..."
-                : formatQty(
-                    bakeryStock?.summary.totalAvailableUnits || 0
-                  )
+                : formatQty(bakeryStock?.summary.totalAvailableUnits || 0)
             }
             note={`${
               bakeryStock?.summary.productsInStock || 0
@@ -344,11 +363,7 @@ export function DashboardPage() {
 
           <KpiCard
             label="Stock Alerts"
-            value={
-              isLoading
-                ? "Loading..."
-                : String(totalAlerts)
-            }
+            value={isLoading ? "Loading..." : String(totalAlerts)}
             note={`${summary.outOfStockItems} raw out · ${
               bakeryStock?.summary.outOfStockProducts || 0
             } finished out`}
@@ -360,9 +375,7 @@ export function DashboardPage() {
         <section className="grid gap-4 2xl:grid-cols-[0.72fr_1.28fr]">
           <InventoryPanel
             items={analytics?.lowStock || []}
-            onOpenInventory={() =>
-              navigate("/dashboard/ingredients")
-            }
+            onOpenInventory={() => navigate("/dashboard/ingredients")}
           />
 
           <SalesPerformancePanel
@@ -383,20 +396,12 @@ export function DashboardPage() {
           <div className="grid gap-4">
             <OperationsCard
               draftBatches={draftBatches}
-              finishedStock={
-                bakeryStock?.summary.totalAvailableUnits || 0
-              }
-              onProduction={() =>
-                navigate("/dashboard/production")
-              }
-              onStock={() =>
-                navigate("/dashboard/bakery-stock")
-              }
+              finishedStock={bakeryStock?.summary.totalAvailableUnits || 0}
+              onProduction={() => navigate("/dashboard/production")}
+              onStock={() => navigate("/dashboard/bakery-stock")}
             />
 
-            <TopProductsPanel
-              products={analytics?.topProducts || []}
-            />
+            <TopProductsPanel products={analytics?.topProducts || []} />
           </div>
         </section>
       </div>
@@ -409,7 +414,7 @@ function KpiCard({
   value,
   note,
   icon,
-  accent
+  accent,
 }: {
   label: string;
   value: string;
@@ -419,37 +424,25 @@ function KpiCard({
 }) {
   const accentMap = {
     gold: {
-      icon:
-        "bg-bauraGoldSoft text-bauraGoldDark",
-      chip:
-        "bg-bauraGoldSoft text-bauraGoldDark",
-      decoration:
-        "bg-bauraGoldSoft"
+      icon: "bg-bauraGoldSoft text-bauraGoldDark",
+      chip: "bg-bauraGoldSoft text-bauraGoldDark",
+      decoration: "bg-bauraGoldSoft",
     },
     brown: {
-      icon:
-        "bg-bauraPrimarySoft text-bauraPrimary",
-      chip:
-        "bg-bauraPrimarySoft text-bauraPrimary",
-      decoration:
-        "bg-bauraPrimarySoft"
+      icon: "bg-bauraPrimarySoft text-bauraPrimary",
+      chip: "bg-bauraPrimarySoft text-bauraPrimary",
+      decoration: "bg-bauraPrimarySoft",
     },
     green: {
-      icon:
-        "bg-bauraSuccessSoft text-bauraSuccess",
-      chip:
-        "bg-bauraSuccessSoft text-bauraSuccess",
-      decoration:
-        "bg-bauraSuccessSoft"
+      icon: "bg-bauraSuccessSoft text-bauraSuccess",
+      chip: "bg-bauraSuccessSoft text-bauraSuccess",
+      decoration: "bg-bauraSuccessSoft",
     },
     red: {
-      icon:
-        "bg-bauraDangerSoft text-bauraDanger",
-      chip:
-        "bg-bauraDangerSoft text-bauraDanger",
-      decoration:
-        "bg-bauraDangerSoft"
-    }
+      icon: "bg-bauraDangerSoft text-bauraDanger",
+      chip: "bg-bauraDangerSoft text-bauraDanger",
+      decoration: "bg-bauraDangerSoft",
+    },
   };
 
   const style = accentMap[accent];
@@ -478,16 +471,14 @@ function KpiCard({
         </div>
 
         <div
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${style.icon}`}
-        >
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${style.icon}`}>
           {icon}
         </div>
       </div>
 
       <div className="relative mt-4">
         <span
-          className={`inline-flex rounded-lg px-2.5 py-1 text-[8px] font-semibold uppercase tracking-[0.04em] ${style.chip}`}
-        >
+          className={`inline-flex rounded-lg px-2.5 py-1 text-[8px] font-semibold uppercase tracking-[0.04em] ${style.chip}`}>
           {note}
         </span>
       </div>
@@ -497,7 +488,7 @@ function KpiCard({
 
 function InventoryPanel({
   items,
-  onOpenInventory
+  onOpenInventory,
 }: {
   items: LowStockItem[];
   onOpenInventory: () => void;
@@ -508,9 +499,7 @@ function InventoryPanel({
     <section className="erp-panel overflow-hidden p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="erp-section-title">
-            Inventory
-          </h2>
+          <h2 className="erp-section-title">Inventory</h2>
 
           <p className="erp-section-subtitle">
             Ingredient stock requiring attention.
@@ -520,8 +509,7 @@ function InventoryPanel({
         <button
           type="button"
           onClick={onOpenInventory}
-          className="text-[9px] font-semibold uppercase tracking-[0.06em] text-bauraGoldDark transition hover:text-bauraPrimary"
-        >
+          className="text-[9px] font-semibold uppercase tracking-[0.06em] text-bauraGoldDark transition hover:text-bauraPrimary">
           Details
         </button>
       </div>
@@ -529,10 +517,7 @@ function InventoryPanel({
       <div className="mt-7 grid gap-6">
         {visibleItems.length === 0 ? (
           <div className="rounded-2xl border border-green-100 bg-bauraSuccessSoft px-4 py-5 text-center">
-            <PackageCheck
-              size={21}
-              className="mx-auto text-bauraSuccess"
-            />
+            <PackageCheck size={21} className="mx-auto text-bauraSuccess" />
 
             <p className="mt-2 text-[10px] font-semibold text-bauraSuccess">
               Ingredient stock is healthy.
@@ -540,19 +525,11 @@ function InventoryPanel({
           </div>
         ) : (
           visibleItems.map((item) => {
-            const alert = Number(
-              item.lowStockAlertQty || 0
-            );
+            const alert = Number(item.lowStockAlertQty || 0);
 
             const percentage =
               alert > 0
-                ? Math.min(
-                    Math.max(
-                      (item.qtyOnHand / alert) * 100,
-                      3
-                    ),
-                    100
-                  )
+                ? Math.min(Math.max((item.qtyOnHand / alert) * 100, 3), 100)
                 : item.isOutOfStock
                   ? 3
                   : 55;
@@ -567,22 +544,15 @@ function InventoryPanel({
                         : item.isLowStock
                           ? "text-bauraWarning"
                           : "text-bauraMuted"
-                    }`}
-                  >
+                    }`}>
                     {item.displayName}
                   </p>
 
                   <p
                     className={`text-[10px] font-semibold ${
-                      item.isOutOfStock
-                        ? "text-bauraDanger"
-                        : "text-bauraInk"
-                    }`}
-                  >
-                    {formatQty(
-                      item.qtyOnHand,
-                      item.baseUnit
-                    )}
+                      item.isOutOfStock ? "text-bauraDanger" : "text-bauraInk"
+                    }`}>
+                    {formatQty(item.qtyOnHand, item.baseUnit)}
                   </p>
                 </div>
 
@@ -596,7 +566,7 @@ function InventoryPanel({
                           : "bg-gradient-to-r from-bauraPrimary to-bauraGold"
                     }`}
                     style={{
-                      width: `${percentage}%`
+                      width: `${percentage}%`,
                     }}
                   />
                 </div>
@@ -619,8 +589,7 @@ function InventoryPanel({
               </p>
 
               <p className="mt-1 text-[9px] leading-5 text-bauraInk2">
-                Review low-stock ingredients before the
-                next production run.
+                Review low-stock ingredients before the next production run.
               </p>
             </div>
           </div>
@@ -635,7 +604,7 @@ function SalesPerformancePanel({
   maxSales,
   monthSales,
   monthCogs,
-  monthProfit
+  monthProfit,
 }: {
   data: SalesTrendItem[];
   maxSales: number;
@@ -647,13 +616,10 @@ function SalesPerformancePanel({
     <section className="erp-panel overflow-hidden p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="erp-section-title">
-            Sales Performance
-          </h2>
+          <h2 className="erp-section-title">Sales Performance</h2>
 
           <p className="erp-section-subtitle">
-            Revenue generated from completed sales during
-            the last seven days.
+            Revenue generated from completed sales during the last seven days.
           </p>
         </div>
 
@@ -679,21 +645,14 @@ function SalesPerformancePanel({
           <div className="flex h-full items-end gap-3 border-b border-bauraBorder px-2">
             {data.map((item, index) => {
               const height =
-                maxSales > 0
-                  ? Math.max(
-                      (item.sales / maxSales) * 100,
-                      8
-                    )
-                  : 8;
+                maxSales > 0 ? Math.max((item.sales / maxSales) * 100, 8) : 8;
 
-              const latest =
-                index === data.length - 1;
+              const latest = index === data.length - 1;
 
               return (
                 <div
                   key={item.date}
-                  className="flex h-full min-w-0 flex-1 flex-col justify-end"
-                >
+                  className="flex h-full min-w-0 flex-1 flex-col justify-end">
                   <div className="group relative flex flex-1 items-end justify-center">
                     <div
                       className={`w-full max-w-[56px] rounded-t-[16px] transition-all duration-300 ${
@@ -702,7 +661,7 @@ function SalesPerformancePanel({
                           : "bg-gradient-to-t from-bauraGoldSoft via-[#E4C79D] to-bauraGold"
                       }`}
                       style={{
-                        height: `${height}%`
+                        height: `${height}%`,
                       }}
                     />
 
@@ -745,7 +704,7 @@ function SalesPerformancePanel({
 function PerformanceMetric({
   label,
   value,
-  highlight = false
+  highlight = false,
 }: {
   label: string;
   value: string;
@@ -757,19 +716,15 @@ function PerformanceMetric({
         highlight
           ? "border-[#EAD8BD] bg-bauraGoldSoft/55"
           : "border-transparent bg-bauraCanvas2"
-      }`}
-    >
+      }`}>
       <p className="text-[8px] font-semibold uppercase tracking-[0.08em] text-bauraMuted">
         {label}
       </p>
 
       <p
         className={`mt-1.5 text-[18px] font-semibold tracking-[-0.03em] ${
-          highlight
-            ? "text-bauraPrimary"
-            : "text-bauraInk"
-        }`}
-      >
+          highlight ? "text-bauraPrimary" : "text-bauraInk"
+        }`}>
         {value}
       </p>
     </div>
@@ -778,7 +733,7 @@ function PerformanceMetric({
 
 function RecentSalesPanel({
   sales,
-  onOpenPos
+  onOpenPos,
 }: {
   sales: RecentSale[];
   onOpenPos: () => void;
@@ -787,9 +742,7 @@ function RecentSalesPanel({
     <section className="erp-panel overflow-hidden">
       <div className="flex items-start justify-between gap-3 border-b border-bauraBorder px-5 py-4">
         <div>
-          <h2 className="erp-section-title">
-            Recent Sales
-          </h2>
+          <h2 className="erp-section-title">Recent Sales</h2>
 
           <p className="erp-section-subtitle">
             Latest completed POS transactions.
@@ -799,8 +752,7 @@ function RecentSalesPanel({
         <button
           type="button"
           onClick={onOpenPos}
-          className="flex items-center gap-1 text-[9px] font-semibold text-bauraGoldDark transition hover:text-bauraPrimary"
-        >
+          className="flex items-center gap-1 text-[9px] font-semibold text-bauraGoldDark transition hover:text-bauraPrimary">
           Open POS
           <ChevronRight size={13} />
         </button>
@@ -810,21 +762,13 @@ function RecentSalesPanel({
         <table className="min-w-full text-left">
           <thead>
             <tr className="border-b border-bauraBorder bg-bauraCanvas2 text-[8px] font-semibold uppercase tracking-[0.09em] text-bauraMuted">
-              <th className="px-5 py-3">
-                Order
-              </th>
+              <th className="px-5 py-3">Order</th>
 
-              <th className="px-5 py-3">
-                Channel
-              </th>
+              <th className="px-5 py-3">Channel</th>
 
-              <th className="px-5 py-3 text-right">
-                Net
-              </th>
+              <th className="px-5 py-3 text-right">Net</th>
 
-              <th className="px-5 py-3 text-right">
-                Profit
-              </th>
+              <th className="px-5 py-3 text-right">Profit</th>
             </tr>
           </thead>
 
@@ -833,44 +777,39 @@ function RecentSalesPanel({
               <tr>
                 <td
                   colSpan={4}
-                  className="px-5 py-12 text-center text-[10px] text-bauraMuted"
-                >
+                  className="px-5 py-12 text-center text-[10px] text-bauraMuted">
                   No recent sales.
                 </td>
               </tr>
             ) : (
-              sales
-                .slice(0, 8)
-                .map((sale) => (
-                  <tr
-                    key={sale.id}
-                    className="text-[10px] transition hover:bg-bauraCanvas2"
-                  >
-                    <td className="px-5 py-3.5">
-                      <p className="font-semibold text-bauraInk">
-                        {sale.orderNo}
-                      </p>
+              sales.slice(0, 8).map((sale) => (
+                <tr
+                  key={sale.id}
+                  className="text-[10px] transition hover:bg-bauraCanvas2">
+                  <td className="px-5 py-3.5">
+                    <p className="font-semibold text-bauraInk">
+                      {sale.orderNo}
+                    </p>
 
-                      <p className="mt-0.5 text-[8px] text-bauraMuted">
-                        {formatDate(sale.soldAt)} ·{" "}
-                        {sale.itemCount} item
-                        {sale.itemCount === 1 ? "" : "s"}
-                      </p>
-                    </td>
+                    <p className="mt-0.5 text-[8px] text-bauraMuted">
+                      {formatDate(sale.soldAt)} · {sale.itemCount} item
+                      {sale.itemCount === 1 ? "" : "s"}
+                    </p>
+                  </td>
 
-                    <td className="px-5 py-3.5 text-bauraMuted">
-                      {sale.salesChannel}
-                    </td>
+                  <td className="px-5 py-3.5 text-bauraMuted">
+                    {sale.salesChannel}
+                  </td>
 
-                    <td className="px-5 py-3.5 text-right font-semibold text-bauraInk">
-                      {formatCurrency(sale.netTotal)}
-                    </td>
+                  <td className="px-5 py-3.5 text-right font-semibold text-bauraInk">
+                    {formatCurrency(sale.netTotal)}
+                  </td>
 
-                    <td className="px-5 py-3.5 text-right font-semibold text-bauraSuccess">
-                      {formatCurrency(sale.profitTotal)}
-                    </td>
-                  </tr>
-                ))
+                  <td className="px-5 py-3.5 text-right font-semibold text-bauraSuccess">
+                    {formatCurrency(sale.profitTotal)}
+                  </td>
+                </tr>
+              ))
             )}
           </tbody>
         </table>
@@ -883,7 +822,7 @@ function OperationsCard({
   draftBatches,
   finishedStock,
   onProduction,
-  onStock
+  onStock,
 }: {
   draftBatches: number;
   finishedStock: number;
@@ -921,9 +860,8 @@ function OperationsCard({
         </h2>
 
         <p className="mt-2 max-w-sm text-[9px] leading-5 text-white/70">
-          Post production batches to create sellable
-          finished stock. POS then consumes directly from
-          Bakery Stock.
+          Post production batches to create sellable finished stock. POS then
+          consumes directly from Bakery Stock.
         </p>
 
         <div className="mt-5 grid grid-cols-2 gap-2.5">
@@ -932,9 +870,7 @@ function OperationsCard({
               <ChefHat size={15} />
             </div>
 
-            <p className="mt-3 text-[19px] font-semibold">
-              {draftBatches}
-            </p>
+            <p className="mt-3 text-[19px] font-semibold">{draftBatches}</p>
 
             <p className="mt-0.5 text-[8px] font-medium uppercase tracking-[0.07em] text-white/60">
               Draft batches
@@ -960,8 +896,7 @@ function OperationsCard({
           <button
             type="button"
             onClick={onProduction}
-            className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-bauraGoldSoft text-[9px] font-semibold text-bauraPrimary transition hover:bg-white"
-          >
+            className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-bauraGoldSoft text-[9px] font-semibold text-bauraPrimary transition hover:bg-white">
             Production
             <ArrowUpRight size={12} />
           </button>
@@ -969,8 +904,7 @@ function OperationsCard({
           <button
             type="button"
             onClick={onStock}
-            className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.08] text-[9px] font-semibold text-white transition hover:bg-white/[0.14]"
-          >
+            className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.08] text-[9px] font-semibold text-white transition hover:bg-white/[0.14]">
             Bakery Stock
           </button>
         </div>
@@ -979,17 +913,11 @@ function OperationsCard({
   );
 }
 
-function TopProductsPanel({
-  products
-}: {
-  products: TopProduct[];
-}) {
+function TopProductsPanel({ products }: { products: TopProduct[] }) {
   return (
     <section className="erp-panel p-5">
       <div>
-        <h2 className="erp-section-title">
-          Top Products
-        </h2>
+        <h2 className="erp-section-title">Top Products</h2>
 
         <p className="erp-section-subtitle">
           Highest revenue products this month.
@@ -1002,38 +930,35 @@ function TopProductsPanel({
             No product sales yet.
           </p>
         ) : (
-          products
-            .slice(0, 4)
-            .map((product, index) => (
-              <div
-                key={product.productId}
-                className="flex items-center gap-3 rounded-xl border border-transparent bg-bauraCanvas2 p-3 transition hover:border-bauraBorder hover:bg-white"
-              >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-bauraGoldSoft text-[10px] font-bold text-bauraGoldDark">
-                  {index + 1}
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[10px] font-semibold text-bauraInk">
-                    {product.displayName}
-                  </p>
-
-                  <p className="mt-0.5 text-[8px] text-bauraMuted">
-                    {formatQty(product.qty)} sold
-                  </p>
-                </div>
-
-                <div className="text-right">
-                  <p className="text-[10px] font-semibold text-bauraInk">
-                    {formatCompactCurrency(product.revenue)}
-                  </p>
-
-                  <p className="mt-0.5 text-[8px] font-medium text-bauraSuccess">
-                    +{formatCompactCurrency(product.profit)}
-                  </p>
-                </div>
+          products.slice(0, 4).map((product, index) => (
+            <div
+              key={product.productId}
+              className="flex items-center gap-3 rounded-xl border border-transparent bg-bauraCanvas2 p-3 transition hover:border-bauraBorder hover:bg-white">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-bauraGoldSoft text-[10px] font-bold text-bauraGoldDark">
+                {index + 1}
               </div>
-            ))
+
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[10px] font-semibold text-bauraInk">
+                  {product.displayName}
+                </p>
+
+                <p className="mt-0.5 text-[8px] text-bauraMuted">
+                  {formatQty(product.qty)} sold
+                </p>
+              </div>
+
+              <div className="text-right">
+                <p className="text-[10px] font-semibold text-bauraInk">
+                  {formatCompactCurrency(product.revenue)}
+                </p>
+
+                <p className="mt-0.5 text-[8px] font-medium text-bauraSuccess">
+                  +{formatCompactCurrency(product.profit)}
+                </p>
+              </div>
+            </div>
+          ))
         )}
       </div>
     </section>

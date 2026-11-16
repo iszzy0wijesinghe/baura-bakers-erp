@@ -24,7 +24,7 @@ import {
   type PosSession,
 } from "../../lib/posSessionApi";
 
-import { useToast } from "../../ui/ToastProvider";
+import { useToast } from "../../ui/useToast";
 
 type Props = {
   business: PosBusinessDay;

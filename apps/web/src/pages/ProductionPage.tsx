@@ -1,12 +1,6 @@
 /** @format */
 
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode
-} from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -17,14 +11,14 @@ import {
   ReceiptText,
   RefreshCw,
   Search,
-  Trash2
+  Trash2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "../layouts/AppLayout";
 import { apiRequest } from "../lib/api";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Modal } from "../ui/Modal";
-import { useToast } from "../ui/ToastProvider";
+import { useToast } from "../ui/useToast";
 
 type ProductionStatus = "DRAFT" | "POSTED" | "VOID";
 
@@ -187,20 +181,20 @@ function createInitialForm(): ProductionForm {
     rejectedQty: "0",
     productionDate: toLocalDateTimeInput(new Date()),
     expiryDate: "",
-    notes: ""
+    notes: "",
   };
 }
 
 function formatCurrency(value: number | string | null | undefined) {
   return `Rs. ${Number(value || 0).toLocaleString("en-LK", {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2
+    maximumFractionDigits: 2,
   })}`;
 }
 
 function formatQty(value: number | string | null | undefined) {
   return Number(value || 0).toLocaleString("en-LK", {
-    maximumFractionDigits: 3
+    maximumFractionDigits: 3,
   });
 }
 
@@ -212,7 +206,7 @@ function formatDateTime(value: string | null | undefined) {
     month: "short",
     day: "2-digit",
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
   });
 }
 
@@ -243,7 +237,9 @@ export function ProductionPage() {
   const [batches, setBatches] = useState<ProductionBatch[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | ProductionStatus>("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | ProductionStatus>(
+    "ALL",
+  );
   const [isLoading, setIsLoading] = useState(true);
 
   const [formOpen, setFormOpen] = useState(false);
@@ -253,8 +249,12 @@ export function ProductionPage() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const [postingBatch, setPostingBatch] = useState<ProductionBatch | null>(null);
-  const [deletingBatch, setDeletingBatch] = useState<ProductionBatch | null>(null);
+  const [postingBatch, setPostingBatch] = useState<ProductionBatch | null>(
+    null,
+  );
+  const [deletingBatch, setDeletingBatch] = useState<ProductionBatch | null>(
+    null,
+  );
   const [posting, setPosting] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -265,12 +265,14 @@ export function ProductionPage() {
 
   const selectedProduct = useMemo(
     () => products.find((product) => product.id === form.productId) ?? null,
-    [products, form.productId]
+    [products, form.productId],
   );
 
   const selectedSize = useMemo(
-    () => selectedProduct?.sizes.find((size) => size.id === form.productSizeId) ?? null,
-    [selectedProduct, form.productSizeId]
+    () =>
+      selectedProduct?.sizes.find((size) => size.id === form.productSizeId) ??
+      null,
+    [selectedProduct, form.productSizeId],
   );
 
   const requiresSize = Boolean(selectedProduct?.sizes.length);
@@ -285,7 +287,10 @@ export function ProductionPage() {
         batch.productDisplayName.toLowerCase().includes(keyword) ||
         (batch.productSizeLabel ?? "").toLowerCase().includes(keyword);
 
-      return matchesSearch && (statusFilter === "ALL" || batch.status === statusFilter);
+      return (
+        matchesSearch &&
+        (statusFilter === "ALL" || batch.status === statusFilter)
+      );
     });
   }, [batches, search, statusFilter]);
 
@@ -296,11 +301,14 @@ export function ProductionPage() {
     return {
       drafts,
       posted: posted.length,
-      goodProduced: posted.reduce((total, batch) => total + Number(batch.producedQty), 0),
+      goodProduced: posted.reduce(
+        (total, batch) => total + Number(batch.producedQty),
+        0,
+      ),
       remaining: posted.reduce(
         (total, batch) => total + Number(batch.bakeryStockRemaining || 0),
-        0
-      )
+        0,
+      ),
     };
   }, [batches]);
 
@@ -309,7 +317,7 @@ export function ProductionPage() {
 
     const [batchResult, productResult] = await Promise.allSettled([
       apiRequest<{ batches: ProductionBatch[] }>("/production"),
-      apiRequest<{ products: ProductOption[] }>("/production/products")
+      apiRequest<{ products: ProductOption[] }>("/production/products"),
     ]);
 
     if (batchResult.status === "fulfilled") {
@@ -317,7 +325,7 @@ export function ProductionPage() {
     } else {
       toast.error(
         "Unable to load production",
-        getErrorMessage(batchResult.reason, "Production API is unavailable.")
+        getErrorMessage(batchResult.reason, "Production API is unavailable."),
       );
     }
 
@@ -326,7 +334,7 @@ export function ProductionPage() {
     } else {
       toast.error(
         "Unable to load products",
-        getErrorMessage(productResult.reason, "Product data is unavailable.")
+        getErrorMessage(productResult.reason, "Product data is unavailable."),
       );
     }
 
@@ -342,23 +350,48 @@ export function ProductionPage() {
   }
 
   useEffect(() => {
-    void loadData();
-  }, []);
+    let active = true;
+
+    Promise.allSettled([
+      apiRequest<{ batches: ProductionBatch[] }>("/production"),
+      apiRequest<{ products: ProductOption[] }>("/production/products"),
+    ]).then(([batchResult, productResult]) => {
+      if (!active) return;
+
+      if (batchResult.status === "fulfilled") {
+        setBatches(batchResult.value.batches);
+      } else {
+        toast.error(
+          "Unable to load production",
+          getErrorMessage(batchResult.reason, "Production API is unavailable."),
+        );
+      }
+
+      if (productResult.status === "fulfilled") {
+        setProducts(productResult.value.products);
+      } else {
+        toast.error(
+          "Unable to load products",
+          getErrorMessage(productResult.reason, "Product data is unavailable."),
+        );
+      }
+
+      setIsLoading(false);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [toast]);
 
   useEffect(() => {
     const requestId = ++previewRequestId.current;
-
-    if (!formOpen) {
-      setPreview(null);
-      setPreviewError(null);
-      setPreviewLoading(false);
-      return;
-    }
 
     const producedQty = Number(form.producedQty);
     const rejectedQty = Number(form.rejectedQty || 0);
 
     const canPreview =
+      formOpen &&
       Boolean(form.productId) &&
       (!requiresSize || Boolean(form.productSizeId)) &&
       producedQty > 0 &&
@@ -367,30 +400,39 @@ export function ProductionPage() {
       Number.isFinite(rejectedQty);
 
     if (!canPreview) {
-      setPreview(null);
-      setPreviewError(null);
-      setPreviewLoading(false);
-      return;
+      const resetTimer = window.setTimeout(() => {
+        if (requestId !== previewRequestId.current) return;
+
+        setPreview(null);
+        setPreviewError(null);
+        setPreviewLoading(false);
+      }, 0);
+
+      return () => {
+        window.clearTimeout(resetTimer);
+        previewRequestId.current += 1;
+      };
     }
 
-    setPreview(null);
-    setPreviewError(null);
-    setPreviewLoading(true);
-
     const timer = window.setTimeout(async () => {
+      if (requestId !== previewRequestId.current) return;
+
+      setPreview(null);
+      setPreviewError(null);
+      setPreviewLoading(true);
+
       try {
-        const response = await apiRequest<{ preview: ProductionPreview }>(
-          "/production/preview",
-          {
-            method: "POST",
-            body: JSON.stringify({
-              productId: form.productId,
-              productSizeId: form.productSizeId || null,
-              producedQty,
-              rejectedQty
-            })
-          }
-        );
+        const response = await apiRequest<{
+          preview: ProductionPreview;
+        }>("/production/preview", {
+          method: "POST",
+          body: JSON.stringify({
+            productId: form.productId,
+            productSizeId: form.productSizeId || null,
+            producedQty,
+            rejectedQty,
+          }),
+        });
 
         if (requestId !== previewRequestId.current) return;
 
@@ -400,7 +442,10 @@ export function ProductionPage() {
 
         setPreview(null);
         setPreviewError(
-          getErrorMessage(error, "Unable to calculate production requirements.")
+          getErrorMessage(
+            error,
+            "Unable to calculate production requirements.",
+          ),
         );
       } finally {
         if (requestId === previewRequestId.current) {
@@ -409,14 +454,17 @@ export function ProductionPage() {
       }
     }, 350);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      previewRequestId.current += 1;
+    };
   }, [
     formOpen,
     form.productId,
     form.productSizeId,
     form.producedQty,
     form.rejectedQty,
-    requiresSize
+    requiresSize,
   ]);
 
   function openCreate() {
@@ -439,7 +487,7 @@ export function ProductionPage() {
     setForm((current) => ({
       ...current,
       productId,
-      productSizeId: ""
+      productSizeId: "",
     }));
     setPreview(null);
     setPreviewError(null);
@@ -447,19 +495,25 @@ export function ProductionPage() {
 
   async function createBatch(postImmediately: boolean) {
     if (!selectedProduct) {
-      toast.warning("Select a product", "Choose the product being manufactured.");
+      toast.warning(
+        "Select a product",
+        "Choose the product being manufactured.",
+      );
       return;
     }
 
     if (requiresSize && !selectedSize) {
-      toast.warning("Select a product size", "Choose the exact size being manufactured.");
+      toast.warning(
+        "Select a product size",
+        "Choose the exact size being manufactured.",
+      );
       return;
     }
 
     if (selectedSize && !selectedSize.canProduce) {
       toast.warning(
         "Recipe missing",
-        "Configure the recipe for this product size before production."
+        "Configure the recipe for this product size before production.",
       );
       return;
     }
@@ -483,7 +537,8 @@ export function ProductionPage() {
     if (postImmediately && (!preview || previewLoading || !preview.canPost)) {
       toast.warning(
         "Production not ready",
-        previewError || "Wait for a valid preview and ensure ingredient stock is sufficient."
+        previewError ||
+          "Wait for a valid preview and ensure ingredient stock is sufficient.",
       );
       return;
     }
@@ -491,43 +546,46 @@ export function ProductionPage() {
     setSaving(true);
 
     try {
-      const response = await apiRequest<{ batch: ProductionBatch }>("/production", {
-        method: "POST",
-        body: JSON.stringify({
-          productId: form.productId,
-          productSizeId: form.productSizeId || null,
-          plannedQty,
-          producedQty,
-          rejectedQty,
-          productionDate: form.productionDate || null,
-          expiryDate: form.expiryDate || null,
-          notes: form.notes.trim() || null
-        })
-      });
+      const response = await apiRequest<{ batch: ProductionBatch }>(
+        "/production",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            productId: form.productId,
+            productSizeId: form.productSizeId || null,
+            plannedQty,
+            producedQty,
+            rejectedQty,
+            productionDate: form.productionDate || null,
+            expiryDate: form.expiryDate || null,
+            notes: form.notes.trim() || null,
+          }),
+        },
+      );
 
       if (postImmediately) {
         try {
           await apiRequest(`/production/${response.batch.id}/post`, {
-            method: "POST"
+            method: "POST",
           });
 
           toast.success(
             "Production posted",
-            `${response.batch.batchNo} was added to Bakery Stock.`
+            `${response.batch.batchNo} was added to Bakery Stock.`,
           );
         } catch (error) {
           toast.warning(
             "Draft saved, posting failed",
             `${response.batch.batchNo} was created as a draft. ${getErrorMessage(
               error,
-              "Please review the batch and post it again."
-            )}`
+              "Please review the batch and post it again.",
+            )}`,
           );
         }
       } else {
         toast.success(
           "Draft saved",
-          `${response.batch.batchNo} was saved without changing stock.`
+          `${response.batch.batchNo} was saved without changing stock.`,
         );
       }
 
@@ -536,7 +594,7 @@ export function ProductionPage() {
     } catch (error) {
       toast.error(
         "Production could not be saved",
-        getErrorMessage(error, "Please try again.")
+        getErrorMessage(error, "Please try again."),
       );
     } finally {
       setSaving(false);
@@ -557,12 +615,12 @@ export function ProductionPage() {
 
     try {
       await apiRequest(`/production/${postingBatch.id}/post`, {
-        method: "POST"
+        method: "POST",
       });
 
       toast.success(
         "Production posted",
-        `${postingBatch.batchNo} is now available in Bakery Stock.`
+        `${postingBatch.batchNo} is now available in Bakery Stock.`,
       );
 
       setPostingBatch(null);
@@ -570,7 +628,7 @@ export function ProductionPage() {
     } catch (error) {
       toast.error(
         "Unable to post production",
-        getErrorMessage(error, "Please try again.")
+        getErrorMessage(error, "Please try again."),
       );
     } finally {
       setPosting(false);
@@ -584,7 +642,7 @@ export function ProductionPage() {
 
     try {
       await apiRequest(`/production/${deletingBatch.id}`, {
-        method: "DELETE"
+        method: "DELETE",
       });
 
       toast.success("Draft deleted", deletingBatch.batchNo);
@@ -593,7 +651,7 @@ export function ProductionPage() {
     } catch (error) {
       toast.error(
         "Unable to delete draft",
-        getErrorMessage(error, "Please try again.")
+        getErrorMessage(error, "Please try again."),
       );
     } finally {
       setDeleting(false);
@@ -606,14 +664,14 @@ export function ProductionPage() {
 
     try {
       const response = await apiRequest<{ batch: ProductionDetail }>(
-        `/production/${batchId}`
+        `/production/${batchId}`,
       );
 
       setDetail(response.batch);
     } catch (error) {
       toast.error(
         "Unable to load batch",
-        getErrorMessage(error, "Please try again.")
+        getErrorMessage(error, "Please try again."),
       );
     } finally {
       setDetailLoading(false);
@@ -630,22 +688,19 @@ export function ProductionPage() {
           <button
             type="button"
             onClick={() => void loadData(true)}
-            className="erp-button-secondary"
-          >
+            className="erp-button-secondary">
             <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
             Refresh
           </button>
           <button
             type="button"
             onClick={openCreate}
-            className="erp-button-primary"
-          >
+            className="erp-button-primary">
             <PackagePlus size={14} />
             New Production
           </button>
         </>
-      }
-    >
+      }>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Metric
           label="Draft Batches"
@@ -688,23 +743,21 @@ export function ProductionPage() {
               </h2>
               <p className="mt-2 max-w-xl text-[10px] leading-6 text-bauraMuted">
                 Production converts recipe ingredients into finished stock.
-                Select the product size, record good and rejected output,
-                review production costs, and post the batch.
+                Select the product size, record good and rejected output, review
+                production costs, and post the batch.
               </p>
               <div className="mt-5 flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={openCreate}
-                  className="erp-button-primary"
-                >
+                  className="erp-button-primary">
                   <PackagePlus size={14} />
                   Create First Production
                 </button>
                 <button
                   type="button"
                   onClick={() => navigate("/dashboard/products")}
-                  className="erp-button-secondary"
-                >
+                  className="erp-button-secondary">
                   Check Products & Recipes
                 </button>
               </div>
@@ -755,10 +808,11 @@ export function ProductionPage() {
               <select
                 value={statusFilter}
                 onChange={(event) =>
-                  setStatusFilter(event.target.value as "ALL" | ProductionStatus)
+                  setStatusFilter(
+                    event.target.value as "ALL" | ProductionStatus,
+                  )
                 }
-                className="erp-input sm:w-40"
-              >
+                className="erp-input sm:w-40">
                 <option value="ALL">All Status</option>
                 <option value="DRAFT">Draft</option>
                 <option value="POSTED">Posted</option>
@@ -786,13 +840,17 @@ export function ProductionPage() {
               <tbody className="divide-y divide-bauraBorder">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={10} className="px-5 py-12 text-center text-[11px] text-bauraMuted">
+                    <td
+                      colSpan={10}
+                      className="px-5 py-12 text-center text-[11px] text-bauraMuted">
                       Loading production batches...
                     </td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-5 py-12 text-center text-[11px] text-bauraMuted">
+                    <td
+                      colSpan={10}
+                      className="px-5 py-12 text-center text-[11px] text-bauraMuted">
                       No production batches match the current filters.
                     </td>
                   </tr>
@@ -800,8 +858,7 @@ export function ProductionPage() {
                   filtered.map((batch) => (
                     <tr
                       key={batch.id}
-                      className="bg-white text-[11px] transition hover:bg-bauraCanvas2"
-                    >
+                      className="bg-white text-[11px] transition hover:bg-bauraCanvas2">
                       <td className="px-5 py-3.5 font-semibold text-bauraInk">
                         {batch.batchNo}
                       </td>
@@ -851,8 +908,7 @@ export function ProductionPage() {
                             type="button"
                             onClick={() => void openDetail(batch.id)}
                             className="flex h-8 w-8 items-center justify-center rounded-lg border border-bauraBorder bg-white text-bauraMuted transition hover:bg-bauraGoldSoft/50 hover:text-bauraPrimary"
-                            title="View batch"
-                          >
+                            title="View batch">
                             <Eye size={13} />
                           </button>
                           {batch.status === "DRAFT" && (
@@ -860,8 +916,7 @@ export function ProductionPage() {
                               <button
                                 type="button"
                                 onClick={() => setPostingBatch(batch)}
-                                className="flex h-8 items-center gap-1.5 rounded-lg bg-bauraPrimary px-3 text-[9px] font-semibold text-white"
-                              >
+                                className="flex h-8 items-center gap-1.5 rounded-lg bg-bauraPrimary px-3 text-[9px] font-semibold text-white">
                                 <CheckCircle2 size={12} />
                                 Post
                               </button>
@@ -869,8 +924,7 @@ export function ProductionPage() {
                                 type="button"
                                 onClick={() => setDeletingBatch(batch)}
                                 className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-100 bg-bauraDangerSoft text-bauraDanger"
-                                title="Delete draft"
-                              >
+                                title="Delete draft">
                                 <Trash2 size={12} />
                               </button>
                             </>
@@ -891,8 +945,7 @@ export function ProductionPage() {
         onClose={closeCreate}
         title="New Production"
         subtitle="Select a product size, review materials and expenses, then save or post."
-        widthClassName="max-w-5xl"
-      >
+        widthClassName="max-w-5xl">
         <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
           <div className="grid content-start gap-4">
             <label>
@@ -900,15 +953,13 @@ export function ProductionPage() {
               <select
                 value={form.productId}
                 onChange={(event) => changeProduct(event.target.value)}
-                className="erp-input"
-              >
+                className="erp-input">
                 <option value="">Select product</option>
                 {products.map((product) => (
                   <option
                     key={product.id}
                     value={product.id}
-                    disabled={!product.canProduce}
-                  >
+                    disabled={!product.canProduce}>
                     {product.displayName}
                     {!product.canProduce ? " — Recipe missing" : ""}
                   </option>
@@ -921,8 +972,7 @@ export function ProductionPage() {
                     closeCreate();
                     navigate("/dashboard/products");
                   }}
-                  className="mt-2 text-[9px] font-semibold text-bauraGoldDark"
-                >
+                  className="mt-2 text-[9px] font-semibold text-bauraGoldDark">
                   No products found. Open Products & Recipes →
                 </button>
               )}
@@ -936,18 +986,16 @@ export function ProductionPage() {
                   onChange={(event) =>
                     setForm((current) => ({
                       ...current,
-                      productSizeId: event.target.value
+                      productSizeId: event.target.value,
                     }))
                   }
-                  className="erp-input"
-                >
+                  className="erp-input">
                   <option value="">Select product size</option>
                   {selectedProduct?.sizes.map((size) => (
                     <option
                       key={size.id}
                       value={size.id}
-                      disabled={!size.canProduce}
-                    >
+                      disabled={!size.canProduce}>
                       {size.label}
                       {!size.canProduce ? " — Recipe missing" : ""}
                     </option>
@@ -995,7 +1043,7 @@ export function ProductionPage() {
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
-                    productionDate: event.target.value
+                    productionDate: event.target.value,
                   }))
                 }
                 className="erp-input"
@@ -1010,7 +1058,7 @@ export function ProductionPage() {
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
-                    expiryDate: event.target.value
+                    expiryDate: event.target.value,
                   }))
                 }
                 className="erp-input"
@@ -1024,7 +1072,7 @@ export function ProductionPage() {
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
-                    notes: event.target.value
+                    notes: event.target.value,
                   }))
                 }
                 rows={4}
@@ -1097,17 +1145,18 @@ export function ProductionPage() {
                   {preview.requirements.map((item) => (
                     <div
                       key={item.ingredientId}
-                      className="border-b border-bauraBorder px-4 py-3"
-                    >
+                      className="border-b border-bauraBorder px-4 py-3">
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <p className="text-[10px] font-semibold text-bauraInk">
                             {item.ingredientDisplayName}
                           </p>
                           <p className="mt-1 text-[9px] text-bauraMuted">
-                            Need {formatQty(item.requiredBaseQty)} {item.baseUnit}
+                            Need {formatQty(item.requiredBaseQty)}{" "}
+                            {item.baseUnit}
                             {" · "}
-                            Available {formatQty(item.availableBaseQty)} {item.baseUnit}
+                            Available {formatQty(item.availableBaseQty)}{" "}
+                            {item.baseUnit}
                           </p>
                           <p className="mt-1 text-[9px] font-medium text-bauraInk">
                             {formatCurrency(item.estimatedCost)}
@@ -1140,14 +1189,16 @@ export function ProductionPage() {
 
                   {preview.expenses.length === 0 ? (
                     <p className="px-4 py-5 text-[10px] text-bauraMuted">
-                      No additional production expenses configured for this recipe.
+                      No additional production expenses configured for this
+                      recipe.
                     </p>
                   ) : (
                     preview.expenses.map((expense, index) => (
                       <div
-                        key={expense.recipeExpenseId ?? `${expense.name}-${index}`}
-                        className="flex items-start justify-between gap-4 border-b border-bauraBorder px-4 py-3"
-                      >
+                        key={
+                          expense.recipeExpenseId ?? `${expense.name}-${index}`
+                        }
+                        className="flex items-start justify-between gap-4 border-b border-bauraBorder px-4 py-3">
                         <div>
                           <p className="text-[10px] font-semibold text-bauraInk">
                             {expense.name}
@@ -1155,7 +1206,8 @@ export function ProductionPage() {
                           <p className="mt-1 text-[9px] text-bauraMuted">
                             {formatExpenseCategory(expense.category)}
                             {" · "}
-                            {formatQty(expense.quantity)} × {formatCurrency(expense.rate)}
+                            {formatQty(expense.quantity)} ×{" "}
+                            {formatCurrency(expense.rate)}
                           </p>
                         </div>
                         <p className="text-[10px] font-semibold text-bauraInk">
@@ -1181,8 +1233,7 @@ export function ProductionPage() {
                       preview.canPost
                         ? "erp-badge bg-bauraSuccessSoft text-bauraSuccess"
                         : "erp-badge bg-bauraDangerSoft text-bauraDanger"
-                    }
-                  >
+                    }>
                     {preview.canPost ? "Ready to Post" : "Stock Shortage"}
                   </span>
                 </div>
@@ -1206,16 +1257,14 @@ export function ProductionPage() {
             type="button"
             disabled={saving}
             onClick={closeCreate}
-            className="erp-button-secondary"
-          >
+            className="erp-button-secondary">
             Cancel
           </button>
           <button
             type="button"
             disabled={saving}
             onClick={() => void createBatch(false)}
-            className="erp-button-secondary"
-          >
+            className="erp-button-secondary">
             Save Draft
           </button>
           <button
@@ -1228,8 +1277,7 @@ export function ProductionPage() {
               Boolean(previewError)
             }
             onClick={() => void createBatch(true)}
-            className="erp-button-primary"
-          >
+            className="erp-button-primary">
             {saving ? (
               <RefreshCw size={14} className="animate-spin" />
             ) : (
@@ -1247,8 +1295,7 @@ export function ProductionPage() {
         }}
         title={detail?.batchNo || "Production Batch"}
         subtitle={detail ? getBatchProductName(detail) : undefined}
-        widthClassName="max-w-4xl"
-      >
+        widthClassName="max-w-4xl">
         {detailLoading || !detail ? (
           <div className="py-12 text-center text-[10px] text-bauraMuted">
             Loading production details...
@@ -1263,8 +1310,14 @@ export function ProductionPage() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <DetailMetric label="Good Qty" value={formatQty(detail.producedQty)} />
-              <DetailMetric label="Rejected" value={formatQty(detail.rejectedQty)} />
+              <DetailMetric
+                label="Good Qty"
+                value={formatQty(detail.producedQty)}
+              />
+              <DetailMetric
+                label="Rejected"
+                value={formatQty(detail.rejectedQty)}
+              />
               <DetailMetric
                 label="Ingredient Cost"
                 value={formatCurrency(detail.ingredientCostTotal)}
@@ -1277,7 +1330,10 @@ export function ProductionPage() {
                 label="Total Cost"
                 value={formatCurrency(detail.totalProductionCost)}
               />
-              <DetailMetric label="Unit Cost" value={formatCurrency(detail.unitCost)} />
+              <DetailMetric
+                label="Unit Cost"
+                value={formatCurrency(detail.unitCost)}
+              />
               <DetailMetric
                 label="Stock Remaining"
                 value={
@@ -1307,8 +1363,7 @@ export function ProductionPage() {
                   {detail.consumptions.map((item) => (
                     <div
                       key={item.id}
-                      className="grid gap-2 px-4 py-3 text-[10px] sm:grid-cols-[1fr_auto_auto] sm:items-center"
-                    >
+                      className="grid gap-2 px-4 py-3 text-[10px] sm:grid-cols-[1fr_auto_auto] sm:items-center">
                       <div>
                         <p className="font-semibold text-bauraInk">
                           {item.ingredientDisplayName}
@@ -1343,8 +1398,7 @@ export function ProductionPage() {
                   {detail.expenses.map((expense, index) => (
                     <div
                       key={expense.id ?? `${expense.name}-${index}`}
-                      className="flex items-center justify-between gap-4 px-4 py-3"
-                    >
+                      className="flex items-center justify-between gap-4 px-4 py-3">
                       <div>
                         <p className="text-[10px] font-semibold text-bauraInk">
                           {expense.name}
@@ -1352,7 +1406,8 @@ export function ProductionPage() {
                         <p className="mt-1 text-[9px] text-bauraMuted">
                           {formatExpenseCategory(expense.category)}
                           {" · "}
-                          {formatQty(expense.quantity)} × {formatCurrency(expense.rate)}
+                          {formatQty(expense.quantity)} ×{" "}
+                          {formatCurrency(expense.rate)}
                         </p>
                       </div>
                       <p className="text-[10px] font-semibold text-bauraInk">
@@ -1380,7 +1435,9 @@ export function ProductionPage() {
               {detail.postedByName && (
                 <span>
                   Posted by {detail.postedByName}
-                  {detail.postedAt ? ` · ${formatDateTime(detail.postedAt)}` : ""}
+                  {detail.postedAt
+                    ? ` · ${formatDateTime(detail.postedAt)}`
+                    : ""}
                 </span>
               )}
             </div>
@@ -1424,7 +1481,7 @@ function Metric({
   label,
   value,
   note,
-  icon
+  icon,
 }: {
   label: string;
   value: string;
@@ -1454,7 +1511,7 @@ function Metric({
 function FlowStep({
   number,
   title,
-  text
+  text,
 }: {
   number: string;
   title: string;
@@ -1476,7 +1533,7 @@ function FlowStep({
 function QtyInput({
   label,
   value,
-  onChange
+  onChange,
 }: {
   label: string;
   value: string;
@@ -1500,7 +1557,7 @@ function QtyInput({
 function PreviewMetric({
   label,
   value,
-  good
+  good,
 }: {
   label: string;
   value: string;
@@ -1518,21 +1575,14 @@ function PreviewMetric({
             : good === true
               ? "text-bauraSuccess"
               : "text-bauraInk"
-        }`}
-      >
+        }`}>
         {value}
       </p>
     </div>
   );
 }
 
-function DetailMetric({
-  label,
-  value
-}: {
-  label: string;
-  value: string;
-}) {
+function DetailMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-bauraBorder bg-bauraCanvas2 p-4">
       <p className="text-[8px] font-semibold uppercase tracking-[0.09em] text-bauraMuted">
@@ -1543,11 +1593,7 @@ function DetailMetric({
   );
 }
 
-function ProductionStatusBadge({
-  status
-}: {
-  status: ProductionStatus;
-}) {
+function ProductionStatusBadge({ status }: { status: ProductionStatus }) {
   if (status === "POSTED") {
     return (
       <span className="erp-badge bg-bauraSuccessSoft text-bauraSuccess">

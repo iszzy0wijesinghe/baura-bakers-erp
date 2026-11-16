@@ -1,11 +1,7 @@
-import {
-  useEffect,
-  useMemo,
-  useState
-} from "react";
-import type {
-  FormEvent
-} from "react";
+/** @format */
+
+import { useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import {
   Boxes,
   Edit3,
@@ -13,57 +9,29 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Trash2
+  Trash2,
 } from "lucide-react";
-import {
-  ImageUploadField
-} from "../components/ImageUploadField";
-import {
-  AppLayout
-} from "../layouts/AppLayout";
-import {
-  apiRequest
-} from "../lib/api";
-import {
-  ConfirmDialog
-} from "../ui/ConfirmDialog";
-import {
-  Modal
-} from "../ui/Modal";
-import {
-  useToast
-} from "../ui/ToastProvider";
+import { ImageUploadField } from "../components/ImageUploadField";
+import { AppLayout } from "../layouts/AppLayout";
+import { apiRequest } from "../lib/api";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { Modal } from "../ui/Modal";
+import { useToast } from "../ui/useToast";
 
-type PackageUnit =
-  | "G"
-  | "KG"
-  | "ML"
-  | "L"
-  | "UNIT";
+type PackageUnit = "G" | "KG" | "ML" | "L" | "UNIT";
 
-type BaseUnit =
-  | "G"
-  | "ML"
-  | "UNIT";
+type BaseUnit = "G" | "ML" | "UNIT";
 
 type Ingredient = {
   id: string;
   name: string;
-  brand:
-    | string
-    | null;
-  imageUrl:
-    | string
-    | null;
+  brand: string | null;
+  imageUrl: string | null;
   packageQty: string;
-  packageUnit:
-    PackageUnit;
+  packageUnit: PackageUnit;
   baseQty: string;
-  baseUnit:
-    BaseUnit;
-  lowStockAlertQty:
-    | string
-    | null;
+  baseUnit: BaseUnit;
+  lowStockAlertQty: string | null;
   isActive: boolean;
   displayName: string;
 };
@@ -73,402 +41,238 @@ type IngredientForm = {
   brand: string;
   imageUrl: string;
   packageQty: string;
-  packageUnit:
-    PackageUnit;
+  packageUnit: PackageUnit;
   baseQty: string;
-  baseUnit:
-    BaseUnit;
-  lowStockAlertQty:
-    string;
+  baseUnit: BaseUnit;
+  lowStockAlertQty: string;
 };
 
-const initialForm:
-  IngredientForm = {
-    name: "",
-    brand: "",
-    imageUrl: "",
-    packageQty: "",
-    packageUnit: "G",
-    baseQty: "",
-    baseUnit: "G",
-    lowStockAlertQty: ""
-  };
+const initialForm: IngredientForm = {
+  name: "",
+  brand: "",
+  imageUrl: "",
+  packageQty: "",
+  packageUnit: "G",
+  baseQty: "",
+  baseUnit: "G",
+  lowStockAlertQty: "",
+};
 
 export function IngredientsPage() {
-  const toast =
-    useToast();
+  const toast = useToast();
 
-  const [
-    ingredients,
-    setIngredients
-  ] =
-    useState<
-      Ingredient[]
-    >([]);
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
 
-  const [
-    form,
-    setForm
-  ] =
-    useState<IngredientForm>(
-      initialForm
-    );
+  const [form, setForm] = useState<IngredientForm>(initialForm);
 
-  const [
-    editingIngredient,
-    setEditingIngredient
-  ] =
-    useState<
-      Ingredient | null
-    >(null);
+  const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(
+    null,
+  );
 
-  const [
-    deletingIngredient,
-    setDeletingIngredient
-  ] =
-    useState<
-      Ingredient | null
-    >(null);
+  const [deletingIngredient, setDeletingIngredient] =
+    useState<Ingredient | null>(null);
 
-  const [
-    isFormOpen,
-    setIsFormOpen
-  ] =
-    useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(false);
 
-  const [
-    search,
-    setSearch
-  ] =
-    useState("");
+  const [search, setSearch] = useState("");
 
-  const [
-    statusFilter,
-    setStatusFilter
-  ] =
-    useState<
-      | "ALL"
-      | "ACTIVE"
-      | "INACTIVE"
-    >("ACTIVE");
+  const [statusFilter, setStatusFilter] = useState<
+    "ALL" | "ACTIVE" | "INACTIVE"
+  >("ACTIVE");
 
-  const [
-    isLoading,
-    setIsLoading
-  ] =
-    useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const [
-    isSaving,
-    setIsSaving
-  ] =
-    useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const [
-    isDeleting,
-    setIsDeleting
-  ] =
-    useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  const isEditing =
-    Boolean(
-      editingIngredient
-    );
+  const isEditing = Boolean(editingIngredient);
 
-  async function loadIngredients(
-    showToast = false
-  ) {
-    setIsLoading(
-      true
-    );
+  async function loadIngredients(showToast = false) {
+    setIsLoading(true);
 
     try {
-      const data =
-        await apiRequest<{
-          ingredients:
-            Ingredient[];
-        }>(
-          "/ingredients"
-        );
+      const data = await apiRequest<{
+        ingredients: Ingredient[];
+      }>("/ingredients");
 
-      setIngredients(
-        data.ingredients
-      );
+      setIngredients(data.ingredients);
 
-      if (
-        showToast
-      ) {
-        toast.success(
-          "Ingredients refreshed"
-        );
+      if (showToast) {
+        toast.success("Ingredients refreshed");
       }
     } catch (error) {
       toast.error(
         "Failed to load ingredients",
-        error instanceof Error
-          ? error.message
-          : "Failed to load ingredients."
+        error instanceof Error ? error.message : "Failed to load ingredients.",
       );
     } finally {
-      setIsLoading(
-        false
-      );
+      setIsLoading(false);
     }
   }
 
   useEffect(() => {
-    loadIngredients();
-  }, []);
+    let active = true;
 
-  const filteredIngredients =
-    useMemo(() => {
-      const keyword =
-        search
-          .trim()
-          .toLowerCase();
+    apiRequest<{ ingredients: Ingredient[] }>("/ingredients")
+      .then((data) => {
+        if (!active) return;
 
-      return ingredients.filter(
-        (ingredient) => {
-          const matchesSearch =
-            !keyword ||
-            ingredient.displayName
-              .toLowerCase()
-              .includes(
-                keyword
-              ) ||
-            ingredient.name
-              .toLowerCase()
-              .includes(
-                keyword
-              ) ||
-            ingredient.brand
-              ?.toLowerCase()
-              .includes(
-                keyword
-              );
+        setIngredients(data.ingredients);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
 
-          const matchesStatus =
-            statusFilter ===
-              "ALL" ||
-            (
-              statusFilter ===
-                "ACTIVE" &&
-              ingredient.isActive
-            ) ||
-            (
-              statusFilter ===
-                "INACTIVE" &&
-              !ingredient.isActive
-            );
-
-          return (
-            matchesSearch &&
-            matchesStatus
-          );
+        toast.error(
+          "Failed to load ingredients",
+          error instanceof Error
+            ? error.message
+            : "Failed to load ingredients.",
+        );
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false);
         }
-      );
-    }, [
-      ingredients,
-      search,
-      statusFilter
-    ]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [toast]);
+
+  const filteredIngredients = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+
+    return ingredients.filter((ingredient) => {
+      const matchesSearch =
+        !keyword ||
+        ingredient.displayName.toLowerCase().includes(keyword) ||
+        ingredient.name.toLowerCase().includes(keyword) ||
+        ingredient.brand?.toLowerCase().includes(keyword);
+
+      const matchesStatus =
+        statusFilter === "ALL" ||
+        (statusFilter === "ACTIVE" && ingredient.isActive) ||
+        (statusFilter === "INACTIVE" && !ingredient.isActive);
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [ingredients, search, statusFilter]);
 
   function openAddModal() {
-    setEditingIngredient(
-      null
-    );
+    setEditingIngredient(null);
 
     setForm({
-      ...initialForm
+      ...initialForm,
     });
 
-    setIsFormOpen(
-      true
-    );
+    setIsFormOpen(true);
   }
 
-  function openEditModal(
-    ingredient:
-      Ingredient
-  ) {
-    setEditingIngredient(
-      ingredient
-    );
+  function openEditModal(ingredient: Ingredient) {
+    setEditingIngredient(ingredient);
 
     setForm({
-      name:
-        ingredient.name,
+      name: ingredient.name,
 
-      brand:
-        ingredient.brand ||
-        "",
+      brand: ingredient.brand || "",
 
-      imageUrl:
-        ingredient.imageUrl ||
-        "",
+      imageUrl: ingredient.imageUrl || "",
 
-      packageQty:
-        String(
-          ingredient.packageQty
-        ),
+      packageQty: String(ingredient.packageQty),
 
-      packageUnit:
-        ingredient.packageUnit,
+      packageUnit: ingredient.packageUnit,
 
-      baseQty:
-        String(
-          ingredient.baseQty
-        ),
+      baseQty: String(ingredient.baseQty),
 
-      baseUnit:
-        ingredient.baseUnit,
+      baseUnit: ingredient.baseUnit,
 
-      lowStockAlertQty:
-        ingredient.lowStockAlertQty
-          ? String(
-              ingredient.lowStockAlertQty
-            )
-          : ""
+      lowStockAlertQty: ingredient.lowStockAlertQty
+        ? String(ingredient.lowStockAlertQty)
+        : "",
     });
 
-    setIsFormOpen(
-      true
-    );
+    setIsFormOpen(true);
   }
 
   function closeFormModal() {
-    if (
-      isSaving
-    ) {
+    if (isSaving) {
       return;
     }
 
-    setIsFormOpen(
-      false
-    );
+    setIsFormOpen(false);
 
-    setEditingIngredient(
-      null
-    );
+    setEditingIngredient(null);
 
     setForm({
-      ...initialForm
+      ...initialForm,
     });
   }
 
-  async function handleSubmit(
-    event:
-      FormEvent
-  ) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
 
-    const packageQty =
-      Number(
-        form.packageQty
-      );
+    const packageQty = Number(form.packageQty);
 
-    const baseQty =
-      Number(
-        form.baseQty
-      );
+    const baseQty = Number(form.baseQty);
 
-    const lowStockAlertQty =
-      form.lowStockAlertQty
-        ? Number(
-            form.lowStockAlertQty
-          )
-        : null;
+    const lowStockAlertQty = form.lowStockAlertQty
+      ? Number(form.lowStockAlertQty)
+      : null;
 
-    if (
-      !form.name.trim()
-    ) {
-      toast.warning(
-        "Ingredient name required"
-      );
+    if (!form.name.trim()) {
+      toast.warning("Ingredient name required");
 
       return;
     }
 
-    if (
-      packageQty <= 0 ||
-      baseQty <= 0
-    ) {
+    if (packageQty <= 0 || baseQty <= 0) {
       toast.warning(
         "Invalid quantity",
-        "Package and base quantities must be greater than zero."
+        "Package and base quantities must be greater than zero.",
       );
 
       return;
     }
 
-    setIsSaving(
-      true
-    );
+    setIsSaving(true);
 
     try {
       const payload = {
-        name:
-          form.name.trim(),
+        name: form.name.trim(),
 
-        brand:
-          form.brand.trim() ||
-          null,
+        brand: form.brand.trim() || null,
 
-        imageUrl:
-          form.imageUrl.trim() ||
-          null,
+        imageUrl: form.imageUrl.trim() || null,
 
         packageQty,
 
-        packageUnit:
-          form.packageUnit,
+        packageUnit: form.packageUnit,
 
         baseQty,
 
-        baseUnit:
-          form.baseUnit,
+        baseUnit: form.baseUnit,
 
-        lowStockAlertQty
+        lowStockAlertQty,
       };
 
-      if (
-        editingIngredient
-      ) {
-        await apiRequest(
-          `/ingredients/${editingIngredient.id}`,
-          {
-            method:
-              "PUT",
+      if (editingIngredient) {
+        await apiRequest(`/ingredients/${editingIngredient.id}`, {
+          method: "PUT",
 
-            body:
-              JSON.stringify(
-                payload
-              )
-          }
-        );
+          body: JSON.stringify(payload),
+        });
 
-        toast.success(
-          "Ingredient updated",
-          `${payload.name} was updated.`
-        );
+        toast.success("Ingredient updated", `${payload.name} was updated.`);
       } else {
-        await apiRequest(
-          "/ingredients",
-          {
-            method:
-              "POST",
+        await apiRequest("/ingredients", {
+          method: "POST",
 
-            body:
-              JSON.stringify(
-                payload
-              )
-          }
-        );
+          body: JSON.stringify(payload),
+        });
 
-        toast.success(
-          "Ingredient added",
-          `${payload.name} was added.`
-        );
+        toast.success("Ingredient added", `${payload.name} was added.`);
       }
 
       closeFormModal();
@@ -477,45 +281,31 @@ export function IngredientsPage() {
     } catch (error) {
       toast.error(
         "Save failed",
-        error instanceof Error
-          ? error.message
-          : "Failed to save ingredient."
+        error instanceof Error ? error.message : "Failed to save ingredient.",
       );
     } finally {
-      setIsSaving(
-        false
-      );
+      setIsSaving(false);
     }
   }
 
   async function handleDeactivate() {
-    if (
-      !deletingIngredient
-    ) {
+    if (!deletingIngredient) {
       return;
     }
 
-    setIsDeleting(
-      true
-    );
+    setIsDeleting(true);
 
     try {
-      await apiRequest(
-        `/ingredients/${deletingIngredient.id}`,
-        {
-          method:
-            "DELETE"
-        }
-      );
+      await apiRequest(`/ingredients/${deletingIngredient.id}`, {
+        method: "DELETE",
+      });
 
       toast.success(
         "Ingredient deactivated",
-        `${deletingIngredient.displayName} was deactivated.`
+        `${deletingIngredient.displayName} was deactivated.`,
       );
 
-      setDeletingIngredient(
-        null
-      );
+      setDeletingIngredient(null);
 
       await loadIngredients();
     } catch (error) {
@@ -523,12 +313,10 @@ export function IngredientsPage() {
         "Deactivate failed",
         error instanceof Error
           ? error.message
-          : "Failed to deactivate ingredient."
+          : "Failed to deactivate ingredient.",
       );
     } finally {
-      setIsDeleting(
-        false
-      );
+      setIsDeleting(false);
     }
   }
 
@@ -541,275 +329,152 @@ export function IngredientsPage() {
         <>
           <button
             type="button"
-            onClick={() =>
-              loadIngredients(
-                true
-              )
-            }
-            className="erp-button-secondary"
-          >
-            <RefreshCw
-              size={15}
-              className={
-                isLoading
-                  ? "animate-spin"
-                  : ""
-              }
-            />
-
+            onClick={() => loadIngredients(true)}
+            className="erp-button-secondary">
+            <RefreshCw size={15} className={isLoading ? "animate-spin" : ""} />
             Refresh
           </button>
 
           <button
             type="button"
-            onClick={
-              openAddModal
-            }
-            className="erp-button-primary"
-          >
-            <Plus
-              size={15}
-            />
-
+            onClick={openAddModal}
+            className="erp-button-primary">
+            <Plus size={15} />
             Add Ingredient
           </button>
         </>
-      }
-    >
+      }>
       <section className="erp-panel overflow-hidden">
         <div className="flex flex-col gap-4 border-b border-bauraBorder px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="erp-section-title">
-              Ingredient List
-            </h2>
+            <h2 className="erp-section-title">Ingredient List</h2>
 
             <p className="erp-section-subtitle">
-              {
-                filteredIngredients.length
-              }{" "}
-              shown ·{" "}
-              {
-                ingredients.length
-              }{" "}
-              total
+              {filteredIngredients.length} shown · {ingredients.length} total
             </p>
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row">
             <div className="erp-search sm:w-72">
-              <Search
-                size={15}
-                className="text-bauraMuted"
-              />
+              <Search size={15} className="text-bauraMuted" />
 
               <input
-                value={
-                  search
-                }
-                onChange={(
-                  event
-                ) =>
-                  setSearch(
-                    event.target.value
-                  )
-                }
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search ingredients..."
                 className="w-full bg-transparent text-[11px] text-bauraInk outline-none placeholder:text-bauraMuted2"
               />
             </div>
 
             <select
-              value={
-                statusFilter
-              }
-              onChange={(
-                event
-              ) =>
+              value={statusFilter}
+              onChange={(event) =>
                 setStatusFilter(
-                  event.target.value as
-                    | "ALL"
-                    | "ACTIVE"
-                    | "INACTIVE"
+                  event.target.value as "ALL" | "ACTIVE" | "INACTIVE",
                 )
               }
-              className="erp-input sm:w-40"
-            >
-              <option value="ACTIVE">
-                Active
-              </option>
+              className="erp-input sm:w-40">
+              <option value="ACTIVE">Active</option>
 
-              <option value="ALL">
-                All
-              </option>
+              <option value="ALL">All</option>
 
-              <option value="INACTIVE">
-                Inactive
-              </option>
+              <option value="INACTIVE">Inactive</option>
             </select>
           </div>
         </div>
 
         <div className="baura-scrollbar max-h-[calc(100vh-270px)] overflow-y-auto p-4">
           {isLoading ? (
-            <EmptyState
-              text="Loading ingredients..."
-            />
-          ) : filteredIngredients.length ===
-            0 ? (
-            <EmptyState
-              text="No ingredients found."
-            />
+            <EmptyState text="Loading ingredients..." />
+          ) : filteredIngredients.length === 0 ? (
+            <EmptyState text="No ingredients found." />
           ) : (
             <div className="grid gap-3 xl:grid-cols-2">
-              {filteredIngredients.map(
-                (
-                  ingredient
-                ) => (
-                  <article
-                    key={
-                      ingredient.id
-                    }
-                    className="rounded-[16px] border border-bauraBorder bg-white p-4 transition hover:shadow-bauraCard"
-                  >
-                    <div className="flex items-start gap-4">
-                      <IngredientImage
-                        ingredient={
-                          ingredient
-                        }
-                      />
+              {filteredIngredients.map((ingredient) => (
+                <article
+                  key={ingredient.id}
+                  className="rounded-[16px] border border-bauraBorder bg-white p-4 transition hover:shadow-bauraCard">
+                  <div className="flex items-start gap-4">
+                    <IngredientImage ingredient={ingredient} />
 
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="min-w-0">
-                            <h3 className="truncate text-[12px] font-semibold text-bauraInk">
-                              {
-                                ingredient.displayName
-                              }
-                            </h3>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <h3 className="truncate text-[12px] font-semibold text-bauraInk">
+                            {ingredient.displayName}
+                          </h3>
 
+                          <p className="mt-1 text-[9px] text-bauraMuted">
+                            Base conversion: {ingredient.baseQty}{" "}
+                            {ingredient.baseUnit}
+                          </p>
+
+                          {ingredient.lowStockAlertQty && (
                             <p className="mt-1 text-[9px] text-bauraMuted">
-                              Base conversion:{" "}
-                              {
-                                ingredient.baseQty
-                              }{" "}
-                              {
-                                ingredient.baseUnit
-                              }
+                              Alert below {ingredient.lowStockAlertQty}{" "}
+                              {ingredient.baseUnit}
                             </p>
-
-                            {ingredient.lowStockAlertQty && (
-                              <p className="mt-1 text-[9px] text-bauraMuted">
-                                Alert below{" "}
-                                {
-                                  ingredient.lowStockAlertQty
-                                }{" "}
-                                {
-                                  ingredient.baseUnit
-                                }
-                              </p>
-                            )}
-                          </div>
-
-                          <span
-                            className={`erp-badge ${
-                              ingredient.isActive
-                                ? "bg-bauraSuccessSoft text-bauraSuccess"
-                                : "bg-bauraDangerSoft text-bauraDanger"
-                            }`}
-                          >
-                            {ingredient.isActive
-                              ? "Active"
-                              : "Inactive"}
-                          </span>
+                          )}
                         </div>
 
-                        {ingredient.isActive && (
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                openEditModal(
-                                  ingredient
-                                )
-                              }
-                              className="erp-button-secondary h-8 px-3"
-                            >
-                              <Edit3
-                                size={12}
-                              />
-
-                              Edit
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setDeletingIngredient(
-                                  ingredient
-                                )
-                              }
-                              className="erp-button-danger h-8 px-3"
-                            >
-                              <Trash2
-                                size={12}
-                              />
-
-                              Deactivate
-                            </button>
-                          </div>
-                        )}
+                        <span
+                          className={`erp-badge ${
+                            ingredient.isActive
+                              ? "bg-bauraSuccessSoft text-bauraSuccess"
+                              : "bg-bauraDangerSoft text-bauraDanger"
+                          }`}>
+                          {ingredient.isActive ? "Active" : "Inactive"}
+                        </span>
                       </div>
+
+                      {ingredient.isActive && (
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(ingredient)}
+                            className="erp-button-secondary h-8 px-3">
+                            <Edit3 size={12} />
+                            Edit
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setDeletingIngredient(ingredient)}
+                            className="erp-button-danger h-8 px-3">
+                            <Trash2 size={12} />
+                            Deactivate
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  </article>
-                )
-              )}
+                  </div>
+                </article>
+              ))}
             </div>
           )}
         </div>
       </section>
 
       <Modal
-        open={
-          isFormOpen
-        }
-        onClose={
-          closeFormModal
-        }
-        title={
-          isEditing
-            ? "Edit Ingredient"
-            : "Add Ingredient"
-        }
+        open={isFormOpen}
+        onClose={closeFormModal}
+        title={isEditing ? "Edit Ingredient" : "Add Ingredient"}
         subtitle={
           isEditing
             ? "Update ingredient information and its Cloudinary image."
             : "Create a reusable ingredient for inventory, recipes and production."
         }
-        widthClassName="max-w-3xl"
-      >
-        <form
-          onSubmit={
-            handleSubmit
-          }
-          className="grid gap-5"
-        >
+        widthClassName="max-w-3xl">
+        <form onSubmit={handleSubmit} className="grid gap-5">
           <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
             <ImageUploadField
               label="Ingredient Image"
-              value={
-                form.imageUrl
-              }
-              onChange={(
-                imageUrl
-              ) =>
-                setForm(
-                  (
-                    current
-                  ) => ({
-                    ...current,
-                    imageUrl
-                  })
-                )
+              value={form.imageUrl}
+              onChange={(imageUrl) =>
+                setForm((current) => ({
+                  ...current,
+                  imageUrl,
+                }))
               }
               folder="baura/ingredients"
             />
@@ -817,47 +482,27 @@ export function IngredientsPage() {
             <div className="grid content-start gap-4">
               <Input
                 label="Ingredient Name"
-                value={
-                  form.name
-                }
-                onChange={(
-                  value
-                ) =>
-                  setForm(
-                    (
-                      current
-                    ) => ({
-                      ...current,
-                      name:
-                        value
-                    })
-                  )
+                value={form.name}
+                onChange={(value) =>
+                  setForm((current) => ({
+                    ...current,
+                    name: value,
+                  }))
                 }
                 placeholder="Baking Powder"
               />
 
               <Input
                 label="Brand"
-                value={
-                  form.brand
-                }
-                onChange={(
-                  value
-                ) =>
-                  setForm(
-                    (
-                      current
-                    ) => ({
-                      ...current,
-                      brand:
-                        value
-                    })
-                  )
+                value={form.brand}
+                onChange={(value) =>
+                  setForm((current) => ({
+                    ...current,
+                    brand: value,
+                  }))
                 }
                 placeholder="Motha"
-                required={
-                  false
-                }
+                required={false}
               />
             </div>
           </div>
@@ -865,21 +510,12 @@ export function IngredientsPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <Input
               label="Package Quantity"
-              value={
-                form.packageQty
-              }
-              onChange={(
-                value
-              ) =>
-                setForm(
-                  (
-                    current
-                  ) => ({
-                    ...current,
-                    packageQty:
-                      value
-                  })
-                )
+              value={form.packageQty}
+              onChange={(value) =>
+                setForm((current) => ({
+                  ...current,
+                  packageQty: value,
+                }))
               }
               placeholder="1"
               type="number"
@@ -887,51 +523,26 @@ export function IngredientsPage() {
 
             <Select
               label="Package Unit"
-              value={
-                form.packageUnit
+              value={form.packageUnit}
+              onChange={(value) =>
+                setForm((current) => ({
+                  ...current,
+                  packageUnit: value as PackageUnit,
+                }))
               }
-              onChange={(
-                value
-              ) =>
-                setForm(
-                  (
-                    current
-                  ) => ({
-                    ...current,
-                    packageUnit:
-                      value as
-                        PackageUnit
-                  })
-                )
-              }
-              options={[
-                "G",
-                "KG",
-                "ML",
-                "L",
-                "UNIT"
-              ]}
+              options={["G", "KG", "ML", "L", "UNIT"]}
             />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Input
               label="Base Quantity"
-              value={
-                form.baseQty
-              }
-              onChange={(
-                value
-              ) =>
-                setForm(
-                  (
-                    current
-                  ) => ({
-                    ...current,
-                    baseQty:
-                      value
-                  })
-                )
+              value={form.baseQty}
+              onChange={(value) =>
+                setForm((current) => ({
+                  ...current,
+                  baseQty: value,
+                }))
               }
               placeholder="1000"
               type="number"
@@ -939,77 +550,44 @@ export function IngredientsPage() {
 
             <Select
               label="Base Unit"
-              value={
-                form.baseUnit
+              value={form.baseUnit}
+              onChange={(value) =>
+                setForm((current) => ({
+                  ...current,
+                  baseUnit: value as BaseUnit,
+                }))
               }
-              onChange={(
-                value
-              ) =>
-                setForm(
-                  (
-                    current
-                  ) => ({
-                    ...current,
-                    baseUnit:
-                      value as
-                        BaseUnit
-                  })
-                )
-              }
-              options={[
-                "G",
-                "ML",
-                "UNIT"
-              ]}
+              options={["G", "ML", "UNIT"]}
             />
           </div>
 
           <Input
             label="Low Stock Alert Qty"
-            value={
-              form.lowStockAlertQty
-            }
-            onChange={(
-              value
-            ) =>
-              setForm(
-                (
-                  current
-                ) => ({
-                  ...current,
-                  lowStockAlertQty:
-                    value
-                })
-              )
+            value={form.lowStockAlertQty}
+            onChange={(value) =>
+              setForm((current) => ({
+                ...current,
+                lowStockAlertQty: value,
+              }))
             }
             placeholder="100"
             type="number"
-            required={
-              false
-            }
+            required={false}
           />
 
           <div className="flex flex-col-reverse gap-2 border-t border-bauraBorder pt-5 sm:flex-row sm:justify-end">
             <button
               type="button"
-              onClick={
-                closeFormModal
-              }
-              disabled={
-                isSaving
-              }
-              className="erp-button-secondary"
-            >
+              onClick={closeFormModal}
+              disabled={isSaving}
+              className="erp-button-secondary">
               Cancel
             </button>
 
             <button
               type="submit"
-              disabled={
-                isSaving
-              }
-              className="erp-button-primary"
-            >
+              disabled={isSaving}
+              className="erp-button-primary">
               {isSaving
                 ? "Saving..."
                 : isEditing
@@ -1021,11 +599,7 @@ export function IngredientsPage() {
       </Modal>
 
       <ConfirmDialog
-        open={
-          Boolean(
-            deletingIngredient
-          )
-        }
+        open={Boolean(deletingIngredient)}
         title="Deactivate ingredient?"
         message={
           deletingIngredient
@@ -1035,44 +609,25 @@ export function IngredientsPage() {
         confirmText="Deactivate"
         cancelText="Cancel"
         isDanger
-        isLoading={
-          isDeleting
-        }
+        isLoading={isDeleting}
         onCancel={() => {
-          if (
-            !isDeleting
-          ) {
-            setDeletingIngredient(
-              null
-            );
+          if (!isDeleting) {
+            setDeletingIngredient(null);
           }
         }}
-        onConfirm={
-          handleDeactivate
-        }
+        onConfirm={handleDeactivate}
       />
     </AppLayout>
   );
 }
 
-function IngredientImage({
-  ingredient
-}: {
-  ingredient:
-    Ingredient;
-}) {
-  if (
-    ingredient.imageUrl
-  ) {
+function IngredientImage({ ingredient }: { ingredient: Ingredient }) {
+  if (ingredient.imageUrl) {
     return (
       <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-bauraBorder bg-bauraCanvas2">
         <img
-          src={
-            ingredient.imageUrl
-          }
-          alt={
-            ingredient.displayName
-          }
+          src={ingredient.imageUrl}
+          alt={ingredient.displayName}
           className="h-full w-full object-cover"
           loading="lazy"
         />
@@ -1082,28 +637,17 @@ function IngredientImage({
 
   return (
     <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-bauraGoldSoft text-bauraGoldDark">
-      <Boxes
-        size={21}
-      />
+      <Boxes size={21} />
     </div>
   );
 }
 
-function EmptyState({
-  text
-}: {
-  text: string;
-}) {
+function EmptyState({ text }: { text: string }) {
   return (
     <div className="flex min-h-[180px] flex-col items-center justify-center rounded-[16px] border border-dashed border-bauraBorder bg-bauraCanvas2 px-6 text-center">
-      <ImageIcon
-        size={22}
-        className="text-bauraMuted2"
-      />
+      <ImageIcon size={22} className="text-bauraMuted2" />
 
-      <p className="mt-3 text-[10px] font-medium text-bauraMuted">
-        {text}
-      </p>
+      <p className="mt-3 text-[10px] font-medium text-bauraMuted">{text}</p>
     </div>
   );
 }
@@ -1114,56 +658,28 @@ function Input({
   onChange,
   placeholder,
   type = "text",
-  required = true
+  required = true,
 }: {
   label: string;
   value: string;
-  onChange: (
-    value: string
-  ) => void;
+  onChange: (value: string) => void;
   placeholder?: string;
   type?: string;
   required?: boolean;
 }) {
   return (
     <label className="block">
-      <span className="erp-label">
-        {label}
-      </span>
+      <span className="erp-label">{label}</span>
 
       <input
         className="erp-input"
-        value={
-          value
-        }
-        onChange={(
-          event
-        ) =>
-          onChange(
-            event.target.value
-          )
-        }
-        placeholder={
-          placeholder
-        }
-        type={
-          type
-        }
-        required={
-          required
-        }
-        min={
-          type ===
-          "number"
-            ? "0"
-            : undefined
-        }
-        step={
-          type ===
-          "number"
-            ? "0.001"
-            : undefined
-        }
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        type={type}
+        required={required}
+        min={type === "number" ? "0" : undefined}
+        step={type === "number" ? "0.001" : undefined}
       />
     </label>
   );
@@ -1173,51 +689,26 @@ function Select({
   label,
   value,
   onChange,
-  options
+  options,
 }: {
   label: string;
   value: string;
-  onChange: (
-    value: string
-  ) => void;
-  options:
-    string[];
+  onChange: (value: string) => void;
+  options: string[];
 }) {
   return (
     <label className="block">
-      <span className="erp-label">
-        {label}
-      </span>
+      <span className="erp-label">{label}</span>
 
       <select
         className="erp-input"
-        value={
-          value
-        }
-        onChange={(
-          event
-        ) =>
-          onChange(
-            event.target.value
-          )
-        }
-      >
-        {options.map(
-          (
-            option
-          ) => (
-            <option
-              key={
-                option
-              }
-              value={
-                option
-              }
-            >
-              {option}
-            </option>
-          )
-        )}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
       </select>
     </label>
   );

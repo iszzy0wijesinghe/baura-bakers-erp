@@ -1,6 +1,6 @@
 /** @format */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   AlertTriangle,
@@ -29,6 +29,35 @@ import {
 
 import { useToast } from "../../ui/ToastProvider";
 
+
+const dayEndStartRequests = new Map<
+  string,
+  ReturnType<typeof startPosDayEnd>
+>();
+
+function startDayEndOnce(
+  sessionId: string,
+  cashierNote: string | null
+) {
+  const existing = dayEndStartRequests.get(sessionId);
+
+  if (existing) return existing;
+
+  const request = startPosDayEnd(sessionId, {
+    cashierNote
+  });
+
+  dayEndStartRequests.set(sessionId, request);
+
+  void request.catch(() => {
+    if (dayEndStartRequests.get(sessionId) === request) {
+      dayEndStartRequests.delete(sessionId);
+    }
+  });
+
+  return request;
+}
+
 type Props = {
   session: PosSession;
   alreadyClosing?: boolean;
@@ -44,17 +73,58 @@ type Denomination = {
   quantity: number;
 };
 
-const IMAGE_BASE =
-  `${import.meta.env.BASE_URL}images/currency/lkr`;
+const IMAGE_BASE = `${import.meta.env.BASE_URL}images/currency/lkr`;
 
 const DEFAULT_DENOMINATIONS: Denomination[] = [
-  { value: 5000, label: "Rs. 5,000", type: "NOTE", imageUrl: `${IMAGE_BASE}/5000-F.webp`, quantity: 0 },
-  { value: 2000, label: "Rs. 2,000", type: "NOTE", imageUrl: `${IMAGE_BASE}/2000.webp`, quantity: 0 },
-  { value: 1000, label: "Rs. 1,000", type: "NOTE", imageUrl: `${IMAGE_BASE}/1000-F.webp`, quantity: 0 },
-  { value: 500, label: "Rs. 500", type: "NOTE", imageUrl: `${IMAGE_BASE}/500-F.webp`, quantity: 0 },
-  { value: 100, label: "Rs. 100", type: "NOTE", imageUrl: `${IMAGE_BASE}/100-F.webp`, quantity: 0 },
-  { value: 50, label: "Rs. 50", type: "NOTE", imageUrl: `${IMAGE_BASE}/50-F.webp`, quantity: 0 },
-  { value: 20, label: "Rs. 20", type: "NOTE", imageUrl: `${IMAGE_BASE}/20-F.webp`, quantity: 0 },
+  {
+    value: 5000,
+    label: "Rs. 5,000",
+    type: "NOTE",
+    imageUrl: `${IMAGE_BASE}/5000-F.webp`,
+    quantity: 0,
+  },
+  {
+    value: 2000,
+    label: "Rs. 2,000",
+    type: "NOTE",
+    imageUrl: `${IMAGE_BASE}/2000.webp`,
+    quantity: 0,
+  },
+  {
+    value: 1000,
+    label: "Rs. 1,000",
+    type: "NOTE",
+    imageUrl: `${IMAGE_BASE}/1000-F.webp`,
+    quantity: 0,
+  },
+  {
+    value: 500,
+    label: "Rs. 500",
+    type: "NOTE",
+    imageUrl: `${IMAGE_BASE}/500-F.webp`,
+    quantity: 0,
+  },
+  {
+    value: 100,
+    label: "Rs. 100",
+    type: "NOTE",
+    imageUrl: `${IMAGE_BASE}/100-F.webp`,
+    quantity: 0,
+  },
+  {
+    value: 50,
+    label: "Rs. 50",
+    type: "NOTE",
+    imageUrl: `${IMAGE_BASE}/50-F.webp`,
+    quantity: 0,
+  },
+  {
+    value: 20,
+    label: "Rs. 20",
+    type: "NOTE",
+    imageUrl: `${IMAGE_BASE}/20-F.webp`,
+    quantity: 0,
+  },
   { value: 10, label: "Rs. 10", type: "COIN", imageUrl: null, quantity: 0 },
   { value: 5, label: "Rs. 5", type: "COIN", imageUrl: null, quantity: 0 },
   { value: 2, label: "Rs. 2", type: "COIN", imageUrl: null, quantity: 0 },
@@ -111,11 +181,7 @@ function getBusinessDateKey(value: string | Date): string {
     : value.slice(0, 10);
 }
 
-function DenominationVisual({
-  denomination,
-}: {
-  denomination: Denomination;
-}) {
+function DenominationVisual({ denomination }: { denomination: Denomination }) {
   const [imageFailed, setImageFailed] = useState(false);
 
   if (denomination.type === "COIN") {
@@ -162,8 +228,7 @@ function QuantityControl({
         onClick={() => onChange(denomination.quantity - 1)}
         disabled={denomination.quantity === 0}
         aria-label={`Decrease ${denomination.label} quantity`}
-        className="flex h-full w-9 shrink-0 items-center justify-center text-bauraInk transition hover:bg-[#f4f1ed] disabled:cursor-not-allowed disabled:opacity-30"
-      >
+        className="flex h-full w-9 shrink-0 items-center justify-center text-bauraInk transition hover:bg-[#f4f1ed] disabled:cursor-not-allowed disabled:opacity-30">
         <Minus size={13} />
       </button>
 
@@ -184,8 +249,7 @@ function QuantityControl({
         onClick={() => onChange(denomination.quantity + 1)}
         disabled={denomination.quantity >= 100000}
         aria-label={`Increase ${denomination.label} quantity`}
-        className="flex h-full w-9 shrink-0 items-center justify-center text-bauraInk transition hover:bg-[#f4f1ed] disabled:cursor-not-allowed disabled:opacity-30"
-      >
+        className="flex h-full w-9 shrink-0 items-center justify-center text-bauraInk transition hover:bg-[#f4f1ed] disabled:cursor-not-allowed disabled:opacity-30">
         <Plus size={13} />
       </button>
     </div>
@@ -207,8 +271,7 @@ function NoteCard({
         hasQuantity
           ? "border-bauraPrimary/30 shadow-[0_4px_18px_rgba(74,43,30,0.06)]"
           : "border-black/[0.075] hover:border-black/[0.14] hover:shadow-[0_4px_18px_rgba(0,0,0,0.035)]"
-      }`}
-    >
+      }`}>
       <div className="flex items-center gap-3">
         <DenominationVisual denomination={denomination} />
 
@@ -241,8 +304,7 @@ function NoteCard({
         <span
           className={`text-[12px] font-extrabold ${
             hasQuantity ? "text-bauraPrimary" : "text-bauraInk"
-          }`}
-        >
+          }`}>
           Rs. {money(denomination.value * denomination.quantity)}
         </span>
       </div>
@@ -265,8 +327,7 @@ function CoinCard({
         hasQuantity
           ? "border-bauraPrimary/30"
           : "border-black/[0.075] hover:border-black/[0.14]"
-      }`}
-    >
+      }`}>
       <div className="flex items-center gap-3">
         <DenominationVisual denomination={denomination} />
 
@@ -306,16 +367,14 @@ function Summary({
       <span
         className={`text-[10px] ${
           strong ? "font-bold text-bauraInk" : "text-bauraMuted"
-        }`}
-      >
+        }`}>
         {label}
       </span>
 
       <span
         className={`text-[10px] ${
           strong ? "font-black text-bauraInk" : "font-bold text-bauraInk"
-        }`}
-      >
+        }`}>
         Rs. {money(value)}
       </span>
     </div>
@@ -337,8 +396,7 @@ function CashValue({
       <span
         className={`font-black ${
           strong ? "text-[16px] text-bauraPrimary" : "text-[12px] text-bauraInk"
-        }`}
-      >
+        }`}>
         Rs. {money(value)}
       </span>
     </div>
@@ -358,16 +416,14 @@ export function PosDayEnd({
     DEFAULT_DENOMINATIONS.map((item) => ({ ...item })),
   );
   const [cashierNote, setCashierNote] = useState("");
+  const initialCashierNote = useRef(cashierNote);
   const [varianceReason, setVarianceReason] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   const countedCash = useMemo(
     () =>
-      denominations.reduce(
-        (total, row) => total + row.value * row.quantity,
-        0,
-      ),
+      denominations.reduce((total, row) => total + row.value * row.quantity, 0),
     [denominations],
   );
 
@@ -432,11 +488,53 @@ export function PosDayEnd({
     }
   }
 
-  useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.id]);
+useEffect(() => {
+  let active = true;
 
+  const sessionId = session.id;
+  const isClosing = alreadyClosing || session.status === "CLOSING";
+
+  async function initializeDayEnd() {
+    try {
+      const response = isClosing
+        ? await getPosDayEnd(sessionId)
+        : await startDayEndOnce(
+            sessionId,
+            initialCashierNote.current.trim() || null
+          );
+
+      if (!active) return;
+
+      setTotals(response.totals);
+
+      if (!isClosing) {
+        toast.info(
+          "Day End started",
+          "Billing is now locked while the drawer is reconciled."
+        );
+      }
+    } catch (error) {
+      if (!active) return;
+
+      toast.error(
+        "Unable to start Day End",
+        error instanceof Error
+          ? error.message
+          : "Could not load Day End totals."
+      );
+    } finally {
+      if (active) {
+        setLoading(false);
+      }
+    }
+  }
+
+  void initializeDayEnd();
+
+  return () => {
+    active = false;
+  };
+}, [session.id, session.status, alreadyClosing, toast]);
   async function submit() {
     if (!totals || submitting || isFutureDated) return;
 
@@ -471,9 +569,7 @@ export function PosDayEnd({
     } catch (error) {
       toast.error(
         "Day End failed",
-        error instanceof Error
-          ? error.message
-          : "Unable to submit Day End.",
+        error instanceof Error ? error.message : "Unable to submit Day End.",
       );
     } finally {
       setSubmitting(false);
@@ -513,8 +609,7 @@ export function PosDayEnd({
           <button
             type="button"
             onClick={() => void load()}
-            className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-bauraPrimary px-5 text-[10px] font-bold text-white"
-          >
+            className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-bauraPrimary px-5 text-[10px] font-bold text-white">
             <RefreshCw size={14} />
             Try Again
           </button>
@@ -532,8 +627,7 @@ export function PosDayEnd({
               type="button"
               onClick={onBack}
               className="flex h-9 w-9 items-center justify-center rounded-xl border border-black/[0.08] transition hover:bg-[#f4f4f1]"
-              aria-label="Back"
-            >
+              aria-label="Back">
               <ArrowLeft size={15} />
             </button>
           )}
@@ -568,9 +662,9 @@ export function PosDayEnd({
                 </p>
                 <p className="mt-1 text-[10px] leading-5 text-amber-800">
                   This session belongs to{" "}
-                  <strong>{formatDate(session.businessDate)}</strong>.
-                  Complete its reconciliation and submit it for manager
-                  approval. Existing sales remain on their original date.
+                  <strong>{formatDate(session.businessDate)}</strong>. Complete
+                  its reconciliation and submit it for manager approval.
+                  Existing sales remain on their original date.
                 </p>
               </div>
             </div>
@@ -703,7 +797,10 @@ export function PosDayEnd({
               <Summary label="Cash sales" value={totals.cashSalesTotal} />
               <Summary label="Card sales" value={totals.cardSalesTotal} />
               <Summary label="Bank transfer" value={totals.bankTransferTotal} />
-              <Summary label="Other payments" value={totals.otherPaymentTotal} />
+              <Summary
+                label="Other payments"
+                value={totals.otherPaymentTotal}
+              />
 
               <div className="my-3 border-t border-dashed border-black/10" />
 
@@ -736,8 +833,7 @@ export function PosDayEnd({
                   hasVariance
                     ? "border-amber-100 bg-amber-50"
                     : "border-emerald-100 bg-emerald-50"
-                }`}
-              >
+                }`}>
                 <div className="flex items-center justify-between">
                   <p className="text-[8px] font-bold uppercase tracking-[0.08em] text-bauraMuted">
                     Cash Variance
@@ -750,8 +846,7 @@ export function PosDayEnd({
                 <p
                   className={`mt-1 text-[20px] font-black ${
                     hasVariance ? "text-amber-700" : "text-emerald-700"
-                  }`}
-                >
+                  }`}>
                   {variance > 0 ? "+" : variance < 0 ? "−" : ""}
                   Rs. {money(Math.abs(variance))}
                 </p>
@@ -798,8 +893,7 @@ export function PosDayEnd({
               type="button"
               disabled={submitting || isFutureDated}
               onClick={() => void submit()}
-              className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-bauraPrimary text-[10px] font-extrabold text-white shadow-[0_10px_25px_rgba(91,55,38,0.16)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-            >
+              className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-bauraPrimary text-[10px] font-extrabold text-white shadow-[0_10px_25px_rgba(91,55,38,0.16)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
               {submitting ? (
                 <>
                   <Loader2 size={15} className="animate-spin" />
@@ -819,9 +913,9 @@ export function PosDayEnd({
                 className="mt-0.5 shrink-0 text-bauraGoldDark"
               />
               <p className="text-[9px] leading-5 text-bauraMuted">
-                After submission, the register remains locked until a
-                different authorized manager approves the reconciliation.
-                Sales and cash records retain their original business date.
+                After submission, the register remains locked until a different
+                authorized manager approves the reconciliation. Sales and cash
+                records retain their original business date.
               </p>
             </div>
           </div>

@@ -1,3 +1,5 @@
+/** @format */
+
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
@@ -23,6 +25,7 @@ import posCustomerRoutes from "./modules/pos-customers/posCustomers.routes";
 import businessCalendarRoutes from "./modules/business-calendar/businessCalendar.routes";
 import posSessionRoutes from "./modules/pos-sessions/posSessions.routes";
 import posCashMovementRoutes from "./modules/pos-cash-movements/posCashMovements.routes";
+import officialSiteCalendarRoutes from "./modules/integrations/officialSiteCalendar.routes";
 
 dotenv.config();
 
@@ -52,9 +55,9 @@ if (isProduction) {
 app.use(
   helmet({
     crossOriginResourcePolicy: {
-      policy: "cross-origin"
-    }
-  })
+      policy: "cross-origin",
+    },
+  }),
 );
 
 /*
@@ -62,7 +65,10 @@ app.use(
  * This does not hide responses from the authenticated browser user.
  */
 app.use("/api", (_req, res, next) => {
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+  res.setHeader(
+    "Cache-Control",
+    "no-store, no-cache, must-revalidate, private",
+  );
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
   res.setHeader("X-Content-Type-Options", "nosniff");
@@ -75,9 +81,7 @@ app.use("/api", (_req, res, next) => {
 |--------------------------------------------------------------------------
 */
 
-const configuredOrigins = (
-  process.env.FRONTEND_URL || "http://localhost:5173"
-)
+const configuredOrigins = (process.env.FRONTEND_URL || "http://localhost:5173")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
@@ -93,23 +97,13 @@ app.use(
       callback(new Error("Origin is not allowed by CORS"));
     },
 
-    methods: [
-      "GET",
-      "POST",
-      "PUT",
-      "PATCH",
-      "DELETE",
-      "OPTIONS"
-    ],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization"
-    ],
+    allowedHeaders: ["Content-Type", "Authorization"],
 
     credentials: false,
-    maxAge: 86400
-  })
+    maxAge: 86400,
+  }),
 );
 
 /*
@@ -123,8 +117,8 @@ app.use(express.json({ limit: "1mb" }));
 app.use(
   express.urlencoded({
     extended: false,
-    limit: "1mb"
-  })
+    limit: "1mb",
+  }),
 );
 
 /*
@@ -139,8 +133,8 @@ const apiLimiter = rateLimit({
   standardHeaders: "draft-7",
   legacyHeaders: false,
   message: {
-    message: "Too many requests. Please try again shortly."
-  }
+    message: "Too many requests. Please try again shortly.",
+  },
 });
 
 app.use("/api", apiLimiter);
@@ -158,8 +152,8 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   skipSuccessfulRequests: true,
   message: {
-    message: "Too many authentication attempts. Please try again later."
-  }
+    message: "Too many authentication attempts. Please try again later.",
+  },
 });
 
 app.use("/api/auth", authLimiter);
@@ -173,7 +167,7 @@ app.use("/api/auth", authLimiter);
 app.get("/api/health", (_req, res) => {
   res.status(200).json({
     status: "OK",
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -245,6 +239,14 @@ app.use("/api/settings", settingsRoutes);
 
 /*
 |--------------------------------------------------------------------------
+| Official website integration
+|--------------------------------------------------------------------------
+*/
+
+app.use("/api/integrations/official-site", officialSiteCalendarRoutes);
+
+/*
+|--------------------------------------------------------------------------
 | 404 handler
 |--------------------------------------------------------------------------
 */
@@ -252,7 +254,7 @@ app.use("/api/settings", settingsRoutes);
 app.use((req, res) => {
   res.status(404).json({
     message: "API route not found.",
-    path: req.path
+    path: req.path,
   });
 });
 
@@ -267,7 +269,7 @@ app.use(
     error: unknown,
     _req: express.Request,
     res: express.Response,
-    _next: express.NextFunction
+    _next: express.NextFunction,
   ) => {
     console.error(error);
 
@@ -275,7 +277,7 @@ app.use(
 
     if (message === "Origin is not allowed by CORS") {
       res.status(403).json({
-        message: "Origin not allowed."
+        message: "Origin not allowed.",
       });
       return;
     }
@@ -283,9 +285,9 @@ app.use(
     res.status(500).json({
       message: isProduction
         ? "Internal server error."
-        : message || "Internal server error."
+        : message || "Internal server error.",
     });
-  }
+  },
 );
 
 /*
@@ -297,13 +299,9 @@ app.use(
 const HOST = process.env.HOST || "127.0.0.1";
 
 const server = app.listen(PORT, HOST, () => {
-  console.log(
-    `Baura Bakery ERP API running on http://localhost:${PORT}`
-  );
+  console.log(`Baura Bakery ERP API running on http://localhost:${PORT}`);
 
-  console.log(
-    `Environment: ${isProduction ? "production" : "development"}`
-  );
+  console.log(`Environment: ${isProduction ? "production" : "development"}`);
 });
 
 /*

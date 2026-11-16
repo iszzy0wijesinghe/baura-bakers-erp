@@ -1,14 +1,12 @@
-import {
-  Prisma,
-} from "@prisma/client";
+/** @format */
+
+import { Prisma } from "@prisma/client";
 import { Router } from "express";
 import jwt from "jsonwebtoken";
 
 import { env } from "../../config/env";
 import { prisma } from "../../lib/prisma";
-import {
-  authMiddleware,
-} from "../../middleware/auth.middleware";
+import { authMiddleware } from "../../middleware/auth.middleware";
 
 const router = Router();
 
@@ -54,19 +52,13 @@ type AccessTokenPayload = {
   permissions: string[];
 };
 
-function normalizeEmail(
-  value: unknown,
-): string {
-  return String(
-    value ?? "",
-  )
+function normalizeEmail(value: unknown): string {
+  return String(value ?? "")
     .trim()
     .toLowerCase();
 }
 
-function normalizePermissionKeys(
-  value: unknown,
-): string[] {
+function normalizePermissionKeys(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
   }
@@ -75,69 +67,37 @@ function normalizePermissionKeys(
     new Set(
       value
         .filter(
-          (
-            permission,
-          ): permission is string =>
-            typeof permission ===
-              "string",
+          (permission): permission is string => typeof permission === "string",
         )
-        .map(
-          (permission) =>
-            permission.trim(),
-        )
+        .map((permission) => permission.trim())
         .filter(Boolean),
     ),
   ).sort();
 }
 
-function nullableString(
-  value: unknown,
-): string | null {
-  if (
-    typeof value !==
-    "string"
-  ) {
+function nullableString(value: unknown): string | null {
+  if (typeof value !== "string") {
     return null;
   }
 
-  const normalized =
-    value.trim();
+  const normalized = value.trim();
 
-  return normalized
-    ? normalized
-    : null;
+  return normalized ? normalized : null;
 }
 
-function nullablePositiveInteger(
-  value: unknown,
-): number | null {
-  if (
-    typeof value !==
-      "number" ||
-    !Number.isInteger(
-      value,
-    ) ||
-    value <= 0
-  ) {
+function nullablePositiveInteger(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
     return null;
   }
 
   return value;
 }
 
-function splitName(
-  value: string,
-): {
+function splitName(value: string): {
   firstName: string;
   lastName: string;
 } {
-  const normalized =
-    value
-      .trim()
-      .replace(
-        /\s+/g,
-        " ",
-      );
+  const normalized = value.trim().replace(/\s+/g, " ");
 
   if (!normalized) {
     return {
@@ -146,117 +106,65 @@ function splitName(
     };
   }
 
-  const parts =
-    normalized.split(
-      " ",
-    );
+  const parts = normalized.split(" ");
 
-  const firstName =
-    parts.shift() ??
-    "ERP";
+  const firstName = parts.shift() ?? "ERP";
 
-  const lastName =
-    parts.join(" ");
+  const lastName = parts.join(" ");
 
   return {
     firstName,
 
-    lastName:
-      lastName ||
-      "User",
+    lastName: lastName || "User",
   };
 }
 
-function isOfficialSiteAccess(
-  value: unknown,
-): value is OfficialSiteAccess {
-  if (
-    typeof value !==
-      "object" ||
-    value === null
-  ) {
+function isOfficialSiteAccess(value: unknown): value is OfficialSiteAccess {
+  if (typeof value !== "object" || value === null) {
     return false;
   }
 
-  const access =
-    value as Record<
-      string,
-      unknown
-    >;
+  const access = value as Record<string, unknown>;
 
   return (
-    typeof access.erp ===
-      "boolean" &&
-    typeof access.pos ===
-      "boolean" &&
-    typeof access.website_admin ===
-      "boolean"
+    typeof access.erp === "boolean" &&
+    typeof access.pos === "boolean" &&
+    typeof access.website_admin === "boolean"
   );
 }
 
-function parseOfficialSiteUser(
-  value: unknown,
-): OfficialSiteUser | null {
-  if (
-    typeof value !==
-      "object" ||
-    value === null
-  ) {
+function parseOfficialSiteUser(value: unknown): OfficialSiteUser | null {
+  if (typeof value !== "object" || value === null) {
     return null;
   }
 
-  const user =
-    value as Record<
-      string,
-      unknown
-    >;
+  const user = value as Record<string, unknown>;
 
   if (
-    typeof user.id !==
-      "number" ||
-    !Number.isInteger(
-      user.id,
-    ) ||
+    typeof user.id !== "number" ||
+    !Number.isInteger(user.id) ||
     user.id <= 0
   ) {
     return null;
   }
 
-  if (
-    typeof user.name !==
-      "string" ||
-    !user.name.trim()
-  ) {
+  if (typeof user.name !== "string" || !user.name.trim()) {
     return null;
   }
 
-  if (
-    typeof user.email !==
-      "string" ||
-    !user.email.trim()
-  ) {
+  if (typeof user.email !== "string" || !user.email.trim()) {
     return null;
   }
 
-  if (
-    user.is_active !==
-    true
-  ) {
+  if (user.is_active !== true) {
     return null;
   }
 
-  if (
-    !isOfficialSiteAccess(
-      user.access,
-    )
-  ) {
+  if (!isOfficialSiteAccess(user.access)) {
     return null;
   }
 
-  const permissions =
-    normalizePermissionKeys(
-      user.permissions,
-    );
+  const permissions = normalizePermissionKeys(user.permissions);
 
   /*
    * Laravel is the canonical authorization
@@ -267,102 +175,61 @@ function parseOfficialSiteUser(
    * erp.access and the convenience access flag
    * agrees with it.
    */
-  if (
-    !permissions.includes(
-      "erp.access",
-    ) ||
-    user.access.erp !==
-      true
-  ) {
+  if (!permissions.includes("erp.access") || user.access.erp !== true) {
     return null;
   }
 
   return {
-    id:
-      user.id,
+    id: user.id,
 
-    name:
-      user.name.trim(),
+    name: user.name.trim(),
 
-    email:
-      normalizeEmail(
-        user.email,
-      ),
+    email: normalizeEmail(user.email),
 
-    role:
-      nullableString(
-        user.role,
-      ),
+    role: nullableString(user.role),
 
-    role_id:
-      nullablePositiveInteger(
-        user.role_id,
-      ),
+    role_id: nullablePositiveInteger(user.role_id),
 
-    role_code:
-      nullableString(
-        user.role_code,
-      ),
+    role_code: nullableString(user.role_code),
 
-    role_name:
-      nullableString(
-        user.role_name,
-      ),
+    role_name: nullableString(user.role_name),
 
-    is_active:
-      true,
+    is_active: true,
 
     permissions,
 
-    access:
-      user.access,
+    access: user.access,
   };
 }
 
 function parseOfficialAuthSuccess(
   value: unknown,
 ): OfficialSiteAuthSuccess | null {
-  if (
-    typeof value !==
-      "object" ||
-    value === null
-  ) {
+  if (typeof value !== "object" || value === null) {
     return null;
   }
 
-  const response =
-    value as Record<
-      string,
-      unknown
-    >;
+  const response = value as Record<string, unknown>;
 
-  if (
-    response.authenticated !==
-    true
-  ) {
+  if (response.authenticated !== true) {
     return null;
   }
 
-  const user =
-    parseOfficialSiteUser(
-      response.user,
-    );
+  const user = parseOfficialSiteUser(response.user);
 
   if (!user) {
     return null;
   }
 
   return {
-    authenticated:
-      true,
+    authenticated: true,
 
     user,
   };
 }
 
 function officialSiteUrl(path: string): string {
-  const baseUrl =
-    env.OFFICIAL_SITE_API_URL.replace(/\/+$/, "") + "/";
+  const baseUrl = env.OFFICIAL_SITE_API_URL.replace(/\/+$/, "") + "/";
 
   const relativePath = path.replace(/^\/+/, "");
 
@@ -386,59 +253,42 @@ async function authenticateWithOfficialSite(
   let response: Response;
 
   try {
-    response =
-      await fetch(
-        officialSiteUrl(
-          "integrations/erp/authenticate",
-        ),
-        {
-          method:
-            "POST",
+    response = await fetch(
+      officialSiteUrl("api/v1/integrations/erp/authenticate"),
+      {
+        method: "POST",
 
-          headers: {
-            Accept:
-              "application/json",
+        headers: {
+          Accept: "application/json",
 
-            "Content-Type":
-              "application/json",
+          "Content-Type": "application/json",
 
-            Authorization:
-              `Bearer ${env.ERP_INTEGRATION_TOKEN}`,
-          },
-
-          body:
-            JSON.stringify({
-              email,
-              password,
-            }),
-
-          signal:
-            AbortSignal.timeout(
-              10_000,
-            ),
+          Authorization: `Bearer ${env.ERP_INTEGRATION_TOKEN}`,
         },
-      );
-  } catch (error) {
-    console.error(
-      "Official-site authentication request failed:",
-      error,
+
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+
+        signal: AbortSignal.timeout(10_000),
+      },
     );
+  } catch (error) {
+    console.error("Official-site authentication request failed:", error);
 
     return {
       ok: false,
       status: 503,
 
-      message:
-        "Authentication service is temporarily unavailable.",
+      message: "Authentication service is temporarily unavailable.",
     };
   }
 
-  let body:
-    unknown = null;
+  let body: unknown = null;
 
   try {
-    body =
-      await response.json();
+    body = await response.json();
   } catch {
     body = null;
   }
@@ -451,18 +301,12 @@ async function authenticateWithOfficialSite(
      * whether the email, password, account state
      * or ERP access permission caused rejection.
      */
-    if (
-      response.status ===
-        401 ||
-      response.status ===
-        422
-    ) {
+    if (response.status === 401 || response.status === 422) {
       return {
         ok: false,
         status: 401,
 
-        message:
-          "Invalid email or password.",
+        message: "Invalid email or password.",
       };
     }
 
@@ -476,15 +320,11 @@ async function authenticateWithOfficialSite(
       ok: false,
       status: 503,
 
-      message:
-        "Authentication service is temporarily unavailable.",
+      message: "Authentication service is temporarily unavailable.",
     };
   }
 
-  const parsed =
-    parseOfficialAuthSuccess(
-      body,
-    );
+  const parsed = parseOfficialAuthSuccess(body);
 
   if (!parsed) {
     console.error(
@@ -496,42 +336,28 @@ async function authenticateWithOfficialSite(
       ok: false,
       status: 503,
 
-      message:
-        "Authentication service is temporarily unavailable.",
+      message: "Authentication service is temporarily unavailable.",
     };
   }
 
   return {
     ok: true,
-    user:
-      parsed.user,
+    user: parsed.user,
   };
 }
 
-async function synchronizeErpUser(
-  officialUser: OfficialSiteUser,
-) {
-  const email =
-    normalizeEmail(
-      officialUser.email,
-    );
+async function synchronizeErpUser(officialUser: OfficialSiteUser) {
+  const email = normalizeEmail(officialUser.email);
 
-  const {
-    firstName,
-    lastName,
-  } = splitName(
-    officialUser.name,
-  );
+  const { firstName, lastName } = splitName(officialUser.name);
 
   return prisma.$transaction(
     async (tx) => {
-      let user =
-        await tx.user.findUnique({
-          where: {
-            officialSiteUserId:
-              officialUser.id,
-          },
-        });
+      let user = await tx.user.findUnique({
+        where: {
+          officialSiteUserId: officialUser.id,
+        },
+      });
 
       if (!user) {
         /*
@@ -541,112 +367,85 @@ async function synchronizeErpUser(
          * Link it by email instead of creating a
          * duplicate user.
          */
-        const existingByEmail =
-          await tx.user.findUnique({
-            where: {
-              email,
-            },
-          });
+        const existingByEmail = await tx.user.findUnique({
+          where: {
+            email,
+          },
+        });
 
         if (
           existingByEmail &&
-          existingByEmail
-            .officialSiteUserId !==
-            null &&
-          existingByEmail
-            .officialSiteUserId !==
-            officialUser.id
+          existingByEmail.officialSiteUserId !== null &&
+          existingByEmail.officialSiteUserId !== officialUser.id
         ) {
           throw new Error(
             "ERP email is already linked to another official-site user.",
           );
         }
 
-        if (
-          existingByEmail
-        ) {
-          user =
-            await tx.user.update({
-              where: {
-                id:
-                  existingByEmail.id,
-              },
-
-              data: {
-                officialSiteUserId:
-                  officialUser.id,
-
-                firstName,
-                lastName,
-                email,
-
-                isActive:
-                  true,
-
-                /*
-                 * Local ERP password authentication
-                 * is no longer authoritative.
-                 */
-                passwordHash:
-                  null,
-              },
-            });
-        } else {
-          user =
-            await tx.user.create({
-              data: {
-                officialSiteUserId:
-                  officialUser.id,
-
-                firstName,
-                lastName,
-                email,
-
-                isActive:
-                  true,
-
-                passwordHash:
-                  null,
-              },
-            });
-        }
-      } else {
-        const emailOwner =
-          await tx.user.findUnique({
+        if (existingByEmail) {
+          user = await tx.user.update({
             where: {
-              email,
-            },
-          });
-
-        if (
-          emailOwner &&
-          emailOwner.id !==
-            user.id
-        ) {
-          throw new Error(
-            "Official-site email belongs to another ERP user.",
-          );
-        }
-
-        user =
-          await tx.user.update({
-            where: {
-              id:
-                user.id,
+              id: existingByEmail.id,
             },
 
             data: {
+              officialSiteUserId: officialUser.id,
+
               firstName,
               lastName,
               email,
 
-              isActive:
-                true,
+              isActive: true,
 
-              passwordHash:
-                null,
+              /*
+               * Local ERP password authentication
+               * is no longer authoritative.
+               */
+              passwordHash: null,
             },
           });
+        } else {
+          user = await tx.user.create({
+            data: {
+              officialSiteUserId: officialUser.id,
+
+              firstName,
+              lastName,
+              email,
+
+              isActive: true,
+
+              passwordHash: null,
+            },
+          });
+        }
+      } else {
+        const emailOwner = await tx.user.findUnique({
+          where: {
+            email,
+          },
+        });
+
+        if (emailOwner && emailOwner.id !== user.id) {
+          throw new Error("Official-site email belongs to another ERP user.");
+        }
+
+        user = await tx.user.update({
+          where: {
+            id: user.id,
+          },
+
+          data: {
+            firstName,
+            lastName,
+            email,
+
+            isActive: true,
+
+            passwordHash: null,
+          },
+        });
       }
 
       /*
@@ -671,15 +470,13 @@ async function synchronizeErpUser(
 
       return tx.user.findUniqueOrThrow({
         where: {
-          id:
-            user.id,
+          id: user.id,
         },
 
         select: {
           id: true,
 
-          officialSiteUserId:
-            true,
+          officialSiteUserId: true,
 
           firstName: true,
           lastName: true,
@@ -699,10 +496,7 @@ async function synchronizeErpUser(
       });
     },
     {
-      isolationLevel:
-        Prisma
-          .TransactionIsolationLevel
-          .ReadCommitted,
+      isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
     },
   );
 }
@@ -712,352 +506,207 @@ function createAccessToken(
   email: string,
   officialUser: OfficialSiteUser,
 ): string {
-  const payload:
-    AccessTokenPayload = {
-      email,
+  const payload: AccessTokenPayload = {
+    email,
 
-      type:
-        "access",
+    type: "access",
 
-      officialSiteUserId:
-        officialUser.id,
+    officialSiteUserId: officialUser.id,
 
-      roleId:
-        officialUser.role_id,
+    roleId: officialUser.role_id,
 
-      roleCode:
-        officialUser.role_code,
+    roleCode: officialUser.role_code,
 
-      roleName:
-        officialUser.role_name ??
-        officialUser.role,
+    roleName: officialUser.role_name ?? officialUser.role,
 
-      permissions:
-        officialUser.permissions,
-    };
+    permissions: officialUser.permissions,
+  };
 
-  return jwt.sign(
-    payload,
-    env.JWT_SECRET,
-    {
-      subject:
-        userId,
+  return jwt.sign(payload, env.JWT_SECRET, {
+    subject: userId,
 
-      expiresIn:
-        env.JWT_EXPIRES_IN as jwt.SignOptions["expiresIn"],
+    expiresIn: env.JWT_EXPIRES_IN as jwt.SignOptions["expiresIn"],
 
-      algorithm:
-        "HS256",
+    algorithm: "HS256",
 
-      issuer:
-        "baura-erp-api",
+    issuer: "baura-erp-api",
 
-      audience:
-        "baura-erp",
-    },
-  );
+    audience: "baura-erp",
+  });
 }
 
-router.post(
-  "/login",
-  async (
-    req,
-    res,
-  ) => {
-    const email =
-      normalizeEmail(
-        req.body?.email,
-      );
+router.post("/login", async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
 
-    const password =
-      typeof req.body
-        ?.password ===
-      "string"
-        ? req.body.password
-        : "";
+  const password =
+    typeof req.body?.password === "string" ? req.body.password : "";
 
-    if (
-      !email ||
-      !password
-    ) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "Email and password are required.",
-        });
-    }
-
-    if (
-      email.length >
-        254 ||
-      password.length >
-        256
-    ) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "Invalid login details.",
-        });
-    }
-
-    const authentication =
-      await authenticateWithOfficialSite(
-        email,
-        password,
-      );
-
-    if (
-      !authentication.ok
-    ) {
-      return res
-        .status(
-          authentication.status,
-        )
-        .json({
-          message:
-            authentication.message,
-        });
-    }
-
-    const officialUser =
-      authentication.user;
-
-    /*
-     * Defense in depth.
-     *
-     * Laravel already checks erp.access, but ERP
-     * verifies the effective permission again
-     * before issuing its own session.
-     */
-    if (
-      !officialUser
-        .permissions
-        .includes(
-          "erp.access",
-        )
-    ) {
-      return res
-        .status(401)
-        .json({
-          message:
-            "Invalid email or password.",
-        });
-    }
-
-    let user;
-
-    try {
-      user =
-        await synchronizeErpUser(
-          officialUser,
-        );
-    } catch (error) {
-      console.error(
-        "Failed to synchronize ERP identity:",
-        error,
-      );
-
-      return res
-        .status(503)
-        .json({
-          message:
-            "Your ERP account could not be prepared. Please try again.",
-        });
-    }
-
-    if (
-      !user.isActive
-    ) {
-      return res
-        .status(401)
-        .json({
-          message:
-            "Invalid email or password.",
-        });
-    }
-
-    const token =
-      createAccessToken(
-        user.id,
-        user.email,
-        officialUser,
-      );
-
-    return res.json({
-      token,
-
-      user: {
-        id:
-          user.id,
-
-        officialSiteUserId:
-          officialUser.id,
-
-        firstName:
-          user.firstName,
-
-        lastName:
-          user.lastName,
-
-        email:
-          user.email,
-
-        /*
-         * Canonical Laravel RBAC identity.
-         */
-        roleId:
-          officialUser.role_id,
-
-        roleCode:
-          officialUser.role_code,
-
-        roleName:
-          officialUser.role_name ??
-          officialUser.role,
-
-        permissions:
-          officialUser.permissions,
-
-        access:
-          officialUser.access,
-
-        /*
-         * Temporary compatibility only.
-         *
-         * Existing ERP modules may still inspect
-         * local roles until we migrate every route
-         * to permission checks.
-         */
-        roles:
-          user.roles.map(
-            (
-              userRole,
-            ) =>
-              userRole.role.name,
-          ),
-      },
+  if (!email || !password) {
+    return res.status(400).json({
+      message: "Email and password are required.",
     });
-  },
-);
+  }
 
-router.get(
-  "/me",
-  authMiddleware,
-  async (
-    req,
-    res,
-  ) => {
-    if (!req.user) {
-      return res
-        .status(401)
-        .json({
-          message:
-            "Unauthorized",
-        });
-    }
+  if (email.length > 254 || password.length > 256) {
+    return res.status(400).json({
+      message: "Invalid login details.",
+    });
+  }
 
-    const user =
-      await prisma.user.findUnique({
-        where: {
-          id:
-            req.user.id,
-        },
+  const authentication = await authenticateWithOfficialSite(email, password);
 
+  if (!authentication.ok) {
+    return res.status(authentication.status).json({
+      message: authentication.message,
+    });
+  }
+
+  const officialUser = authentication.user;
+
+  /*
+   * Defense in depth.
+   *
+   * Laravel already checks erp.access, but ERP
+   * verifies the effective permission again
+   * before issuing its own session.
+   */
+  if (!officialUser.permissions.includes("erp.access")) {
+    return res.status(401).json({
+      message: "Invalid email or password.",
+    });
+  }
+
+  let user;
+
+  try {
+    user = await synchronizeErpUser(officialUser);
+  } catch (error) {
+    console.error("Failed to synchronize ERP identity:", error);
+
+    return res.status(503).json({
+      message: "Your ERP account could not be prepared. Please try again.",
+    });
+  }
+
+  if (!user.isActive) {
+    return res.status(401).json({
+      message: "Invalid email or password.",
+    });
+  }
+
+  const token = createAccessToken(user.id, user.email, officialUser);
+
+  return res.json({
+    token,
+
+    user: {
+      id: user.id,
+
+      officialSiteUserId: officialUser.id,
+
+      firstName: user.firstName,
+
+      lastName: user.lastName,
+
+      email: user.email,
+
+      /*
+       * Canonical Laravel RBAC identity.
+       */
+      roleId: officialUser.role_id,
+
+      roleCode: officialUser.role_code,
+
+      roleName: officialUser.role_name ?? officialUser.role,
+
+      permissions: officialUser.permissions,
+
+      access: officialUser.access,
+
+      /*
+       * Temporary compatibility only.
+       *
+       * Existing ERP modules may still inspect
+       * local roles until we migrate every route
+       * to permission checks.
+       */
+      roles: user.roles.map((userRole) => userRole.role.name),
+    },
+  });
+});
+
+router.get("/me", authMiddleware, async (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({
+      message: "Unauthorized",
+    });
+  }
+
+  const user = await prisma.user.findUnique({
+    where: {
+      id: req.user.id,
+    },
+
+    select: {
+      id: true,
+
+      officialSiteUserId: true,
+
+      firstName: true,
+      lastName: true,
+      email: true,
+      isActive: true,
+
+      roles: {
         select: {
-          id: true,
-
-          officialSiteUserId:
-            true,
-
-          firstName: true,
-          lastName: true,
-          email: true,
-          isActive: true,
-
-          roles: {
+          role: {
             select: {
-              role: {
-                select: {
-                  name: true,
-                },
-              },
+              name: true,
             },
           },
         },
-      });
-
-    if (
-      !user ||
-      !user.isActive ||
-      user.officialSiteUserId ===
-        null
-    ) {
-      return res
-        .status(401)
-        .json({
-          message:
-            "Unauthorized",
-        });
-    }
-
-    return res.json({
-      user: {
-        id:
-          user.id,
-
-        officialSiteUserId:
-          user.officialSiteUserId,
-
-        firstName:
-          user.firstName,
-
-        lastName:
-          user.lastName,
-
-        email:
-          user.email,
-
-        roleId:
-          req.user.roleId,
-
-        roleCode:
-          req.user.roleCode,
-
-        roleName:
-          req.user.roleName,
-
-        permissions:
-          req.user.permissions,
-
-        access: {
-          erp:
-            req.user.permissions.includes(
-              "erp.access",
-            ),
-
-          pos:
-            req.user.permissions.includes(
-              "erp.pos.access",
-            ),
-
-          websiteAdmin:
-            req.user.permissions.includes(
-              "website-admin.access",
-            ),
-        },
-
-        roles:
-          user.roles.map(
-            (
-              userRole,
-            ) =>
-              userRole.role.name,
-          ),
       },
+    },
+  });
+
+  if (!user || !user.isActive || user.officialSiteUserId === null) {
+    return res.status(401).json({
+      message: "Unauthorized",
     });
-  },
-);
+  }
+
+  return res.json({
+    user: {
+      id: user.id,
+
+      officialSiteUserId: user.officialSiteUserId,
+
+      firstName: user.firstName,
+
+      lastName: user.lastName,
+
+      email: user.email,
+
+      roleId: req.user.roleId,
+
+      roleCode: req.user.roleCode,
+
+      roleName: req.user.roleName,
+
+      permissions: req.user.permissions,
+
+      access: {
+        erp: req.user.permissions.includes("erp.access"),
+
+        pos: req.user.permissions.includes("erp.pos.access"),
+
+        websiteAdmin: req.user.permissions.includes("website-admin.access"),
+      },
+
+      roles: user.roles.map((userRole) => userRole.role.name),
+    },
+  });
+});
 
 export default router;
+

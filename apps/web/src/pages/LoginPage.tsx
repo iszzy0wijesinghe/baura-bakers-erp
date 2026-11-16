@@ -15,8 +15,8 @@ import {
   ShieldCheck,
   Sparkles
 } from "lucide-react";
-import { useAuth } from "../auth/AuthContext";
-import { useToast } from "../ui/ToastProvider";
+import { useAuth } from "../auth/useAuth";
+import { useToast } from "../ui/useToast";
 
 const BAURA_LOGO =
   `${import.meta.env.BASE_URL}images/logos/logo.webp`;

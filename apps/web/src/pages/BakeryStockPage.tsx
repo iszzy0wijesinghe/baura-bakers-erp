@@ -1,10 +1,6 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState
-} from "react";
+/** @format */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   AlertTriangle,
@@ -20,19 +16,15 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Boxes,
-  X
+  X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "../layouts/AppLayout";
 import { apiRequest } from "../lib/api";
 import { Modal } from "../ui/Modal";
-import { useToast } from "../ui/ToastProvider";
+import { useToast } from "../ui/useToast";
 
-type StockStatus =
-  | "IN_STOCK"
-  | "LOW_STOCK"
-  | "OUT_OF_STOCK"
-  | "EXPIRED_ONLY";
+type StockStatus = "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK" | "EXPIRED_ONLY";
 
 type BakeryStockItem = {
   productId: string;
@@ -153,23 +145,19 @@ const EMPTY_SUMMARY: BakeryStockSummary = {
   totalAvailableUnits: 0,
   totalExpiredUnits: 0,
   totalStockValue: 0,
-  totalExpiredValue: 0
+  totalExpiredValue: 0,
 };
 
-function formatCurrency(
-  value: number | string | null | undefined
-): string {
+function formatCurrency(value: number | string | null | undefined): string {
   return `Rs. ${Number(value ?? 0).toLocaleString("en-LK", {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2
+    maximumFractionDigits: 2,
   })}`;
 }
 
-function formatQty(
-  value: number | string | null | undefined
-): string {
+function formatQty(value: number | string | null | undefined): string {
   return Number(value ?? 0).toLocaleString("en-LK", {
-    maximumFractionDigits: 3
+    maximumFractionDigits: 3,
   });
 }
 
@@ -184,7 +172,7 @@ function formatDateTime(value: string | null | undefined): string {
     month: "short",
     day: "2-digit",
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
   });
 }
 
@@ -197,7 +185,7 @@ function formatDate(value: string | null | undefined): string {
   return date.toLocaleDateString("en-LK", {
     year: "numeric",
     month: "short",
-    day: "2-digit"
+    day: "2-digit",
   });
 }
 
@@ -207,9 +195,7 @@ function getSizeLabel(item: BakeryStockItem): string {
 }
 
 function getDetailUrl(selection: DetailSelection): string {
-  const base = `/bakery-stock/${encodeURIComponent(
-    selection.productId
-  )}`;
+  const base = `/bakery-stock/${encodeURIComponent(selection.productId)}`;
 
   if (selection.isLegacyStock) {
     return `${base}?productSizeId=legacy`;
@@ -217,7 +203,7 @@ function getDetailUrl(selection: DetailSelection): string {
 
   if (selection.productSizeId) {
     return `${base}?productSizeId=${encodeURIComponent(
-      selection.productSizeId
+      selection.productSizeId,
     )}`;
   }
 
@@ -261,25 +247,22 @@ export function BakeryStockPage() {
         item.variantName,
         item.displayName,
         item.productSizeLabel,
-        item.officialSiteSizeId?.toString()
+        item.officialSiteSizeId?.toString(),
       ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
 
-      const matchesSearch =
-        !keyword || searchableText.includes(keyword);
+      const matchesSearch = !keyword || searchableText.includes(keyword);
 
-      const matchesStatus =
-        status === "ALL" || item.status === status;
+      const matchesStatus = status === "ALL" || item.status === status;
 
       let matchesSize = true;
 
       if (sizeFilter === "SIZED") {
         matchesSize = Boolean(item.productSizeId);
       } else if (sizeFilter === "STANDARD") {
-        matchesSize =
-          item.productSizeId === null && !item.isLegacyStock;
+        matchesSize = item.productSizeId === null && !item.isLegacyStock;
       } else if (sizeFilter === "LEGACY") {
         matchesSize = item.isLegacyStock;
       }
@@ -289,9 +272,7 @@ export function BakeryStockPage() {
   }, [data, search, status, sizeFilter]);
 
   const hasActiveFilters =
-    search.trim().length > 0 ||
-    status !== "ALL" ||
-    sizeFilter !== "ALL";
+    search.trim().length > 0 || status !== "ALL" || sizeFilter !== "ALL";
 
   const loadStock = useCallback(
     async (showSuccess = false) => {
@@ -299,9 +280,7 @@ export function BakeryStockPage() {
       setLoading(true);
 
       try {
-        const response = await apiRequest<BakeryStockResponse>(
-          "/bakery-stock"
-        );
+        const response = await apiRequest<BakeryStockResponse>("/bakery-stock");
 
         if (requestId !== stockRequestRef.current) return;
 
@@ -315,9 +294,7 @@ export function BakeryStockPage() {
 
         toast.error(
           "Unable to load Bakery Stock",
-          error instanceof Error
-            ? error.message
-            : "Please try again."
+          error instanceof Error ? error.message : "Please try again.",
         );
       } finally {
         if (requestId === stockRequestRef.current) {
@@ -325,17 +302,38 @@ export function BakeryStockPage() {
         }
       }
     },
-    [toast]
+    [toast],
   );
 
   useEffect(() => {
-    void loadStock();
+    let active = true;
+    const requestId = ++stockRequestRef.current;
+
+    apiRequest<BakeryStockResponse>("/bakery-stock")
+      .then((response) => {
+        if (!active || requestId !== stockRequestRef.current) return;
+        setData(response);
+      })
+      .catch((error: unknown) => {
+        if (!active || requestId !== stockRequestRef.current) return;
+
+        toast.error(
+          "Unable to load Bakery Stock",
+          error instanceof Error ? error.message : "Please try again.",
+        );
+      })
+      .finally(() => {
+        if (active && requestId === stockRequestRef.current) {
+          setLoading(false);
+        }
+      });
 
     return () => {
+      active = false;
       stockRequestRef.current += 1;
       detailRequestRef.current += 1;
     };
-  }, [loadStock]);
+  }, [toast]);
 
   const openProduct = useCallback(
     async (item: BakeryStockItem) => {
@@ -343,7 +341,7 @@ export function BakeryStockPage() {
         productId: item.productId,
         productSizeId: item.productSizeId,
         isLegacyStock: item.isLegacyStock,
-        displayName: item.displayName
+        displayName: item.displayName,
       };
 
       const requestId = ++detailRequestRef.current;
@@ -354,7 +352,7 @@ export function BakeryStockPage() {
 
       try {
         const response = await apiRequest<BakeryStockDetail>(
-          getDetailUrl(selection)
+          getDetailUrl(selection),
         );
 
         if (requestId !== detailRequestRef.current) return;
@@ -367,9 +365,7 @@ export function BakeryStockPage() {
 
         toast.error(
           "Unable to load stock details",
-          error instanceof Error
-            ? error.message
-            : "Please try again."
+          error instanceof Error ? error.message : "Please try again.",
         );
       } finally {
         if (requestId === detailRequestRef.current) {
@@ -377,7 +373,7 @@ export function BakeryStockPage() {
         }
       }
     },
-    [toast]
+    [toast],
   );
 
   const closeDetail = useCallback(() => {
@@ -398,26 +394,20 @@ export function BakeryStockPage() {
             type="button"
             onClick={() => void loadStock(true)}
             disabled={loading}
-            className="erp-button-secondary"
-          >
-            <RefreshCw
-              size={14}
-              className={loading ? "animate-spin" : ""}
-            />
+            className="erp-button-secondary">
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             Refresh
           </button>
 
           <button
             type="button"
             onClick={() => navigate("/dashboard/production")}
-            className="erp-button-primary"
-          >
+            className="erp-button-primary">
             <ChefHat size={14} />
             New Production
           </button>
         </>
-      }
-    >
+      }>
       <section className="mb-4 overflow-hidden rounded-[18px] border border-[#EADFCF] bg-gradient-to-r from-[#FFFDF8] to-[#FAF2E6] p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
@@ -432,13 +422,13 @@ export function BakeryStockPage() {
 
               <p className="mt-1 max-w-2xl text-[9px] leading-5 text-bauraMuted">
                 Every posted production batch adds finished goods to its
-                selected product size. Stock availability and production
-                costs are tracked independently for each size.
+                selected product size. Stock availability and production costs
+                are tracked independently for each size.
               </p>
 
               <p className="mt-1 text-[9px] leading-5 text-bauraMuted">
-                POS should consume the matching product size only.
-                Historical stock without a size remains separate.
+                POS should consume the matching product size only. Historical
+                stock without a size remains separate.
               </p>
             </div>
           </div>
@@ -446,8 +436,7 @@ export function BakeryStockPage() {
           <button
             type="button"
             onClick={() => navigate("/pos")}
-            className="erp-button-secondary shrink-0"
-          >
+            className="erp-button-secondary shrink-0">
             <ShoppingCart size={14} />
             Open POS
           </button>
@@ -521,24 +510,22 @@ export function BakeryStockPage() {
 
             <p className="mt-2 text-[10px] leading-6 text-bauraMuted">
               Create products and their size-specific recipes, then post a
-              production batch. Finished stock will appear here under
-              the appropriate product size.
+              production batch. Finished stock will appear here under the
+              appropriate product size.
             </p>
 
             <div className="mt-5 flex flex-wrap justify-center gap-2">
               <button
                 type="button"
                 onClick={() => navigate("/dashboard/products")}
-                className="erp-button-secondary"
-              >
+                className="erp-button-secondary">
                 Products & Recipes
               </button>
 
               <button
                 type="button"
                 onClick={() => navigate("/dashboard/production")}
-                className="erp-button-primary"
-              >
+                className="erp-button-primary">
                 <ChefHat size={14} />
                 Production
               </button>
@@ -551,9 +538,7 @@ export function BakeryStockPage() {
         <section className="erp-panel mt-4 overflow-hidden">
           <div className="flex flex-col gap-4 border-b border-bauraBorder px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="erp-section-title">
-                Finished Products
-              </h2>
+              <h2 className="erp-section-title">Finished Products</h2>
 
               <p className="erp-section-subtitle">
                 {filtered.length} shown · {data?.items.length ?? 0} stock
@@ -577,8 +562,7 @@ export function BakeryStockPage() {
                 onChange={(event) =>
                   setSizeFilter(event.target.value as SizeFilter)
                 }
-                className="erp-input sm:w-40"
-              >
+                className="erp-input sm:w-40">
                 <option value="ALL">All Sizes</option>
                 <option value="SIZED">Sized Products</option>
                 <option value="STANDARD">Standard Products</option>
@@ -590,8 +574,7 @@ export function BakeryStockPage() {
                 onChange={(event) =>
                   setStatus(event.target.value as StockFilter)
                 }
-                className="erp-input sm:w-40"
-              >
+                className="erp-input sm:w-40">
                 <option value="ALL">All Status</option>
                 <option value="IN_STOCK">In Stock</option>
                 <option value="LOW_STOCK">Low Stock</option>
@@ -607,8 +590,7 @@ export function BakeryStockPage() {
                     setStatus("ALL");
                     setSizeFilter("ALL");
                   }}
-                  className="erp-button-secondary"
-                >
+                  className="erp-button-secondary">
                   <X size={13} />
                   Clear
                 </button>
@@ -637,8 +619,7 @@ export function BakeryStockPage() {
                   <tr>
                     <td
                       colSpan={9}
-                      className="px-5 py-12 text-center text-[11px] text-bauraMuted"
-                    >
+                      className="px-5 py-12 text-center text-[11px] text-bauraMuted">
                       Loading Bakery Stock...
                     </td>
                   </tr>
@@ -646,19 +627,18 @@ export function BakeryStockPage() {
                   <tr>
                     <td
                       colSpan={9}
-                      className="px-5 py-12 text-center text-[11px] text-bauraMuted"
-                    >
+                      className="px-5 py-12 text-center text-[11px] text-bauraMuted">
                       No finished products match the selected filters.
                     </td>
                   </tr>
                 ) : (
                   filtered.map((item) => (
                     <tr
-                      key={`${item.productId}:${item.productSizeId ?? (
-                        item.isLegacyStock ? "legacy" : "standard"
-                      )}`}
-                      className="bg-white text-[11px] transition hover:bg-bauraCanvas2"
-                    >
+                      key={`${item.productId}:${
+                        item.productSizeId ??
+                        (item.isLegacyStock ? "legacy" : "standard")
+                      }`}
+                      className="bg-white text-[11px] transition hover:bg-bauraCanvas2">
                       <td className="px-5 py-3.5">
                         <p className="font-semibold text-bauraInk">
                           {item.variantName
@@ -675,9 +655,7 @@ export function BakeryStockPage() {
                         <SizeBadge
                           label={getSizeLabel(item)}
                           legacy={item.isLegacyStock}
-                          standard={
-                            !item.productSizeId && !item.isLegacyStock
-                          }
+                          standard={!item.productSizeId && !item.isLegacyStock}
                         />
                       </td>
 
@@ -690,8 +668,7 @@ export function BakeryStockPage() {
                           item.expiredQty > 0
                             ? "font-semibold text-bauraDanger"
                             : "text-bauraMuted"
-                        }`}
-                      >
+                        }`}>
                         {formatQty(item.expiredQty)}
                       </td>
 
@@ -715,8 +692,7 @@ export function BakeryStockPage() {
                         <button
                           type="button"
                           onClick={() => void openProduct(item)}
-                          className="erp-button-secondary h-8 px-3"
-                        >
+                          className="erp-button-secondary h-8 px-3">
                           <Eye size={12} />
                           View
                         </button>
@@ -731,8 +707,8 @@ export function BakeryStockPage() {
           {!loading && filtered.length > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-bauraBorder bg-bauraCanvas2/50 px-5 py-3">
               <p className="text-[9px] text-bauraMuted">
-                Inventory is grouped by product and size. Expired
-                quantities are excluded from sellable stock.
+                Inventory is grouped by product and size. Expired quantities are
+                excluded from sellable stock.
               </p>
 
               <p className="text-[10px] font-semibold text-bauraInk">
@@ -740,8 +716,8 @@ export function BakeryStockPage() {
                 {formatQty(
                   filtered.reduce(
                     (total, item) => total + item.availableQty,
-                    0
-                  )
+                    0,
+                  ),
                 )}{" "}
                 sellable units
               </p>
@@ -753,12 +729,9 @@ export function BakeryStockPage() {
       <Modal
         open={Boolean(detailSelection)}
         onClose={closeDetail}
-        title={
-          detailSelection?.displayName || "Bakery Stock Details"
-        }
+        title={detailSelection?.displayName || "Bakery Stock Details"}
         subtitle="Size-specific production lots, available stock and movement history."
-        widthClassName="max-w-5xl"
-      >
+        widthClassName="max-w-5xl">
         {detailLoading || !detail ? (
           <div className="py-12 text-center text-[10px] text-bauraMuted">
             Loading stock details...
@@ -781,9 +754,7 @@ export function BakeryStockPage() {
 
               <DetailMetric
                 label="Average Unit Cost"
-                value={formatCurrency(
-                  detail.stock.weightedAverageCost
-                )}
+                value={formatCurrency(detail.stock.weightedAverageCost)}
                 note="Weighted production cost"
               />
 
@@ -829,18 +800,10 @@ export function BakeryStockPage() {
                         <th className="px-4 py-2.5">Size</th>
                         <th className="px-4 py-2.5">Produced</th>
                         <th className="px-4 py-2.5">Expiry</th>
-                        <th className="px-4 py-2.5 text-right">
-                          Original
-                        </th>
-                        <th className="px-4 py-2.5 text-right">
-                          Remaining
-                        </th>
-                        <th className="px-4 py-2.5 text-right">
-                          Unit Cost
-                        </th>
-                        <th className="px-4 py-2.5 text-right">
-                          Value
-                        </th>
+                        <th className="px-4 py-2.5 text-right">Original</th>
+                        <th className="px-4 py-2.5 text-right">Remaining</th>
+                        <th className="px-4 py-2.5 text-right">Unit Cost</th>
+                        <th className="px-4 py-2.5 text-right">Value</th>
                         <th className="px-4 py-2.5">State</th>
                       </tr>
                     </thead>
@@ -940,15 +903,12 @@ export function BakeryStockPage() {
               ) : (
                 <div className="divide-y divide-bauraBorder">
                   {detail.movements.map((movement) => {
-                    const positive = getMovementPositive(
-                      movement.qtyDelta
-                    );
+                    const positive = getMovementPositive(movement.qtyDelta);
 
                     return (
                       <div
                         key={movement.id}
-                        className="grid gap-3 px-4 py-3 text-[10px] sm:grid-cols-[125px_1fr_auto] sm:items-center"
-                      >
+                        className="grid gap-3 px-4 py-3 text-[10px] sm:grid-cols-[125px_1fr_auto] sm:items-center">
                         <div>
                           <span className="erp-badge bg-bauraGoldSoft/60 text-bauraPrimary">
                             {getMovementLabel(movement.movementType)}
@@ -969,19 +929,15 @@ export function BakeryStockPage() {
 
                           {movement.costAmount !== null && (
                             <p className="mt-1 text-[9px] text-bauraMuted">
-                              Cost:{" "}
-                              {formatCurrency(movement.costAmount)}
+                              Cost: {formatCurrency(movement.costAmount)}
                             </p>
                           )}
                         </div>
 
                         <div
                           className={`flex items-center justify-end gap-1.5 font-semibold ${
-                            positive
-                              ? "text-bauraSuccess"
-                              : "text-bauraDanger"
-                          }`}
-                        >
+                            positive ? "text-bauraSuccess" : "text-bauraDanger"
+                          }`}>
                           {positive ? (
                             <ArrowUpRight size={14} />
                           ) : (
@@ -1009,7 +965,7 @@ function SummaryCard({
   value,
   note,
   icon,
-  warning = false
+  warning = false,
 }: {
   label: string;
   value: string;
@@ -1029,9 +985,7 @@ function SummaryCard({
             {value}
           </p>
 
-          <p className="mt-1 text-[9px] text-bauraMuted">
-            {note}
-          </p>
+          <p className="mt-1 text-[9px] text-bauraMuted">{note}</p>
         </div>
 
         <div
@@ -1039,8 +993,7 @@ function SummaryCard({
             warning
               ? "bg-bauraWarningSoft text-bauraWarning"
               : "bg-bauraGoldSoft text-bauraGoldDark"
-          }`}
-        >
+          }`}>
           {icon}
         </div>
       </div>
@@ -1053,7 +1006,7 @@ function MiniStat({
   value,
   description,
   icon,
-  warning = false
+  warning = false,
 }: {
   label: string;
   value: string;
@@ -1068,23 +1021,15 @@ function MiniStat({
           {label}
         </p>
 
-        <span
-          className={
-            warning ? "text-bauraWarning" : "text-bauraGoldDark"
-          }
-        >
+        <span className={warning ? "text-bauraWarning" : "text-bauraGoldDark"}>
           {icon}
         </span>
       </div>
 
-      <p className="mt-2 text-[16px] font-semibold text-bauraInk">
-        {value}
-      </p>
+      <p className="mt-2 text-[16px] font-semibold text-bauraInk">{value}</p>
 
       {description && (
-        <p className="mt-1 text-[9px] text-bauraMuted">
-          {description}
-        </p>
+        <p className="mt-1 text-[9px] text-bauraMuted">{description}</p>
       )}
     </div>
   );
@@ -1094,7 +1039,7 @@ function DetailMetric({
   label,
   value,
   note,
-  warning = false
+  warning = false,
 }: {
   label: string;
   value: string;
@@ -1107,19 +1052,12 @@ function DetailMetric({
         warning
           ? "border-amber-200 bg-amber-50/40"
           : "border-bauraBorder bg-bauraCanvas2/50"
-      }`}
-    >
-      <p className="text-[9px] font-medium text-bauraMuted">
-        {label}
-      </p>
+      }`}>
+      <p className="text-[9px] font-medium text-bauraMuted">{label}</p>
 
-      <p className="mt-1.5 text-[17px] font-semibold text-bauraInk">
-        {value}
-      </p>
+      <p className="mt-1.5 text-[17px] font-semibold text-bauraInk">{value}</p>
 
-      <p className="mt-1 text-[9px] text-bauraMuted">
-        {note}
-      </p>
+      <p className="mt-1 text-[9px] text-bauraMuted">{note}</p>
     </div>
   );
 }
@@ -1127,7 +1065,7 @@ function DetailMetric({
 function SizeBadge({
   label,
   legacy = false,
-  standard = false
+  standard = false,
 }: {
   label: string;
   legacy?: boolean;
@@ -1143,9 +1081,7 @@ function SizeBadge({
 
   if (standard) {
     return (
-      <span className="erp-badge bg-bauraCanvas2 text-bauraMuted">
-        {label}
-      </span>
+      <span className="erp-badge bg-bauraCanvas2 text-bauraMuted">{label}</span>
     );
   }
 
@@ -1156,11 +1092,7 @@ function SizeBadge({
   );
 }
 
-function StockStatusBadge({
-  status
-}: {
-  status: StockStatus;
-}) {
+function StockStatusBadge({ status }: { status: StockStatus }) {
   switch (status) {
     case "IN_STOCK":
       return (

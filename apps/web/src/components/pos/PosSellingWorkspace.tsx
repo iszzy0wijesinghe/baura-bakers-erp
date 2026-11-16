@@ -1,12 +1,6 @@
 /** @format */
 
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   ArrowDownToLine,
@@ -35,9 +29,7 @@ import {
   X,
 } from "lucide-react";
 
-import type {
-  PosSession,
-} from "../../lib/posSessionApi";
+import type { PosSession } from "../../lib/posSessionApi";
 
 import {
   completePosSale,
@@ -58,12 +50,9 @@ import {
   type PosDrawerSummary,
 } from "../../lib/posOperationsApi";
 
-import {
-  useToast,
-} from "../../ui/ToastProvider";
+import { useToast } from "../../ui/useToast";
 
-const BAURA_LOGO =
-  `${import.meta.env.BASE_URL}images/logos/logo.webp`;
+const BAURA_LOGO = `${import.meta.env.BASE_URL}images/logos/logo.webp`;
 
 type CartItem = {
   product: PosProduct;
@@ -101,22 +90,14 @@ function numberValue(value: unknown) {
 }
 
 function makeIdempotencyKey() {
-  if (
-    typeof crypto !== "undefined" &&
-    "randomUUID" in crypto
-  ) {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return `pos-${crypto.randomUUID()}`;
   }
 
-  return `pos-${Date.now()}-${Math.random()
-    .toString(36)
-    .slice(2)}`;
+  return `pos-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function getCartKey(
-  productId: string,
-  productSizeId: string | null,
-) {
+function getCartKey(productId: string, productSizeId: string | null) {
   return `${productId}:${productSizeId ?? "standard"}`;
 }
 
@@ -180,20 +161,24 @@ export function PosSellingWorkspace({
 
   const [search, setSearch] = useState("");
 
-  const [
-    selectedSizeProduct,
-    setSelectedSizeProduct,
-  ] = useState<PosProduct | null>(null);
+  const [selectedSizeProduct, setSelectedSizeProduct] =
+    useState<PosProduct | null>(null);
 
   const [cart, setCart] = useState<CartItem[]>([]);
 
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [printerSettingsOpen, setPrinterSettingsOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] =
-    useState<PosPaymentMethod>("CASH");
+  const [paymentMethod, setPaymentMethod] = useState<PosPaymentMethod>("CASH");
 
-  const splitEnabled = import.meta.env.VITE_POS_SPLIT_PAYMENTS_ENABLED === "true";
-  type SplitRow = { id: number; method: PosPaymentMethod; amount: string; tendered: string; reference: string };
+  const splitEnabled =
+    import.meta.env.VITE_POS_SPLIT_PAYMENTS_ENABLED === "true";
+  type SplitRow = {
+    id: number;
+    method: PosPaymentMethod;
+    amount: string;
+    tendered: string;
+    reference: string;
+  };
   const [splitMode, setSplitMode] = useState(false);
   const [splitRows, setSplitRows] = useState<SplitRow[]>([
     { id: 1, method: "CASH", amount: "", tendered: "", reference: "" },
@@ -201,39 +186,35 @@ export function PosSellingWorkspace({
   ]);
   const [tendered, setTendered] = useState("");
 
-  const [paymentReference, setPaymentReference] =
-    useState("");
+  const [paymentReference, setPaymentReference] = useState("");
 
-  const [selectedCustomer, setSelectedCustomer] =
-    useState<PosCustomer | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<PosCustomer | null>(
+    null,
+  );
 
   const [receiptEmail, setReceiptEmail] = useState("");
 
   const [discountInput, setDiscountInput] = useState("");
 
-  const [discountApproval, setDiscountApproval] =
-    useState<PosApproval | null>(null);
+  const [discountApproval, setDiscountApproval] = useState<PosApproval | null>(
+    null,
+  );
 
-  const [approvalLoading, setApprovalLoading] =
-    useState(false);
+  const [approvalLoading, setApprovalLoading] = useState(false);
 
   const [processing, setProcessing] = useState(false);
 
-  const [completedSale, setCompletedSale] =
-    useState<CompletedPosSale | null>(null);
-
-  const [customerModal, setCustomerModal] =
-    useState(false);
-
-  const [cashMovementModal, setCashMovementModal] =
-    useState(false);
-
-  const [drawer, setDrawer] =
-    useState<PosDrawerSummary | null>(null);
-
-  const sessionBusinessDate = formatBusinessDate(
-    session.businessDate,
+  const [completedSale, setCompletedSale] = useState<CompletedPosSale | null>(
+    null,
   );
+
+  const [customerModal, setCustomerModal] = useState(false);
+
+  const [cashMovementModal, setCashMovementModal] = useState(false);
+
+  const [drawer, setDrawer] = useState<PosDrawerSummary | null>(null);
+
+  const sessionBusinessDate = formatBusinessDate(session.businessDate);
 
   const [today, setToday] = useState(getSriLankaToday);
 
@@ -241,15 +222,11 @@ export function PosSellingWorkspace({
 
   const isFutureDated = sessionBusinessDate > today;
 
-  const isValidBusinessDate =
-    sessionBusinessDate === today;
+  const isValidBusinessDate = sessionBusinessDate === today;
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (
-        (event.ctrlKey || event.metaKey) &&
-        event.key.toLowerCase() === "k"
-      ) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         searchRef.current?.focus();
       }
@@ -258,10 +235,7 @@ export function PosSellingWorkspace({
     window.addEventListener("keydown", handleKeyDown);
 
     return () => {
-      window.removeEventListener(
-        "keydown",
-        handleKeyDown,
-      );
+      window.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
 
@@ -283,7 +257,21 @@ export function PosSellingWorkspace({
   }
 
   useEffect(() => {
-    void loadDrawer();
+    let active = true;
+
+    getCurrentPosCashMovements()
+      .then((response) => {
+        if (!active) return;
+
+        setDrawer(response.drawer);
+      })
+      .catch(() => {
+        // Drawer availability must not interrupt catalogue browsing.
+      });
+
+    return () => {
+      active = false;
+    };
   }, [session.id]);
 
   const filteredProducts = useMemo(() => {
@@ -299,55 +287,30 @@ export function PosSellingWorkspace({
   }, [products, search]);
 
   const grossTotal = useMemo(
-    () =>
-      cart.reduce(
-        (total, item) =>
-          total + item.unitPrice * item.qty,
-        0,
-      ),
+    () => cart.reduce((total, item) => total + item.unitPrice * item.qty, 0),
     [cart],
   );
 
-  const requestedDiscount = Math.max(
-    0,
-    numberValue(discountInput),
-  );
+  const requestedDiscount = Math.max(0, numberValue(discountInput));
 
-  const discountTotal = Math.min(
-    requestedDiscount,
-    grossTotal,
-  );
+  const discountTotal = Math.min(requestedDiscount, grossTotal);
 
-  const netTotal = Math.max(
-    0,
-    grossTotal - discountTotal,
-  );
+  const netTotal = Math.max(0, grossTotal - discountTotal);
 
   const tenderedAmount = numberValue(tendered);
 
   const change =
-    paymentMethod === "CASH"
-      ? Math.max(0, tenderedAmount - netTotal)
-      : 0;
+    paymentMethod === "CASH" ? Math.max(0, tenderedAmount - netTotal) : 0;
 
-  const cartQty = cart.reduce(
-    (total, item) => total + item.qty,
-    0,
-  );
+  const cartQty = cart.reduce((total, item) => total + item.qty, 0);
 
-  function getSizeStock(
-    product: PosProduct,
-    sizeId: string | null,
-  ) {
+  function getSizeStock(product: PosProduct, sizeId: string | null) {
     if (!sizeId) {
-      return product.sizes.length
-        ? 0
-        : numberValue(product.availableQty);
+      return product.sizes.length ? 0 : numberValue(product.availableQty);
     }
 
     return numberValue(
-      product.sizes.find((size) => size.id === sizeId)
-        ?.availableQty,
+      product.sizes.find((size) => size.id === sizeId)?.availableQty,
     );
   }
 
@@ -365,10 +328,7 @@ export function PosSellingWorkspace({
       return;
     }
 
-    addSelectedProduct(
-      product,
-      product.sizes[0] ?? null,
-    );
+    addSelectedProduct(product, product.sizes[0] ?? null);
   }
 
   function addSelectedProduct(
@@ -385,15 +345,9 @@ export function PosSellingWorkspace({
 
     const productSizeId = selectedSize?.id ?? null;
 
-    const availableQty = getSizeStock(
-      product,
-      productSizeId,
-    );
+    const availableQty = getSizeStock(product, productSizeId);
 
-    const cartKey = getCartKey(
-      product.id,
-      productSizeId,
-    );
+    const cartKey = getCartKey(product.id, productSizeId);
 
     if (availableQty <= 0) {
       toast.warning(
@@ -407,11 +361,7 @@ export function PosSellingWorkspace({
 
     setCart((current) => {
       const existing = current.find(
-        (item) =>
-          getCartKey(
-            item.product.id,
-            item.productSizeId,
-          ) === cartKey,
+        (item) => getCartKey(item.product.id, item.productSizeId) === cartKey,
       );
 
       if (existing && existing.qty >= availableQty) {
@@ -424,17 +374,13 @@ export function PosSellingWorkspace({
 
       if (existing) {
         return current.map((item) =>
-          getCartKey(
-            item.product.id,
-            item.productSizeId,
-          ) === cartKey
+          getCartKey(item.product.id, item.productSizeId) === cartKey
             ? {
                 ...item,
                 qty: item.qty + 1,
                 product,
                 unitPrice: numberValue(
-                  selectedSize?.price ??
-                    product.sellPrice,
+                  selectedSize?.price ?? product.sellPrice,
                 ),
               }
             : item,
@@ -447,9 +393,7 @@ export function PosSellingWorkspace({
           product,
           productSizeId,
           sizeLabel: selectedSize?.label ?? null,
-          unitPrice: numberValue(
-            selectedSize?.price ?? product.sellPrice,
-          ),
+          unitPrice: numberValue(selectedSize?.price ?? product.sellPrice),
           qty: 1,
         },
       ];
@@ -458,19 +402,11 @@ export function PosSellingWorkspace({
     setSelectedSizeProduct(null);
   }
 
-  function updateQty(
-    productId: string,
-    delta: number,
-  ) {
+  function updateQty(productId: string, delta: number) {
     setCart((current) =>
       current
         .map((item) => {
-          if (
-            getCartKey(
-              item.product.id,
-              item.productSizeId,
-            ) !== productId
-          ) {
+          if (getCartKey(item.product.id, item.productSizeId) !== productId) {
             return item;
           }
 
@@ -481,15 +417,10 @@ export function PosSellingWorkspace({
           }
 
           const latestProduct =
-            products.find(
-              (product) =>
-                product.id === item.product.id,
-            ) ?? item.product;
+            products.find((product) => product.id === item.product.id) ??
+            item.product;
 
-          const available = getSizeStock(
-            latestProduct,
-            item.productSizeId,
-          );
+          const available = getSizeStock(latestProduct, item.productSizeId);
 
           if (next > available) {
             toast.warning(
@@ -504,21 +435,14 @@ export function PosSellingWorkspace({
             qty: Math.min(next, available),
           };
         })
-        .filter(
-          (item): item is CartItem =>
-            item !== null && item.qty > 0,
-        ),
+        .filter((item): item is CartItem => item !== null && item.qty > 0),
     );
   }
 
   function removeItem(productId: string) {
     setCart((current) =>
       current.filter(
-        (item) =>
-          getCartKey(
-            item.product.id,
-            item.productSizeId,
-          ) !== productId,
+        (item) => getCartKey(item.product.id, item.productSizeId) !== productId,
       ),
     );
   }
@@ -551,18 +475,12 @@ export function PosSellingWorkspace({
     setReceiptEmail(customer.email || "");
     setCustomerModal(false);
 
-    toast.success(
-      "Customer selected",
-      customer.name,
-    );
+    toast.success("Customer selected", customer.name);
   }
 
   async function requestDiscountApproval() {
     if (requestedDiscount <= 0) {
-      toast.warning(
-        "Enter discount",
-        "Enter a discount amount first.",
-      );
+      toast.warning("Enter discount", "Enter a discount amount first.");
       return;
     }
 
@@ -591,10 +509,7 @@ export function PosSellingWorkspace({
 
       setDiscountApproval(response.approval);
 
-      toast.info(
-        "Approval requested",
-        "Waiting for manager approval.",
-      );
+      toast.info("Approval requested", "Waiting for manager approval.");
     } catch (error) {
       toast.error(
         "Approval request failed",
@@ -615,9 +530,7 @@ export function PosSellingWorkspace({
     setApprovalLoading(true);
 
     try {
-      const response = await getPosApprovalStatus(
-        discountApproval.id,
-      );
+      const response = await getPosApprovalStatus(discountApproval.id);
 
       setDiscountApproval(response.approval);
 
@@ -626,13 +539,10 @@ export function PosSellingWorkspace({
           "Discount approved",
           `Rs. ${money(requestedDiscount)} approved.`,
         );
-      } else if (
-        response.approval.status === "REJECTED"
-      ) {
+      } else if (response.approval.status === "REJECTED") {
         toast.error(
           "Discount rejected",
-          response.approval.reason ||
-            "The manager rejected this discount.",
+          response.approval.reason || "The manager rejected this discount.",
         );
       }
     } catch (error) {
@@ -652,10 +562,15 @@ export function PosSellingWorkspace({
     setDiscountApproval(null);
   }
 
-  const splitAllocatedCents = splitRows.reduce((sum, row) => sum + Math.round(numberValue(row.amount) * 100), 0);
+  const splitAllocatedCents = splitRows.reduce(
+    (sum, row) => sum + Math.round(numberValue(row.amount) * 100),
+    0,
+  );
   const splitRemainingCents = Math.round(netTotal * 100) - splitAllocatedCents;
   const updateSplitRow = (id: number, patch: Partial<SplitRow>) =>
-    setSplitRows((rows) => rows.map((row) => row.id === id ? { ...row, ...patch } : row));
+    setSplitRows((rows) =>
+      rows.map((row) => (row.id === id ? { ...row, ...patch } : row)),
+    );
 
   async function checkout() {
     if (!isValidBusinessDate) {
@@ -667,10 +582,7 @@ export function PosSellingWorkspace({
     }
 
     if (cart.length === 0) {
-      toast.warning(
-        "Empty order",
-        "Add at least one product.",
-      );
+      toast.warning("Empty order", "Add at least one product.");
       return;
     }
 
@@ -682,10 +594,7 @@ export function PosSellingWorkspace({
       return;
     }
 
-    if (
-      requestedDiscount > 0 &&
-      discountApproval?.status !== "APPROVED"
-    ) {
+    if (requestedDiscount > 0 && discountApproval?.status !== "APPROVED") {
       toast.warning(
         "Approval required",
         "The manual discount must be approved before payment.",
@@ -693,10 +602,7 @@ export function PosSellingWorkspace({
       return;
     }
 
-    if (!splitMode && (
-      paymentMethod === "CASH" &&
-      tenderedAmount < netTotal
-    )) {
+    if (!splitMode && paymentMethod === "CASH" && tenderedAmount < netTotal) {
       toast.warning(
         "Insufficient cash",
         "Cash received is less than the total.",
@@ -704,11 +610,11 @@ export function PosSellingWorkspace({
       return;
     }
 
-    if (!splitMode && (
-      (paymentMethod === "CARD" ||
-        paymentMethod === "BANK_TRANSFER") &&
+    if (
+      !splitMode &&
+      (paymentMethod === "CARD" || paymentMethod === "BANK_TRANSFER") &&
       !paymentReference.trim()
-    )) {
+    ) {
       toast.warning(
         "Reference required",
         paymentMethod === "CARD"
@@ -720,19 +626,37 @@ export function PosSellingWorkspace({
 
     if (splitMode) {
       if (!splitEnabled) return;
-      if (splitRows.length < 2 || splitRows.length > 5 ||
-          splitRows.some((row) => !Number.isFinite(Number(row.amount)) || Number(row.amount) <= 0) ||
-          splitRemainingCents !== 0) {
-        toast.warning("Invalid split payment", "Each payment must be positive and the allocations must equal the sale total exactly.");
+      if (
+        splitRows.length < 2 ||
+        splitRows.length > 5 ||
+        splitRows.some(
+          (row) =>
+            !Number.isFinite(Number(row.amount)) || Number(row.amount) <= 0,
+        ) ||
+        splitRemainingCents !== 0
+      ) {
+        toast.warning(
+          "Invalid split payment",
+          "Each payment must be positive and the allocations must equal the sale total exactly.",
+        );
         return;
       }
       for (const row of splitRows) {
-        if (row.method === "CASH" && numberValue(row.tendered) + 0.00001 < numberValue(row.amount)) {
-          toast.warning("Insufficient cash", "Cash received must cover the cash allocation.");
+        if (
+          row.method === "CASH" &&
+          numberValue(row.tendered) + 0.00001 < numberValue(row.amount)
+        ) {
+          toast.warning(
+            "Insufficient cash",
+            "Cash received must cover the cash allocation.",
+          );
           return;
         }
         if (row.method !== "CASH" && !row.reference.trim()) {
-          toast.warning("Reference required", "Enter a payment reference for each non-cash allocation.");
+          toast.warning(
+            "Reference required",
+            "Enter a payment reference for each non-cash allocation.",
+          );
           return;
         }
       }
@@ -742,35 +666,37 @@ export function PosSellingWorkspace({
 
     try {
       const response = await completePosSale({
-        officialCustomerId:
-          selectedCustomer?.id ?? null,
+        officialCustomerId: selectedCustomer?.id ?? null,
 
-        receiptEmail:
-          receiptEmail.trim() || null,
+        receiptEmail: receiptEmail.trim() || null,
 
         discountTotal,
 
-        approvalId:
-          discountTotal > 0
-            ? discountApproval?.id ?? null
-            : null,
+        approvalId: discountTotal > 0 ? (discountApproval?.id ?? null) : null,
 
         idempotencyKey: makeIdempotencyKey(),
 
-        ...(splitMode ? {
-          payments: splitRows.map((row) => ({
-            method: row.method,
-            amount: Math.round(Number(row.amount) * 100) / 100,
-            tenderedAmount: row.method === "CASH" ? Number(row.tendered) : null,
-            reference: row.method === "CASH" ? null : row.reference.trim(),
-          })),
-        } : {
-          payment: {
-            method: paymentMethod,
-            tenderedAmount: paymentMethod === "CASH" ? tenderedAmount : null,
-            reference: paymentMethod === "CASH" ? null : paymentReference.trim() || null,
-          },
-        }),
+        ...(splitMode
+          ? {
+              payments: splitRows.map((row) => ({
+                method: row.method,
+                amount: Math.round(Number(row.amount) * 100) / 100,
+                tenderedAmount:
+                  row.method === "CASH" ? Number(row.tendered) : null,
+                reference: row.method === "CASH" ? null : row.reference.trim(),
+              })),
+            }
+          : {
+              payment: {
+                method: paymentMethod,
+                tenderedAmount:
+                  paymentMethod === "CASH" ? tenderedAmount : null,
+                reference:
+                  paymentMethod === "CASH"
+                    ? null
+                    : paymentReference.trim() || null,
+              },
+            }),
 
         items: cart.map((item) => ({
           productId: item.product.id,
@@ -781,10 +707,7 @@ export function PosSellingWorkspace({
 
       setCompletedSale(response.sale);
 
-      toast.success(
-        "Payment completed",
-        response.sale.orderNo,
-      );
+      toast.success("Payment completed", response.sale.orderNo);
 
       onSaleCompleted?.(response.sale);
       onRefreshProducts();
@@ -792,9 +715,7 @@ export function PosSellingWorkspace({
     } catch (error) {
       toast.error(
         "Sale failed",
-        error instanceof Error
-          ? error.message
-          : "Unable to complete sale.",
+        error instanceof Error ? error.message : "Unable to complete sale.",
       );
     } finally {
       setProcessing(false);
@@ -814,7 +735,14 @@ export function PosSellingWorkspace({
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#f5f5f2] text-bauraInk">
       <header className="relative z-20 flex h-[72px] shrink-0 items-center justify-between gap-4 border-b border-black/[0.07] bg-white px-5 lg:px-7">
-        <button type="button" onClick={() => setPrinterSettingsOpen(true)} title="Printer settings" aria-label="Printer settings" className="absolute right-4 top-4 z-30 rounded-xl border border-black/10 bg-white p-2 text-bauraInk shadow-sm hover:bg-[#f5f5f2]"><Printer size={17}/></button>
+        <button
+          type="button"
+          onClick={() => setPrinterSettingsOpen(true)}
+          title="Printer settings"
+          aria-label="Printer settings"
+          className="absolute right-4 top-4 z-30 rounded-xl border border-black/10 bg-white p-2 text-bauraInk shadow-sm hover:bg-[#f5f5f2]">
+          <Printer size={17} />
+        </button>
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-[50px] w-[118px] shrink-0 items-center justify-start">
             <BauraLogo className="h-full w-full object-left" />
@@ -834,48 +762,32 @@ export function PosSellingWorkspace({
             </div>
 
             <div className="mt-1 flex items-center gap-2 text-[9px] text-bauraMuted">
-              <span className="truncate">
-                {session.sessionNo}
-              </span>
+              <span className="truncate">{session.sessionNo}</span>
 
               <span>•</span>
 
               <span
                 className={`whitespace-nowrap font-bold ${
-                  isValidBusinessDate
-                    ? "text-emerald-600"
-                    : "text-amber-600"
-                }`}
-              >
-                {isValidBusinessDate
-                  ? "Register Open"
-                  : "Day End Required"}
+                  isValidBusinessDate ? "text-emerald-600" : "text-amber-600"
+                }`}>
+                {isValidBusinessDate ? "Register Open" : "Day End Required"}
               </span>
             </div>
           </div>
         </div>
 
         <div className="mx-auto hidden items-center gap-6 2xl:flex">
-          <HeaderStat
-            label="Business date"
-            value={sessionBusinessDate}
-          />
+          <HeaderStat label="Business date" value={sessionBusinessDate} />
 
           <HeaderStat
             label="Opening float"
-            value={`Rs. ${money(
-              numberValue(session.openingFloat),
-            )}`}
+            value={`Rs. ${money(numberValue(session.openingFloat))}`}
           />
 
           <HeaderStat
             label="Expected drawer"
             value={
-              drawer
-                ? `Rs. ${money(
-                    numberValue(drawer.expectedCash),
-                  )}`
-                : "—"
+              drawer ? `Rs. ${money(numberValue(drawer.expectedCash))}` : "—"
             }
           />
         </div>
@@ -885,8 +797,7 @@ export function PosSellingWorkspace({
             type="button"
             onClick={() => setCashMovementModal(true)}
             disabled={!isValidBusinessDate}
-            className="hidden h-10 items-center gap-2 rounded-xl border border-black/[0.09] bg-white px-3 text-[10px] font-bold transition hover:bg-[#faf8f5] disabled:cursor-not-allowed disabled:opacity-40 lg:flex"
-          >
+            className="hidden h-10 items-center gap-2 rounded-xl border border-black/[0.09] bg-white px-3 text-[10px] font-bold transition hover:bg-[#faf8f5] disabled:cursor-not-allowed disabled:opacity-40 lg:flex">
             <CircleDollarSign size={15} />
             Cash Drawer
           </button>
@@ -896,16 +807,14 @@ export function PosSellingWorkspace({
             onClick={onRefreshProducts}
             className="flex h-10 w-10 items-center justify-center rounded-xl border border-black/[0.09] bg-white transition hover:bg-[#faf8f5]"
             title="Refresh catalogue"
-            aria-label="Refresh catalogue"
-          >
+            aria-label="Refresh catalogue">
             <RefreshCw size={15} />
           </button>
 
           <button
             type="button"
             onClick={onDayEnd}
-            className="flex h-10 items-center gap-2 rounded-xl bg-bauraGoldSoft px-4 text-[10px] font-extrabold text-bauraGoldDark transition hover:brightness-95"
-          >
+            className="flex h-10 items-center gap-2 rounded-xl bg-bauraGoldSoft px-4 text-[10px] font-extrabold text-bauraGoldDark transition hover:brightness-95">
             <ReceiptText size={14} />
             Day End
           </button>
@@ -915,8 +824,7 @@ export function PosSellingWorkspace({
             onClick={onLogout}
             className="flex h-10 w-10 items-center justify-center rounded-xl border border-black/[0.09] bg-white transition hover:bg-red-50 hover:text-red-600"
             title="Sign out"
-            aria-label="Sign out"
-          >
+            aria-label="Sign out">
             <LogOut size={15} />
           </button>
         </div>
@@ -925,10 +833,7 @@ export function PosSellingWorkspace({
       {!isValidBusinessDate && (
         <div className="flex shrink-0 items-center justify-between gap-4 border-b border-amber-200 bg-amber-50 px-5 py-3 lg:px-7">
           <div className="flex items-center gap-3">
-            <ShieldCheck
-              size={18}
-              className="shrink-0 text-amber-700"
-            />
+            <ShieldCheck size={18} className="shrink-0 text-amber-700" />
 
             <div>
               <p className="text-[11px] font-extrabold text-amber-900">
@@ -940,10 +845,9 @@ export function PosSellingWorkspace({
               </p>
 
               <p className="mt-0.5 text-[9px] leading-4 text-amber-800">
-                Session date: {sessionBusinessDate} ·
-                Current date: {today}. Sales and cash
-                movements are disabled until this
-                session is resolved.
+                Session date: {sessionBusinessDate} · Current date: {today}.
+                Sales and cash movements are disabled until this session is
+                resolved.
               </p>
             </div>
           </div>
@@ -951,8 +855,7 @@ export function PosSellingWorkspace({
           <button
             type="button"
             onClick={onDayEnd}
-            className="shrink-0 rounded-xl bg-bauraPrimary px-4 py-2.5 text-[10px] font-bold text-white transition hover:bg-bauraPrimaryDark"
-          >
+            className="shrink-0 rounded-xl bg-bauraPrimary px-4 py-2.5 text-[10px] font-bold text-white transition hover:bg-bauraPrimaryDark">
             Open Day End
           </button>
         </div>
@@ -970,9 +873,7 @@ export function PosSellingWorkspace({
               <input
                 ref={searchRef}
                 value={search}
-                onChange={(event) =>
-                  setSearch(event.target.value)
-                }
+                onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search products..."
                 className="h-12 w-full rounded-2xl border border-black/[0.08] bg-white pl-11 pr-20 text-[12px] font-medium shadow-sm outline-none transition focus:border-bauraPrimary/40 focus:ring-4 focus:ring-bauraPrimary/[0.05]"
               />
@@ -989,8 +890,8 @@ export function PosSellingWorkspace({
                 </h1>
 
                 <p className="mt-1 text-[10px] text-bauraMuted">
-                  {filteredProducts.length} products ·
-                  Select an item to add it to the order
+                  {filteredProducts.length} products · Select an item to add it
+                  to the order
                 </p>
               </div>
 
@@ -998,8 +899,7 @@ export function PosSellingWorkspace({
                 <button
                   type="button"
                   onClick={() => setSearch("")}
-                  className="text-[10px] font-bold text-bauraPrimary"
-                >
+                  className="text-[10px] font-bold text-bauraPrimary">
                   Clear search
                 </button>
               )}
@@ -1023,10 +923,7 @@ export function PosSellingWorkspace({
             ) : filteredProducts.length === 0 ? (
               <div className="flex h-full items-center justify-center">
                 <div className="text-center">
-                  <PackageOpen
-                    size={32}
-                    className="mx-auto text-black/20"
-                  />
+                  <PackageOpen size={32} className="mx-auto text-black/20" />
 
                   <p className="mt-3 text-[12px] font-bold">
                     No products found
@@ -1044,15 +941,8 @@ export function PosSellingWorkspace({
                     key={product.id}
                     product={product}
                     cartQty={cart
-                      .filter(
-                        (item) =>
-                          item.product.id === product.id,
-                      )
-                      .reduce(
-                        (sum, item) =>
-                          sum + item.qty,
-                        0,
-                      )}
+                      .filter((item) => item.product.id === product.id)
+                      .reduce((sum, item) => sum + item.qty, 0)}
                     onAdd={() => addProduct(product)}
                   />
                 ))}
@@ -1068,9 +958,7 @@ export function PosSellingWorkspace({
             </div>
 
             <div className="ml-3">
-              <h2 className="text-[14px] font-extrabold">
-                Current Order
-              </h2>
+              <h2 className="text-[14px] font-extrabold">Current Order</h2>
 
               <p className="mt-0.5 text-[9px] text-bauraMuted">
                 {cartQty} item{cartQty === 1 ? "" : "s"}
@@ -1081,8 +969,7 @@ export function PosSellingWorkspace({
               <button
                 type="button"
                 onClick={() => setCart([])}
-                className="ml-auto rounded-lg px-3 py-2 text-[9px] font-bold text-red-500 transition hover:bg-red-50"
-              >
+                className="ml-auto rounded-lg px-3 py-2 text-[9px] font-bold text-red-500 transition hover:bg-red-50">
                 Clear
               </button>
             )}
@@ -1092,8 +979,7 @@ export function PosSellingWorkspace({
             <button
               type="button"
               onClick={() => setCustomerModal(true)}
-              className="flex w-full items-center rounded-xl border border-black/[0.07] bg-[#fafaf8] p-3 text-left transition hover:border-bauraPrimary/20 hover:bg-white"
-            >
+              className="flex w-full items-center rounded-xl border border-black/[0.07] bg-[#fafaf8] p-3 text-left transition hover:border-bauraPrimary/20 hover:bg-white">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-bauraMuted shadow-sm">
                 <UserRound size={16} />
               </div>
@@ -1117,10 +1003,7 @@ export function PosSellingWorkspace({
                 )}
               </div>
 
-              <ChevronRight
-                size={15}
-                className="text-bauraMuted"
-              />
+              <ChevronRight size={15} className="text-bauraMuted" />
             </button>
           </div>
 
@@ -1136,17 +1019,14 @@ export function PosSellingWorkspace({
                 </p>
 
                 <p className="mt-1 max-w-[220px] text-[9px] leading-4 text-bauraMuted">
-                  Select products from the catalogue.
-                  They will appear here instantly.
+                  Select products from the catalogue. They will appear here
+                  instantly.
                 </p>
               </div>
             ) : (
               <div className="space-y-2">
                 {cart.map((item) => {
-                  const key = getCartKey(
-                    item.product.id,
-                    item.productSizeId,
-                  );
+                  const key = getCartKey(item.product.id, item.productSizeId);
 
                   return (
                     <CartRow
@@ -1164,10 +1044,7 @@ export function PosSellingWorkspace({
 
           <div className="shrink-0 border-t border-black/[0.07] bg-white p-4">
             <div className="space-y-2">
-              <SummaryRow
-                label="Subtotal"
-                value={grossTotal}
-              />
+              <SummaryRow label="Subtotal" value={grossTotal} />
 
               <div className="flex items-center gap-2">
                 <div className="flex-1 text-[10px] text-bauraMuted">
@@ -1182,9 +1059,7 @@ export function PosSellingWorkspace({
                   <input
                     inputMode="decimal"
                     value={discountInput}
-                    onChange={(event) =>
-                      changeDiscount(event.target.value)
-                    }
+                    onChange={(event) => changeDiscount(event.target.value)}
                     placeholder="0.00"
                     className="h-9 w-full rounded-lg border border-black/[0.08] pl-8 pr-2 text-right text-[10px] font-bold outline-none focus:border-bauraPrimary/40"
                   />
@@ -1195,12 +1070,8 @@ export function PosSellingWorkspace({
                 <DiscountApprovalStatus
                   approval={discountApproval}
                   loading={approvalLoading}
-                  onRequest={() =>
-                    void requestDiscountApproval()
-                  }
-                  onRefresh={() =>
-                    void refreshApproval()
-                  }
+                  onRequest={() => void requestDiscountApproval()}
+                  onRefresh={() => void refreshApproval()}
                 />
               )}
             </div>
@@ -1222,14 +1093,15 @@ export function PosSellingWorkspace({
                 <span className="text-[11px] font-bold text-bauraMuted">
                   Rs.
                 </span>{" "}
-
                 <span className="text-[25px] font-black tracking-[-0.055em]">
                   {money(netTotal)}
                 </span>
               </div>
             </div>
 
-            <button type="button" disabled={processing || cart.length === 0 || !isValidBusinessDate}
+            <button
+              type="button"
+              disabled={processing || cart.length === 0 || !isValidBusinessDate}
               onClick={() => setPaymentModalOpen(true)}
               className="mt-4 flex h-[54px] w-full items-center justify-center gap-3 rounded-2xl bg-bauraPrimary px-5 text-[13px] font-extrabold text-white shadow-lg transition hover:opacity-90 disabled:opacity-40">
               <CreditCard size={18} /> Pay · Rs. {money(netTotal)}
@@ -1239,204 +1111,302 @@ export function PosSellingWorkspace({
       </main>
 
       {paymentModalOpen && (
-        <div role="presentation" className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget && !processing) setPaymentModalOpen(false); }}>
-          <section role="dialog" aria-modal="true" aria-label="Complete payment" className="flex max-h-[94vh] w-full max-w-[520px] flex-col overflow-hidden rounded-[26px] bg-white shadow-2xl">
+        <div
+          role="presentation"
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-3 backdrop-blur-sm sm:p-6"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !processing)
+              setPaymentModalOpen(false);
+          }}>
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label="Complete payment"
+            className="flex max-h-[94vh] w-full max-w-[520px] flex-col overflow-hidden rounded-[26px] bg-white shadow-2xl">
             <div className="flex shrink-0 items-center justify-between border-b border-black/10 px-6 py-5">
-              <div><p className="text-[10px] font-bold uppercase tracking-widest text-bauraMuted">Secure checkout</p><h2 className="text-[22px] font-black tracking-tight">Complete payment</h2></div>
-              <button type="button" aria-label="Close payment" disabled={processing} onClick={() => setPaymentModalOpen(false)} className="rounded-xl bg-[#f5f5f2] p-3 disabled:opacity-40"><X size={18}/></button>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-bauraMuted">
+                  Secure checkout
+                </p>
+                <h2 className="text-[22px] font-black tracking-tight">
+                  Complete payment
+                </h2>
+              </div>
+              <button
+                type="button"
+                aria-label="Close payment"
+                disabled={processing}
+                onClick={() => setPaymentModalOpen(false)}
+                className="rounded-xl bg-[#f5f5f2] p-3 disabled:opacity-40">
+                <X size={18} />
+              </button>
             </div>
             <div className="overflow-y-auto px-6 py-5">
-              <div className="rounded-2xl bg-[#f5f5f2] p-5"><p className="text-[11px] font-semibold text-bauraMuted">Amount due</p><p className="mt-1 text-[32px] font-black tracking-tight">Rs. {money(netTotal)}</p><p className="mt-1 text-[11px] text-bauraMuted">{cartQty} item{cartQty === 1 ? "" : "s"}</p></div>
-            {splitEnabled && (
-              <div className="mt-3 flex items-center justify-between rounded-xl border border-black/10 p-3">
-                <span className="text-[11px] font-bold">Split payment</span>
-                <button type="button" onClick={() => setSplitMode((value) => !value)}
-                  className="rounded-lg bg-bauraPrimary px-3 py-2 text-[10px] font-bold text-white">
-                  {splitMode ? "Single payment" : "Use multiple methods"}
-                </button>
+              <div className="rounded-2xl bg-[#f5f5f2] p-5">
+                <p className="text-[11px] font-semibold text-bauraMuted">
+                  Amount due
+                </p>
+                <p className="mt-1 text-[32px] font-black tracking-tight">
+                  Rs. {money(netTotal)}
+                </p>
+                <p className="mt-1 text-[11px] text-bauraMuted">
+                  {cartQty} item{cartQty === 1 ? "" : "s"}
+                </p>
               </div>
-            )}
-            {splitMode && splitEnabled && (
-              <div className="mt-3 space-y-3 rounded-xl border border-black/10 p-3">
-                {splitRows.map((row, index) => (
-                  <div key={row.id} className="space-y-2 rounded-lg bg-[#f6f6f3] p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-bold">Payment {index + 1}</span>
-                      {splitRows.length > 2 && <button type="button" className="text-[10px] font-bold text-red-600"
-                        onClick={() => setSplitRows((rows) => rows.filter((item) => item.id !== row.id))}>Remove</button>}
-                    </div>
-                    <select value={row.method} onChange={(event) => updateSplitRow(row.id, { method: event.target.value as PosPaymentMethod, reference: "", tendered: "" })}
-                      className="h-10 w-full rounded-lg border border-black/10 bg-white px-3 text-[11px]">
-                      <option value="CASH">Cash</option><option value="CARD">Card</option>
-                      <option value="BANK_TRANSFER">Bank transfer</option><option value="ONLINE">Online</option>
-                    </select>
-                    <input inputMode="decimal" type="number" min="0.01" step="0.01" placeholder="Allocated amount (LKR)" value={row.amount}
-                      onChange={(event) => updateSplitRow(row.id, { amount: event.target.value })}
-                      className="h-10 w-full rounded-lg border border-black/10 bg-white px-3 text-[11px]" />
-                    {row.method === "CASH" ? (
-                      <>
-                        <input inputMode="decimal" type="number" min="0" step="0.01" placeholder="Cash received (LKR)" value={row.tendered}
-                          onChange={(event) => updateSplitRow(row.id, { tendered: event.target.value })}
-                          className="h-10 w-full rounded-lg border border-black/10 bg-white px-3 text-[11px]" />
-                        <div className="text-[10px]">Change: Rs. {money(Math.max(0, numberValue(row.tendered) - numberValue(row.amount)))}</div>
-                      </>
-                    ) : (
-                      <input placeholder="Payment reference" maxLength={191} value={row.reference}
-                        onChange={(event) => updateSplitRow(row.id, { reference: event.target.value })}
-                        className="h-10 w-full rounded-lg border border-black/10 bg-white px-3 text-[11px]" />
-                    )}
-                  </div>
-                ))}
-                <div className="flex items-center justify-between text-[11px] font-bold">
-                  <span>Remaining</span><span>Rs. {money(splitRemainingCents / 100)}</span>
-                </div>
-                {splitRows.length < 5 && <button type="button" className="rounded-lg border border-black/10 px-3 py-2 text-[10px] font-bold"
-                  onClick={() => setSplitRows((rows) => [...rows, { id: Math.max(...rows.map((row) => row.id)) + 1, method: "CASH", amount: "", tendered: "", reference: "" }])}>
-                  + Add payment method
-                </button>}
-              </div>
-            )}
-            {!splitMode && <div className="mt-4 grid grid-cols-3 gap-2">
-              <PaymentButton
-                active={paymentMethod === "CASH"}
-                label="Cash"
-                icon={<Banknote size={15} />}
-                onClick={() => setPaymentMethod("CASH")}
-              />
-
-              <PaymentButton
-                active={paymentMethod === "CARD"}
-                label="Card"
-                icon={<CreditCard size={15} />}
-                onClick={() => setPaymentMethod("CARD")}
-              />
-
-              <PaymentButton
-                active={
-                  paymentMethod === "BANK_TRANSFER"
-                }
-                label="Bank"
-                icon={<WalletCards size={15} />}
-                onClick={() =>
-                  setPaymentMethod("BANK_TRANSFER")
-                }
-              />
-            </div>}
-
-            {!splitMode && (paymentMethod === "CASH" ? (
-              <div className="mt-3">
-                <div className="grid grid-cols-[1fr_auto] gap-2">
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[9px] font-bold text-bauraMuted">
-                      Rs.
-                    </span>
-
-                    <input
-                      inputMode="decimal"
-                      value={tendered}
-                      onChange={(event) =>
-                        setTendered(event.target.value)
-                      }
-                      placeholder="Cash received"
-                      className="h-11 w-full rounded-xl border border-black/[0.08] pl-9 pr-3 text-[11px] font-bold outline-none focus:border-bauraPrimary/40"
-                    />
-                  </div>
-
+              {splitEnabled && (
+                <div className="mt-3 flex items-center justify-between rounded-xl border border-black/10 p-3">
+                  <span className="text-[11px] font-bold">Split payment</span>
                   <button
                     type="button"
-                    onClick={() =>
-                      setTendered(netTotal.toFixed(2))
-                    }
-                    className="rounded-xl border border-black/[0.08] px-3 text-[9px] font-bold transition hover:bg-[#fafaf8]"
-                  >
-                    Exact
+                    onClick={() => setSplitMode((value) => !value)}
+                    className="rounded-lg bg-bauraPrimary px-3 py-2 text-[10px] font-bold text-white">
+                    {splitMode ? "Single payment" : "Use multiple methods"}
                   </button>
                 </div>
-
-                <div className="mt-2 flex items-center justify-between rounded-lg bg-[#f6f6f3] px-3 py-2">
-                  <span className="text-[9px] font-medium text-bauraMuted">
-                    Change
-                  </span>
-
-                  <span className="text-[11px] font-extrabold">
-                    Rs. {money(change)}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <input
-                value={paymentReference}
-                onChange={(event) =>
-                  setPaymentReference(event.target.value)
-                }
-                placeholder={
-                  paymentMethod === "CARD"
-                    ? "Card payment reference"
-                    : "Bank transfer reference"
-                }
-                className="mt-3 h-11 w-full rounded-xl border border-black/[0.08] px-3 text-[10px] font-medium outline-none focus:border-bauraPrimary/40"
-              />
-            ))}
-
-            <div className="relative mt-2">
-              <Mail
-                size={14}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-bauraMuted"
-              />
-
-              <input
-                type="email"
-                value={receiptEmail}
-                onChange={(event) =>
-                  setReceiptEmail(event.target.value)
-                }
-                placeholder="Receipt email (optional)"
-                className="h-10 w-full rounded-xl border border-black/[0.08] pl-9 pr-3 text-[9px] outline-none focus:border-bauraPrimary/40"
-              />
-            </div>
-
-            <button
-              type="button"
-              disabled={
-                processing ||
-                cart.length === 0 ||
-                !isValidBusinessDate
-              }
-              onClick={() => void checkout()}
-              className="mt-3 flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-bauraPrimary px-4 text-[12px] font-extrabold text-white shadow-[0_10px_25px_rgba(91,55,38,0.18)] transition hover:bg-bauraPrimaryDark disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {processing ? (
-                <>
-                  <Loader2
-                    size={16}
-                    className="animate-spin"
-                  />
-                  Processing payment...
-                </>
-              ) : (
-                <>
-                  <CreditCard size={16} />
-                  Complete Payment · Rs. {money(netTotal)}
-                </>
               )}
-            </button>
+              {splitMode && splitEnabled && (
+                <div className="mt-3 space-y-3 rounded-xl border border-black/10 p-3">
+                  {splitRows.map((row, index) => (
+                    <div
+                      key={row.id}
+                      className="space-y-2 rounded-lg bg-[#f6f6f3] p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-bold">
+                          Payment {index + 1}
+                        </span>
+                        {splitRows.length > 2 && (
+                          <button
+                            type="button"
+                            className="text-[10px] font-bold text-red-600"
+                            onClick={() =>
+                              setSplitRows((rows) =>
+                                rows.filter((item) => item.id !== row.id),
+                              )
+                            }>
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                      <select
+                        value={row.method}
+                        onChange={(event) =>
+                          updateSplitRow(row.id, {
+                            method: event.target.value as PosPaymentMethod,
+                            reference: "",
+                            tendered: "",
+                          })
+                        }
+                        className="h-10 w-full rounded-lg border border-black/10 bg-white px-3 text-[11px]">
+                        <option value="CASH">Cash</option>
+                        <option value="CARD">Card</option>
+                        <option value="BANK_TRANSFER">Bank transfer</option>
+                        <option value="ONLINE">Online</option>
+                      </select>
+                      <input
+                        inputMode="decimal"
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        placeholder="Allocated amount (LKR)"
+                        value={row.amount}
+                        onChange={(event) =>
+                          updateSplitRow(row.id, { amount: event.target.value })
+                        }
+                        className="h-10 w-full rounded-lg border border-black/10 bg-white px-3 text-[11px]"
+                      />
+                      {row.method === "CASH" ? (
+                        <>
+                          <input
+                            inputMode="decimal"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="Cash received (LKR)"
+                            value={row.tendered}
+                            onChange={(event) =>
+                              updateSplitRow(row.id, {
+                                tendered: event.target.value,
+                              })
+                            }
+                            className="h-10 w-full rounded-lg border border-black/10 bg-white px-3 text-[11px]"
+                          />
+                          <div className="text-[10px]">
+                            Change: Rs.{" "}
+                            {money(
+                              Math.max(
+                                0,
+                                numberValue(row.tendered) -
+                                  numberValue(row.amount),
+                              ),
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <input
+                          placeholder="Payment reference"
+                          maxLength={191}
+                          value={row.reference}
+                          onChange={(event) =>
+                            updateSplitRow(row.id, {
+                              reference: event.target.value,
+                            })
+                          }
+                          className="h-10 w-full rounded-lg border border-black/10 bg-white px-3 text-[11px]"
+                        />
+                      )}
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between text-[11px] font-bold">
+                    <span>Remaining</span>
+                    <span>Rs. {money(splitRemainingCents / 100)}</span>
+                  </div>
+                  {splitRows.length < 5 && (
+                    <button
+                      type="button"
+                      className="rounded-lg border border-black/10 px-3 py-2 text-[10px] font-bold"
+                      onClick={() =>
+                        setSplitRows((rows) => [
+                          ...rows,
+                          {
+                            id: Math.max(...rows.map((row) => row.id)) + 1,
+                            method: "CASH",
+                            amount: "",
+                            tendered: "",
+                            reference: "",
+                          },
+                        ])
+                      }>
+                      + Add payment method
+                    </button>
+                  )}
+                </div>
+              )}
+              {!splitMode && (
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  <PaymentButton
+                    active={paymentMethod === "CASH"}
+                    label="Cash"
+                    icon={<Banknote size={15} />}
+                    onClick={() => setPaymentMethod("CASH")}
+                  />
+
+                  <PaymentButton
+                    active={paymentMethod === "CARD"}
+                    label="Card"
+                    icon={<CreditCard size={15} />}
+                    onClick={() => setPaymentMethod("CARD")}
+                  />
+
+                  <PaymentButton
+                    active={paymentMethod === "BANK_TRANSFER"}
+                    label="Bank"
+                    icon={<WalletCards size={15} />}
+                    onClick={() => setPaymentMethod("BANK_TRANSFER")}
+                  />
+                </div>
+              )}
+
+              {!splitMode &&
+                (paymentMethod === "CASH" ? (
+                  <div className="mt-3">
+                    <div className="grid grid-cols-[1fr_auto] gap-2">
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[9px] font-bold text-bauraMuted">
+                          Rs.
+                        </span>
+
+                        <input
+                          inputMode="decimal"
+                          value={tendered}
+                          onChange={(event) => setTendered(event.target.value)}
+                          placeholder="Cash received"
+                          className="h-11 w-full rounded-xl border border-black/[0.08] pl-9 pr-3 text-[11px] font-bold outline-none focus:border-bauraPrimary/40"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setTendered(netTotal.toFixed(2))}
+                        className="rounded-xl border border-black/[0.08] px-3 text-[9px] font-bold transition hover:bg-[#fafaf8]">
+                        Exact
+                      </button>
+                    </div>
+
+                    <div className="mt-2 flex items-center justify-between rounded-lg bg-[#f6f6f3] px-3 py-2">
+                      <span className="text-[9px] font-medium text-bauraMuted">
+                        Change
+                      </span>
+
+                      <span className="text-[11px] font-extrabold">
+                        Rs. {money(change)}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <input
+                    value={paymentReference}
+                    onChange={(event) =>
+                      setPaymentReference(event.target.value)
+                    }
+                    placeholder={
+                      paymentMethod === "CARD"
+                        ? "Card payment reference"
+                        : "Bank transfer reference"
+                    }
+                    className="mt-3 h-11 w-full rounded-xl border border-black/[0.08] px-3 text-[10px] font-medium outline-none focus:border-bauraPrimary/40"
+                  />
+                ))}
+
+              <div className="relative mt-2">
+                <Mail
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-bauraMuted"
+                />
+
+                <input
+                  type="email"
+                  value={receiptEmail}
+                  onChange={(event) => setReceiptEmail(event.target.value)}
+                  placeholder="Receipt email (optional)"
+                  className="h-10 w-full rounded-xl border border-black/[0.08] pl-9 pr-3 text-[9px] outline-none focus:border-bauraPrimary/40"
+                />
+              </div>
+
+              <button
+                type="button"
+                disabled={
+                  processing || cart.length === 0 || !isValidBusinessDate
+                }
+                onClick={() => void checkout()}
+                className="mt-3 flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-bauraPrimary px-4 text-[12px] font-extrabold text-white shadow-[0_10px_25px_rgba(91,55,38,0.18)] transition hover:bg-bauraPrimaryDark disabled:cursor-not-allowed disabled:opacity-40">
+                {processing ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Processing payment...
+                  </>
+                ) : (
+                  <>
+                    <CreditCard size={16} />
+                    Complete Payment · Rs. {money(netTotal)}
+                  </>
+                )}
+              </button>
             </div>
           </section>
         </div>
       )}
-      {printerSettingsOpen && <PrinterSettingsModal onClose={() => setPrinterSettingsOpen(false)} />}
+      {printerSettingsOpen && (
+        <PrinterSettingsModal onClose={() => setPrinterSettingsOpen(false)} />
+      )}
 
       {selectedSizeProduct && (
         <ModalShell
           title="Choose product size"
           description={`Select an available size for ${selectedSizeProduct.displayName}.`}
-          onClose={() => setSelectedSizeProduct(null)}
-        >
+          onClose={() => setSelectedSizeProduct(null)}>
           <div className="grid gap-3">
             {selectedSizeProduct.sizes.map((size) => {
-              const available = numberValue(
-                size.availableQty,
-              );
+              const available = numberValue(size.availableQty);
 
               const inStock = available > 0;
 
@@ -1445,29 +1415,16 @@ export function PosSellingWorkspace({
                   key={size.id}
                   type="button"
                   disabled={!inStock}
-                  onClick={() =>
-                    addSelectedProduct(
-                      selectedSizeProduct,
-                      size,
-                    )
-                  }
-                  className="group flex w-full items-center justify-between gap-4 rounded-2xl border border-black/[0.09] bg-white p-4 text-left transition hover:border-bauraPrimary/50 hover:bg-bauraPrimary/[0.03] hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-45"
-                >
+                  onClick={() => addSelectedProduct(selectedSizeProduct, size)}
+                  className="group flex w-full items-center justify-between gap-4 rounded-2xl border border-black/[0.09] bg-white p-4 text-left transition hover:border-bauraPrimary/50 hover:bg-bauraPrimary/[0.03] hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-45">
                   <div className="min-w-0">
-                    <p className="text-[12px] font-bold">
-                      {size.label}
-                    </p>
+                    <p className="text-[12px] font-bold">{size.label}</p>
 
                     <p
                       className={`mt-1 text-[9px] font-semibold ${
-                        inStock
-                          ? "text-bauraMuted"
-                          : "text-red-600"
-                      }`}
-                    >
-                      {inStock
-                        ? `${available} available`
-                        : "Out of stock"}
+                        inStock ? "text-bauraMuted" : "text-red-600"
+                      }`}>
+                      {inStock ? `${available} available` : "Out of stock"}
                     </p>
                   </div>
 
@@ -1488,8 +1445,7 @@ export function PosSellingWorkspace({
           <button
             type="button"
             onClick={() => setSelectedSizeProduct(null)}
-            className="mt-4 w-full rounded-xl border border-black/10 px-4 py-3 text-[10px] font-bold text-bauraMuted hover:bg-black/[0.03]"
-          >
+            className="mt-4 w-full rounded-xl border border-black/10 px-4 py-3 text-[10px] font-bold text-bauraMuted hover:bg-black/[0.03]">
             Cancel
           </button>
         </ModalShell>
@@ -1520,22 +1476,14 @@ export function PosSellingWorkspace({
   );
 }
 
-function HeaderStat({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function HeaderStat({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <p className="text-[8px] font-bold uppercase tracking-[0.08em] text-bauraMuted">
         {label}
       </p>
 
-      <p className="mt-1 text-[10px] font-extrabold">
-        {value}
-      </p>
+      <p className="mt-1 text-[10px] font-extrabold">{value}</p>
     </div>
   );
 }
@@ -1554,8 +1502,7 @@ function ProductCard({
       type="button"
       disabled={!product.inStock}
       onClick={onAdd}
-      className="group relative overflow-hidden rounded-[18px] border border-black/[0.07] bg-white text-left shadow-[0_2px_10px_rgba(0,0,0,0.025)] transition duration-150 hover:-translate-y-0.5 hover:border-bauraPrimary/20 hover:shadow-[0_12px_28px_rgba(0,0,0,0.08)] disabled:cursor-not-allowed disabled:opacity-45"
-    >
+      className="group relative overflow-hidden rounded-[18px] border border-black/[0.07] bg-white text-left shadow-[0_2px_10px_rgba(0,0,0,0.025)] transition duration-150 hover:-translate-y-0.5 hover:border-bauraPrimary/20 hover:shadow-[0_12px_28px_rgba(0,0,0,0.08)] disabled:cursor-not-allowed disabled:opacity-45">
       <div className="relative aspect-[4/3] overflow-hidden bg-[#efefeb]">
         {product.imageUrl ? (
           <img
@@ -1598,9 +1545,7 @@ function ProductCard({
 
         <div className="mt-3 flex items-end justify-between gap-2">
           <div>
-            <p className="text-[8px] font-medium text-bauraMuted">
-              Price
-            </p>
+            <p className="text-[8px] font-medium text-bauraMuted">Price</p>
 
             <p className="mt-0.5 text-[12px] font-black text-bauraPrimary">
               Rs. {money(product.sellPrice)}
@@ -1608,17 +1553,12 @@ function ProductCard({
           </div>
 
           <div className="text-right">
-            <p className="text-[8px] text-bauraMuted">
-              Stock
-            </p>
+            <p className="text-[8px] text-bauraMuted">Stock</p>
 
             <p
               className={`mt-0.5 text-[9px] font-bold ${
-                product.isLowStock
-                  ? "text-amber-600"
-                  : "text-bauraInk"
-              }`}
-            >
+                product.isLowStock ? "text-amber-600" : "text-bauraInk"
+              }`}>
               {product.availableQty}
             </p>
           </div>
@@ -1660,17 +1600,14 @@ function CartRow({
           <div className="flex gap-2">
             <p className="line-clamp-2 flex-1 text-[10px] font-extrabold leading-4">
               {item.product.displayName}
-              {item.sizeLabel
-                ? ` — ${item.sizeLabel}`
-                : ""}
+              {item.sizeLabel ? ` — ${item.sizeLabel}` : ""}
             </p>
 
             <button
               type="button"
               onClick={onRemove}
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-bauraMuted transition hover:bg-red-50 hover:text-red-500"
-              aria-label="Remove item"
-            >
+              aria-label="Remove item">
               <Trash2 size={13} />
             </button>
           </div>
@@ -1687,8 +1624,7 @@ function CartRow({
             type="button"
             onClick={onMinus}
             className="flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-white"
-            aria-label="Decrease quantity"
-          >
+            aria-label="Decrease quantity">
             <Minus size={12} />
           </button>
 
@@ -1700,8 +1636,7 @@ function CartRow({
             type="button"
             onClick={onPlus}
             className="flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-white"
-            aria-label="Increase quantity"
-          >
+            aria-label="Increase quantity">
             <Plus size={12} />
           </button>
         </div>
@@ -1714,22 +1649,12 @@ function CartRow({
   );
 }
 
-function SummaryRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: number;
-}) {
+function SummaryRow({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-center justify-between text-[10px]">
-      <span className="text-bauraMuted">
-        {label}
-      </span>
+      <span className="text-bauraMuted">{label}</span>
 
-      <span className="font-bold">
-        Rs. {money(value)}
-      </span>
+      <span className="font-bold">Rs. {money(value)}</span>
     </div>
   );
 }
@@ -1753,8 +1678,7 @@ function PaymentButton({
         active
           ? "border-bauraPrimary bg-bauraPrimary/[0.06] text-bauraPrimary shadow-sm"
           : "border-black/[0.08] bg-white text-bauraMuted hover:bg-[#fafaf8]"
-      }`}
-    >
+      }`}>
       {icon}
       {label}
     </button>
@@ -1778,12 +1702,9 @@ function DiscountApprovalStatus({
         type="button"
         disabled={loading}
         onClick={onRequest}
-        className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 text-[9px] font-extrabold text-amber-700 disabled:opacity-50"
-      >
+        className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 text-[9px] font-extrabold text-amber-700 disabled:opacity-50">
         <ShieldCheck size={13} />
-        {loading
-          ? "Requesting approval..."
-          : "Request manager approval"}
+        {loading ? "Requesting approval..." : "Request manager approval"}
       </button>
     );
   }
@@ -1799,21 +1720,13 @@ function DiscountApprovalStatus({
           : pending
             ? "border-amber-200 bg-amber-50"
             : "border-red-200 bg-red-50"
-      }`}
-    >
+      }`}>
       {approved ? (
-        <Check
-          size={14}
-          className="text-emerald-600"
-        />
+        <Check size={14} className="text-emerald-600" />
       ) : (
         <ShieldCheck
           size={14}
-          className={
-            pending
-              ? "text-amber-600"
-              : "text-red-500"
-          }
+          className={pending ? "text-amber-600" : "text-red-500"}
         />
       )}
 
@@ -1825,8 +1738,7 @@ function DiscountApprovalStatus({
               : pending
                 ? "text-amber-700"
                 : "text-red-600"
-          }`}
-        >
+          }`}>
           {approved
             ? "Discount approved"
             : pending
@@ -1840,12 +1752,8 @@ function DiscountApprovalStatus({
           type="button"
           disabled={loading}
           onClick={onRefresh}
-          className="ml-auto flex h-7 items-center gap-1 rounded-md bg-white px-2 text-[8px] font-bold shadow-sm"
-        >
-          <RefreshCw
-            size={11}
-            className={loading ? "animate-spin" : ""}
-          />
+          className="ml-auto flex h-7 items-center gap-1 rounded-md bg-white px-2 text-[8px] font-bold shadow-sm">
+          <RefreshCw size={11} className={loading ? "animate-spin" : ""} />
           Check
         </button>
       )}
@@ -1855,8 +1763,7 @@ function DiscountApprovalStatus({
           type="button"
           disabled={loading}
           onClick={onRequest}
-          className="ml-auto rounded-md bg-white px-2 py-1.5 text-[8px] font-bold"
-        >
+          className="ml-auto rounded-md bg-white px-2 py-1.5 text-[8px] font-bold">
           Request again
         </button>
       )}
@@ -1877,13 +1784,13 @@ function CustomerModal({
 }) {
   const toast = useToast();
 
-  const [mode, setMode] =
-    useState<CustomerModalMode>("SEARCH");
+  const [mode, setMode] = useState<CustomerModalMode>("SEARCH");
 
   const [phone, setPhone] = useState("");
 
-  const [foundCustomer, setFoundCustomer] =
-    useState<PosCustomer | null>(selectedCustomer);
+  const [foundCustomer, setFoundCustomer] = useState<PosCustomer | null>(
+    selectedCustomer,
+  );
 
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1894,10 +1801,7 @@ function CustomerModal({
 
   async function searchCustomer() {
     if (!phone.trim()) {
-      toast.warning(
-        "Phone required",
-        "Enter the customer's phone number.",
-      );
+      toast.warning("Phone required", "Enter the customer's phone number.");
       return;
     }
 
@@ -1910,17 +1814,12 @@ function CustomerModal({
       setFoundCustomer(response.customer);
 
       if (!response.found) {
-        toast.info(
-          "Customer not found",
-          "You can register this customer now.",
-        );
+        toast.info("Customer not found", "You can register this customer now.");
       }
     } catch (error) {
       toast.error(
         "Lookup failed",
-        error instanceof Error
-          ? error.message
-          : "Unable to find customer.",
+        error instanceof Error ? error.message : "Unable to find customer.",
       );
     } finally {
       setSearching(false);
@@ -1943,17 +1842,14 @@ function CustomerModal({
         name: name.trim(),
         phone: phone.trim(),
         email: email.trim() || null,
-        defaultDeliveryAddress:
-          address.trim() || null,
+        defaultDeliveryAddress: address.trim() || null,
       });
 
       onSelect(response.customer);
     } catch (error) {
       toast.error(
         "Registration failed",
-        error instanceof Error
-          ? error.message
-          : "Unable to register customer.",
+        error instanceof Error ? error.message : "Unable to register customer.",
       );
     } finally {
       setSaving(false);
@@ -1964,18 +1860,14 @@ function CustomerModal({
     <ModalShell
       title="Customer"
       description="Find an existing customer or register a new one."
-      onClose={onClose}
-    >
+      onClose={onClose}>
       <div className="grid grid-cols-2 gap-2 rounded-xl bg-[#f4f4f1] p-1">
         <button
           type="button"
           onClick={() => setMode("SEARCH")}
           className={`h-10 rounded-lg text-[10px] font-extrabold transition ${
-            mode === "SEARCH"
-              ? "bg-white shadow-sm"
-              : "text-bauraMuted"
-          }`}
-        >
+            mode === "SEARCH" ? "bg-white shadow-sm" : "text-bauraMuted"
+          }`}>
           Find Customer
         </button>
 
@@ -1983,11 +1875,8 @@ function CustomerModal({
           type="button"
           onClick={() => setMode("REGISTER")}
           className={`h-10 rounded-lg text-[10px] font-extrabold transition ${
-            mode === "REGISTER"
-              ? "bg-white shadow-sm"
-              : "text-bauraMuted"
-          }`}
-        >
+            mode === "REGISTER" ? "bg-white shadow-sm" : "text-bauraMuted"
+          }`}>
           Register New
         </button>
       </div>
@@ -2002,9 +1891,7 @@ function CustomerModal({
             <input
               autoFocus
               value={phone}
-              onChange={(event) =>
-                setPhone(event.target.value)
-              }
+              onChange={(event) => setPhone(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
                   void searchCustomer();
@@ -2018,8 +1905,7 @@ function CustomerModal({
               type="button"
               disabled={searching}
               onClick={() => void searchCustomer()}
-              className="flex h-11 items-center justify-center rounded-xl bg-bauraPrimary px-4 text-[10px] font-bold text-white disabled:opacity-50"
-            >
+              className="flex h-11 items-center justify-center rounded-xl bg-bauraPrimary px-4 text-[10px] font-bold text-white disabled:opacity-50">
               {searching ? "Searching..." : "Search"}
             </button>
           </div>
@@ -2037,8 +1923,7 @@ function CustomerModal({
                   </p>
 
                   <p className="mt-1 text-[9px] text-bauraMuted">
-                    {foundCustomer.phone_normalized ||
-                      foundCustomer.phone}
+                    {foundCustomer.phone_normalized || foundCustomer.phone}
                   </p>
 
                   {foundCustomer.email && (
@@ -2052,8 +1937,7 @@ function CustomerModal({
               <button
                 type="button"
                 onClick={() => onSelect(foundCustomer)}
-                className="mt-4 h-10 w-full rounded-xl bg-bauraPrimary text-[10px] font-bold text-white"
-              >
+                className="mt-4 h-10 w-full rounded-xl bg-bauraPrimary text-[10px] font-bold text-white">
                 Use this customer
               </button>
             </div>
@@ -2062,8 +1946,7 @@ function CustomerModal({
           <button
             type="button"
             onClick={onWalkIn}
-            className="mt-4 h-10 w-full rounded-xl border border-black/[0.08] text-[10px] font-bold"
-          >
+            className="mt-4 h-10 w-full rounded-xl border border-black/[0.08] text-[10px] font-bold">
             Continue as walk-in customer
           </button>
         </>
@@ -2097,9 +1980,7 @@ function CustomerModal({
 
             <textarea
               value={address}
-              onChange={(event) =>
-                setAddress(event.target.value)
-              }
+              onChange={(event) => setAddress(event.target.value)}
               rows={3}
               placeholder="Optional"
               className="mt-2 w-full resize-none rounded-xl border border-black/[0.08] p-3 text-[10px] outline-none focus:border-bauraPrimary/40"
@@ -2110,12 +1991,9 @@ function CustomerModal({
             type="button"
             disabled={saving}
             onClick={() => void registerCustomer()}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-bauraPrimary text-[10px] font-bold text-white disabled:opacity-50"
-          >
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-bauraPrimary text-[10px] font-bold text-white disabled:opacity-50">
             <UserPlus size={14} />
-            {saving
-              ? "Registering..."
-              : "Register Customer"}
+            {saving ? "Registering..." : "Register Customer"}
           </button>
         </div>
       )}
@@ -2136,8 +2014,7 @@ function CashMovementModal({
 }) {
   const toast = useToast();
 
-  const [mode, setMode] =
-    useState<CashMovementMode>("CASH_IN");
+  const [mode, setMode] = useState<CashMovementMode>("CASH_IN");
 
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
@@ -2148,10 +2025,7 @@ function CashMovementModal({
     const numericAmount = numberValue(amount);
 
     if (numericAmount <= 0) {
-      toast.warning(
-        "Invalid amount",
-        "Enter an amount greater than zero.",
-      );
+      toast.warning("Invalid amount", "Enter an amount greater than zero.");
       return;
     }
 
@@ -2175,9 +2049,7 @@ function CashMovementModal({
       });
 
       toast.success(
-        mode === "CASH_IN"
-          ? "Cash added"
-          : "Cash removed",
+        mode === "CASH_IN" ? "Cash added" : "Cash removed",
         `Rs. ${money(numericAmount)}`,
       );
 
@@ -2199,8 +2071,7 @@ function CashMovementModal({
     <ModalShell
       title="Cash Drawer"
       description="Record non-sale cash entering or leaving the register."
-      onClose={onClose}
-    >
+      onClose={onClose}>
       {drawer && (
         <div className="mb-5 rounded-2xl bg-[#f5f5f2] p-4">
           <p className="text-[9px] font-bold uppercase tracking-[0.08em] text-bauraMuted">
@@ -2221,8 +2092,7 @@ function CashMovementModal({
             mode === "CASH_IN"
               ? "border-emerald-300 bg-emerald-50 text-emerald-700"
               : "border-black/[0.08]"
-          }`}
-        >
+          }`}>
           <ArrowDownToLine size={14} />
           Cash In
         </button>
@@ -2234,8 +2104,7 @@ function CashMovementModal({
             mode === "CASH_OUT"
               ? "border-amber-300 bg-amber-50 text-amber-700"
               : "border-black/[0.08]"
-          }`}
-        >
+          }`}>
           <ArrowUpFromLine size={14} />
           Cash Out
         </button>
@@ -2272,8 +2141,7 @@ function CashMovementModal({
         type="button"
         disabled={saving}
         onClick={() => void save()}
-        className="mt-5 h-11 w-full rounded-xl bg-bauraPrimary text-[10px] font-bold text-white disabled:opacity-50"
-      >
+        className="mt-5 h-11 w-full rounded-xl bg-bauraPrimary text-[10px] font-bold text-white disabled:opacity-50">
         {saving
           ? "Saving..."
           : mode === "CASH_IN"
@@ -2313,8 +2181,7 @@ function ModalShell({
             type="button"
             onClick={onClose}
             className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg bg-[#f5f5f2] transition hover:bg-[#ecece8]"
-            aria-label="Close"
-          >
+            aria-label="Close">
             <X size={15} />
           </button>
         </div>
@@ -2344,9 +2211,7 @@ function Field({
 
       <input
         value={value}
-        onChange={(event) =>
-          onChange(event.target.value)
-        }
+        onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         className="mt-2 h-11 w-full rounded-xl border border-black/[0.08] px-3 text-[10px] outline-none focus:border-bauraPrimary/40"
       />
@@ -2366,17 +2231,14 @@ function SaleCompleted({
   const payment = sale.payments?.[0];
 
   const saleDate = sale.soldAt
-    ? new Date(sale.soldAt).toLocaleString(
-        "en-LK",
-        {
-          timeZone: "Asia/Colombo",
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-        },
-      )
+    ? new Date(sale.soldAt).toLocaleString("en-LK", {
+        timeZone: "Asia/Colombo",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
     : "—";
 
   return (
@@ -2404,8 +2266,7 @@ function SaleCompleted({
 
         <div
           id="pos-receipt"
-          className="overflow-hidden rounded-[20px] bg-white p-6 shadow-[0_18px_60px_rgba(0,0,0,0.08)] print:overflow-visible print:rounded-none print:p-0 print:shadow-none"
-        >
+          className="overflow-hidden rounded-[20px] bg-white p-6 shadow-[0_18px_60px_rgba(0,0,0,0.08)] print:overflow-visible print:rounded-none print:p-0 print:shadow-none">
           <div className="text-center">
             <div className="mx-auto flex w-full justify-center">
               <BauraLogo
@@ -2421,32 +2282,18 @@ function SaleCompleted({
 
           <div className="my-5 border-t border-dashed border-black/20 print:my-3" />
 
-          <ReceiptInfo
-            label="Invoice"
-            value={sale.orderNo}
-          />
+          <ReceiptInfo label="Invoice" value={sale.orderNo} />
 
-          <ReceiptInfo
-            label="Date"
-            value={saleDate}
-          />
+          <ReceiptInfo label="Date" value={saleDate} />
 
           {sale.posSession?.sessionNo && (
-            <ReceiptInfo
-              label="Register"
-              value={sale.posSession.sessionNo}
-            />
+            <ReceiptInfo label="Register" value={sale.posSession.sessionNo} />
           )}
 
-          {(sale.customer?.name ||
-            sale.customerNameSnapshot) && (
+          {(sale.customer?.name || sale.customerNameSnapshot) && (
             <ReceiptInfo
               label="Customer"
-              value={
-                sale.customer?.name ||
-                sale.customerNameSnapshot ||
-                ""
-              }
+              value={sale.customer?.name || sale.customerNameSnapshot || ""}
             />
           )}
 
@@ -2455,30 +2302,21 @@ function SaleCompleted({
           <div className="space-y-3 print:space-y-2">
             {sale.items.map((item, index) => (
               <div
-                key={
-                  item.id ||
-                  `${item.productId}-${index}`
-                }
-                className="flex justify-between gap-4 text-[10px] print:gap-2 print:text-[9px]"
-              >
+                key={item.id || `${item.productId}-${index}`}
+                className="flex justify-between gap-4 text-[10px] print:gap-2 print:text-[9px]">
                 <div className="min-w-0 flex-1">
                   <p className="break-words font-extrabold">
-                    {item.productDisplayName ||
-                      item.product?.name ||
-                      "Product"}
+                    {item.productDisplayName || item.product?.name || "Product"}
                   </p>
 
                   <p className="mt-1 text-[9px] text-bauraMuted print:text-black">
                     {numberValue(item.qty)} × Rs.{" "}
-                    {money(
-                      numberValue(item.unitSellPrice),
-                    )}
+                    {money(numberValue(item.unitSellPrice))}
                   </p>
                 </div>
 
                 <p className="shrink-0 text-right font-extrabold">
-                  Rs.{" "}
-                  {money(numberValue(item.netTotal))}
+                  Rs. {money(numberValue(item.netTotal))}
                 </p>
               </div>
             ))}
@@ -2488,24 +2326,18 @@ function SaleCompleted({
 
           <ReceiptInfo
             label="Subtotal"
-            value={`Rs. ${money(
-              numberValue(sale.grossTotal),
-            )}`}
+            value={`Rs. ${money(numberValue(sale.grossTotal))}`}
           />
 
           {numberValue(sale.discountTotal) > 0 && (
             <ReceiptInfo
               label="Discount"
-              value={`- Rs. ${money(
-                numberValue(sale.discountTotal),
-              )}`}
+              value={`- Rs. ${money(numberValue(sale.discountTotal))}`}
             />
           )}
 
           <div className="mt-3 flex items-end justify-between gap-3">
-            <span className="text-[11px] font-black">
-              TOTAL
-            </span>
+            <span className="text-[11px] font-black">TOTAL</span>
 
             <span className="text-right text-[21px] font-black tracking-[-0.04em] print:text-[16px]">
               Rs. {money(numberValue(sale.netTotal))}
@@ -2516,26 +2348,25 @@ function SaleCompleted({
 
           {sale.payments && sale.payments.length > 1 && (
             <div className="mb-3 space-y-1 border-b border-dashed border-black/20 pb-3">
-              {sale.payments.map((entry, index) => <ReceiptInfo key={index} label={entry.method.replaceAll("_", " ")} value={`Rs. ${money(numberValue(entry.amount))}`} />)}
+              {sale.payments.map((entry, index) => (
+                <ReceiptInfo
+                  key={index}
+                  label={entry.method.replaceAll("_", " ")}
+                  value={`Rs. ${money(numberValue(entry.amount))}`}
+                />
+              ))}
             </div>
           )}
           <ReceiptInfo
             label="Payment"
-            value={sale.paymentMethod.replace(
-              /_/g,
-              " ",
-            )}
+            value={sale.paymentMethod.replace(/_/g, " ")}
           />
 
           {payment?.tenderedAmount !== null &&
             payment?.tenderedAmount !== undefined && (
               <ReceiptInfo
                 label="Tendered"
-                value={`Rs. ${money(
-                  numberValue(
-                    payment.tenderedAmount,
-                  ),
-                )}`}
+                value={`Rs. ${money(numberValue(payment.tenderedAmount))}`}
               />
             )}
 
@@ -2543,17 +2374,12 @@ function SaleCompleted({
             payment?.changeAmount !== undefined && (
               <ReceiptInfo
                 label="Change"
-                value={`Rs. ${money(
-                  numberValue(payment.changeAmount),
-                )}`}
+                value={`Rs. ${money(numberValue(payment.changeAmount))}`}
               />
             )}
 
           {payment?.reference && (
-            <ReceiptInfo
-              label="Reference"
-              value={payment.reference}
-            />
+            <ReceiptInfo label="Reference" value={payment.reference} />
           )}
 
           {sale.receiptEmail && (
@@ -2593,8 +2419,7 @@ function SaleCompleted({
           <button
             type="button"
             onClick={onPrint}
-            className="flex h-12 items-center justify-center gap-2 rounded-xl border border-black/[0.08] bg-white text-[10px] font-extrabold transition hover:bg-[#fafaf8]"
-          >
+            className="flex h-12 items-center justify-center gap-2 rounded-xl border border-black/[0.08] bg-white text-[10px] font-extrabold transition hover:bg-[#fafaf8]">
             <Printer size={15} />
             Print Receipt
           </button>
@@ -2602,8 +2427,7 @@ function SaleCompleted({
           <button
             type="button"
             onClick={onNewSale}
-            className="flex h-12 items-center justify-center gap-2 rounded-xl bg-bauraPrimary text-[10px] font-extrabold text-white transition hover:bg-bauraPrimaryDark"
-          >
+            className="flex h-12 items-center justify-center gap-2 rounded-xl bg-bauraPrimary text-[10px] font-extrabold text-white transition hover:bg-bauraPrimaryDark">
             <ReceiptText size={15} />
             New Sale
           </button>
@@ -2691,44 +2515,134 @@ function SaleCompleted({
   );
 }
 
-function ReceiptInfo({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function ReceiptInfo({ label, value }: { label: string; value: string }) {
   return (
     <div className="mb-2 flex justify-between gap-3 text-[9px] print:mb-1.5 print:text-[9px]">
-      <span className="shrink-0 text-bauraMuted print:text-black">
-        {label}
-      </span>
+      <span className="shrink-0 text-bauraMuted print:text-black">{label}</span>
 
-      <span className="min-w-0 break-words text-right font-bold">
-        {value}
-      </span>
+      <span className="min-w-0 break-words text-right font-bold">{value}</span>
     </div>
   );
 }
 
-type PosPrinterSettings = { connection: "SYSTEM" | "USB" | "BLUETOOTH" | "NETWORK"; paper: "58" | "80"; autoPrint: boolean; drawer: boolean; copies: number };
+type PosPrinterSettings = {
+  connection: "SYSTEM" | "USB" | "BLUETOOTH" | "NETWORK";
+  paper: "58" | "80";
+  autoPrint: boolean;
+  drawer: boolean;
+  copies: number;
+};
 const PRINTER_STORAGE_KEY = "baura-pos-printer-settings-v1";
 function readPrinterSettings(): PosPrinterSettings {
-  const defaults: PosPrinterSettings = { connection: "SYSTEM", paper: "80", autoPrint: false, drawer: false, copies: 1 };
-  try { return { ...defaults, ...JSON.parse(localStorage.getItem(PRINTER_STORAGE_KEY) || "{}") }; } catch { return defaults; }
+  const defaults: PosPrinterSettings = {
+    connection: "SYSTEM",
+    paper: "80",
+    autoPrint: false,
+    drawer: false,
+    copies: 1,
+  };
+  try {
+    return {
+      ...defaults,
+      ...JSON.parse(localStorage.getItem(PRINTER_STORAGE_KEY) || "{}"),
+    };
+  } catch {
+    return defaults;
+  }
 }
 function PrinterSettingsModal({ onClose }: { onClose: () => void }) {
-  const [settings, setSettings] = useState<PosPrinterSettings>(readPrinterSettings);
-  function save() { localStorage.setItem(PRINTER_STORAGE_KEY, JSON.stringify(settings)); onClose(); }
-  return <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-    <section role="dialog" aria-modal="true" aria-label="Printer settings" className="w-full max-w-[480px] rounded-[24px] bg-white p-6 shadow-2xl">
-      <div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-extrabold">Printer settings</h2><button type="button" onClick={onClose} aria-label="Close"><X size={20}/></button></div>
-      <p className="mb-5 text-xs text-bauraMuted">Use a printer installed on this computer. USB, Bluetooth and network printers can be selected from the system print dialog. Silent printing and physical cash-drawer control require a compatible local print bridge.</p>
-      <label className="mb-4 block text-xs font-bold">Connection preference<select value={settings.connection} onChange={e => setSettings(v => ({ ...v, connection: e.target.value as PosPrinterSettings["connection"] }))} className="mt-2 h-11 w-full rounded-xl border border-black/15 px-3"><option value="SYSTEM">System printer / browser dialog</option><option value="USB">USB (system paired)</option><option value="BLUETOOTH">Bluetooth (system paired)</option><option value="NETWORK">Wi-Fi / network (system installed)</option></select></label>
-      <label className="mb-4 block text-xs font-bold">Receipt paper width<select value={settings.paper} onChange={e => setSettings(v => ({ ...v, paper: e.target.value as "58" | "80" }))} className="mt-2 h-11 w-full rounded-xl border border-black/15 px-3"><option value="58">58 mm</option><option value="80">80 mm</option></select></label>
-      <label className="mb-4 flex items-center gap-3 text-xs font-semibold"><input type="checkbox" checked={settings.autoPrint} onChange={e => setSettings(v => ({ ...v, autoPrint: e.target.checked }))}/> Request print dialog after completed sale</label>
-      <label className="mb-4 flex items-center gap-3 text-xs font-semibold"><input type="checkbox" checked={settings.drawer} onChange={e => setSettings(v => ({ ...v, drawer: e.target.checked }))}/> Show cash drawer connection status (hardware bridge not configured)</label>
-      <div className="flex gap-3"><button type="button" onClick={() => window.print()} className="flex-1 rounded-xl border border-black/15 py-3 text-xs font-bold">Test print dialog</button><button type="button" onClick={save} className="flex-1 rounded-xl bg-bauraPrimary py-3 text-xs font-bold text-white">Save settings</button></div>
-    </section>
-  </div>;
+  const [settings, setSettings] =
+    useState<PosPrinterSettings>(readPrinterSettings);
+  function save() {
+    localStorage.setItem(PRINTER_STORAGE_KEY, JSON.stringify(settings));
+    onClose();
+  }
+  return (
+    <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label="Printer settings"
+        className="w-full max-w-[480px] rounded-[24px] bg-white p-6 shadow-2xl">
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="text-xl font-extrabold">Printer settings</h2>
+          <button type="button" onClick={onClose} aria-label="Close">
+            <X size={20} />
+          </button>
+        </div>
+        <p className="mb-5 text-xs text-bauraMuted">
+          Use a printer installed on this computer. USB, Bluetooth and network
+          printers can be selected from the system print dialog. Silent printing
+          and physical cash-drawer control require a compatible local print
+          bridge.
+        </p>
+        <label className="mb-4 block text-xs font-bold">
+          Connection preference
+          <select
+            value={settings.connection}
+            onChange={(e) =>
+              setSettings((v) => ({
+                ...v,
+                connection: e.target.value as PosPrinterSettings["connection"],
+              }))
+            }
+            className="mt-2 h-11 w-full rounded-xl border border-black/15 px-3">
+            <option value="SYSTEM">System printer / browser dialog</option>
+            <option value="USB">USB (system paired)</option>
+            <option value="BLUETOOTH">Bluetooth (system paired)</option>
+            <option value="NETWORK">Wi-Fi / network (system installed)</option>
+          </select>
+        </label>
+        <label className="mb-4 block text-xs font-bold">
+          Receipt paper width
+          <select
+            value={settings.paper}
+            onChange={(e) =>
+              setSettings((v) => ({
+                ...v,
+                paper: e.target.value as "58" | "80",
+              }))
+            }
+            className="mt-2 h-11 w-full rounded-xl border border-black/15 px-3">
+            <option value="58">58 mm</option>
+            <option value="80">80 mm</option>
+          </select>
+        </label>
+        <label className="mb-4 flex items-center gap-3 text-xs font-semibold">
+          <input
+            type="checkbox"
+            checked={settings.autoPrint}
+            onChange={(e) =>
+              setSettings((v) => ({ ...v, autoPrint: e.target.checked }))
+            }
+          />{" "}
+          Request print dialog after completed sale
+        </label>
+        <label className="mb-4 flex items-center gap-3 text-xs font-semibold">
+          <input
+            type="checkbox"
+            checked={settings.drawer}
+            onChange={(e) =>
+              setSettings((v) => ({ ...v, drawer: e.target.checked }))
+            }
+          />{" "}
+          Show cash drawer connection status (hardware bridge not configured)
+        </label>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="flex-1 rounded-xl border border-black/15 py-3 text-xs font-bold">
+            Test print dialog
+          </button>
+          <button
+            type="button"
+            onClick={save}
+            className="flex-1 rounded-xl bg-bauraPrimary py-3 text-xs font-bold text-white">
+            Save settings
+          </button>
+        </div>
+      </section>
+    </div>
+  );
 }

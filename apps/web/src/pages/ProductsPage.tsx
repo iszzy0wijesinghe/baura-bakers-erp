@@ -1,3 +1,5 @@
+/** @format */
+
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 
@@ -14,7 +16,7 @@ import {
   RefreshCw,
   Search,
   Trash2,
-  Wallet
+  Wallet,
 } from "lucide-react";
 
 import { ImageUploadField } from "../components/ImageUploadField";
@@ -22,7 +24,7 @@ import { AppLayout } from "../layouts/AppLayout";
 import { apiRequest } from "../lib/api";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Modal } from "../ui/Modal";
-import { useToast } from "../ui/ToastProvider";
+import { useToast } from "../ui/useToast";
 
 type BaseUnit = "G" | "ML" | "UNIT";
 
@@ -35,10 +37,7 @@ type ExpenseCategory =
   | "TRANSPORT"
   | "OTHER";
 
-type CalculationMethod =
-  | "PER_BATCH"
-  | "PER_UNIT"
-  | "QUANTITY_BASED";
+type CalculationMethod = "PER_BATCH" | "PER_UNIT" | "QUANTITY_BASED";
 
 type Ingredient = {
   id: string;
@@ -168,7 +167,7 @@ type ExpenseForm = {
 const initialRecipeForm: RecipeForm = {
   ingredientId: "",
   imageUrl: "",
-  requiredBaseQty: ""
+  requiredBaseQty: "",
 };
 
 const initialExpenseForm: ExpenseForm = {
@@ -178,7 +177,7 @@ const initialExpenseForm: ExpenseForm = {
   quantity: "1",
   rate: "",
   description: "",
-  scope: "SIZE"
+  scope: "SIZE",
 };
 
 const expenseCategories: ExpenseCategory[] = [
@@ -188,7 +187,7 @@ const expenseCategories: ExpenseCategory[] = [
   "PACKAGING",
   "DECORATION",
   "TRANSPORT",
-  "OTHER"
+  "OTHER",
 ];
 
 const calculationMethods: {
@@ -197,19 +196,19 @@ const calculationMethods: {
 }[] = [
   { value: "PER_BATCH", label: "Per Batch" },
   { value: "PER_UNIT", label: "Per Unit" },
-  { value: "QUANTITY_BASED", label: "Quantity × Rate" }
+  { value: "QUANTITY_BASED", label: "Quantity × Rate" },
 ];
 
 function formatCurrency(value: number | string | undefined) {
   return `Rs. ${Number(value ?? 0).toLocaleString("en-LK", {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2
+    maximumFractionDigits: 2,
   })}`;
 }
 
 function formatQty(value: number | string | undefined, unit?: string) {
   const amount = Number(value ?? 0).toLocaleString("en-LK", {
-    maximumFractionDigits: 3
+    maximumFractionDigits: 3,
   });
 
   return unit ? `${amount} ${unit}` : amount;
@@ -224,7 +223,7 @@ function formatSyncTime(value: string | null | undefined) {
 
   return date.toLocaleString("en-LK", {
     dateStyle: "medium",
-    timeStyle: "short"
+    timeStyle: "short",
   });
 }
 
@@ -252,13 +251,21 @@ export function ProductsPage() {
   const [expenses, setExpenses] = useState<RecipeExpense[]>([]);
 
   const [recipeForm, setRecipeForm] = useState<RecipeForm>(initialRecipeForm);
-  const [expenseForm, setExpenseForm] = useState<ExpenseForm>(initialExpenseForm);
+  const [expenseForm, setExpenseForm] =
+    useState<ExpenseForm>(initialExpenseForm);
 
-  const [editingRecipeItem, setEditingRecipeItem] = useState<RecipeItem | null>(null);
-  const [deletingRecipeItem, setDeletingRecipeItem] = useState<RecipeItem | null>(null);
+  const [editingRecipeItem, setEditingRecipeItem] = useState<RecipeItem | null>(
+    null,
+  );
+  const [deletingRecipeItem, setDeletingRecipeItem] =
+    useState<RecipeItem | null>(null);
 
-  const [editingExpense, setEditingExpense] = useState<RecipeExpense | null>(null);
-  const [deletingExpense, setDeletingExpense] = useState<RecipeExpense | null>(null);
+  const [editingExpense, setEditingExpense] = useState<RecipeExpense | null>(
+    null,
+  );
+  const [deletingExpense, setDeletingExpense] = useState<RecipeExpense | null>(
+    null,
+  );
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<
@@ -281,24 +288,22 @@ export function ProductsPage() {
   const [costError, setCostError] = useState<string | null>(null);
 
   const selectedIngredient = ingredients.find(
-    (ingredient) => ingredient.id === recipeForm.ingredientId
+    (ingredient) => ingredient.id === recipeForm.ingredientId,
   );
 
   const activeSizes = useMemo(
     () => (selectedProduct?.sizes ?? []).filter((size) => size.isActive),
-    [selectedProduct]
+    [selectedProduct],
   );
 
-  const selectedSize = activeSizes.find(
-    (size) => size.id === selectedSizeId
-  );
+  const selectedSize = activeSizes.find((size) => size.id === selectedSizeId);
 
   const visibleRecipeItems = useMemo(
     () =>
       (selectedProduct?.recipeItems ?? []).filter(
-        (item) => (item.productSizeId ?? "") === selectedSizeId
+        (item) => (item.productSizeId ?? "") === selectedSizeId,
       ),
-    [selectedProduct, selectedSizeId]
+    [selectedProduct, selectedSizeId],
   );
 
   const officialProducts = useMemo(
@@ -306,9 +311,9 @@ export function ProductsPage() {
       products.filter(
         (product) =>
           product.officialSiteProductId !== null ||
-          product.isOfficialSiteProduct === true
+          product.isOfficialSiteProduct === true,
       ),
-    [products]
+    [products],
   );
 
   const filteredProducts = useMemo(() => {
@@ -330,22 +335,7 @@ export function ProductsPage() {
     });
   }, [officialProducts, search, statusFilter]);
 
-  async function loadIngredients() {
-    try {
-      const data = await apiRequest<{ ingredients: Ingredient[] }>(
-        "/ingredients"
-      );
-
-      setIngredients(data.ingredients.filter((ingredient) => ingredient.isActive));
-    } catch (error) {
-      toast.error("Failed to load ingredients", getErrorMessage(error));
-    }
-  }
-
-  async function loadProducts(
-    showToast = false,
-    preferredProductId?: string
-  ) {
+  async function loadProducts(showToast = false, preferredProductId?: string) {
     setIsLoading(true);
 
     try {
@@ -356,13 +346,13 @@ export function ProductsPage() {
       const official = data.products.filter(
         (product) =>
           product.officialSiteProductId !== null ||
-          product.isOfficialSiteProduct === true
+          product.isOfficialSiteProduct === true,
       );
 
       const target =
         official.find(
           (product) =>
-            product.id === (preferredProductId ?? selectedProduct?.id)
+            product.id === (preferredProductId ?? selectedProduct?.id),
         ) ??
         official[0] ??
         null;
@@ -378,7 +368,7 @@ export function ProductsPage() {
       if (showToast) {
         toast.success(
           "Products refreshed",
-          "The official product catalogue has been reloaded."
+          "The official product catalogue has been reloaded.",
         );
       }
     } catch (error) {
@@ -393,7 +383,7 @@ export function ProductsPage() {
 
     try {
       const data = await apiRequest<{ product: Product }>(
-        `/products/${productId}`
+        `/products/${productId}`,
       );
 
       const product = data.product;
@@ -414,7 +404,7 @@ export function ProductsPage() {
         selectedProduct?.id === product.id &&
         sizes.some((size) => size.id === selectedSizeId)
           ? selectedSizeId
-          : sizes[0]?.id ?? "";
+          : (sizes[0]?.id ?? "");
 
       setSelectedProduct(product);
       setSelectedSizeId(nextSizeId);
@@ -428,14 +418,14 @@ export function ProductsPage() {
   async function loadCostPreview(
     productId: string,
     productSizeId: string,
-    quantity: number
+    quantity: number,
   ) {
     setIsCostLoading(true);
     setCostError(null);
 
     try {
       const query = new URLSearchParams({
-        productionQty: String(quantity)
+        productionQty: String(quantity),
       });
 
       if (productSizeId) {
@@ -443,7 +433,7 @@ export function ProductsPage() {
       }
 
       const data = await apiRequest<{ costPreview: CostPreview }>(
-        `/products/${productId}/cost-preview?${query.toString()}`
+        `/products/${productId}/cost-preview?${query.toString()}`,
       );
 
       setCostPreview(data.costPreview);
@@ -458,11 +448,11 @@ export function ProductsPage() {
   async function loadExpenses(
     productId: string,
     productSizeId: string,
-    quantity: number
+    quantity: number,
   ) {
     try {
       const query = new URLSearchParams({
-        productionQty: String(quantity)
+        productionQty: String(quantity),
       });
 
       if (productSizeId) {
@@ -470,7 +460,7 @@ export function ProductsPage() {
       }
 
       const data = await apiRequest<{ expenses: RecipeExpense[] }>(
-        `/recipe-expenses/${productId}?${query.toString()}`
+        `/recipe-expenses/${productId}?${query.toString()}`,
       );
 
       setExpenses(data.expenses);
@@ -487,25 +477,144 @@ export function ProductsPage() {
   }
 
   useEffect(() => {
-    void loadProducts();
-    void loadIngredients();
-  }, []);
+    let active = true;
+
+    async function initialize() {
+      const [productsResult, ingredientsResult] = await Promise.allSettled([
+        apiRequest<{ products: Product[] }>("/products"),
+        apiRequest<{ ingredients: Ingredient[] }>("/ingredients"),
+      ]);
+
+      if (!active) return;
+
+      if (ingredientsResult.status === "fulfilled") {
+        setIngredients(
+          ingredientsResult.value.ingredients.filter(
+            (ingredient) => ingredient.isActive,
+          ),
+        );
+      } else {
+        toast.error(
+          "Failed to load ingredients",
+          getErrorMessage(ingredientsResult.reason),
+        );
+      }
+
+      if (productsResult.status === "fulfilled") {
+        const items = productsResult.value.products;
+        setProducts(items);
+
+        const firstOfficialProduct = items.find(
+          (product) =>
+            product.officialSiteProductId !== null ||
+            product.isOfficialSiteProduct === true,
+        );
+
+        if (firstOfficialProduct) {
+          try {
+            const response = await apiRequest<{ product: Product }>(
+              `/products/${firstOfficialProduct.id}`,
+            );
+
+            if (!active) return;
+
+            const product = response.product;
+
+            setSelectedProduct(product);
+            setSelectedSizeId(
+              product.sizes?.find((size) => size.isActive)?.id ?? "",
+            );
+          } catch (error) {
+            if (active) {
+              toast.error("Failed to load product", getErrorMessage(error));
+            }
+          }
+        }
+      } else {
+        toast.error(
+          "Failed to load products",
+          getErrorMessage(productsResult.reason),
+        );
+      }
+
+      if (active) {
+        setIsLoading(false);
+      }
+    }
+
+    void initialize();
+
+    return () => {
+      active = false;
+    };
+  }, [toast]);
+
+  const selectedProductId = selectedProduct?.id ?? null;
 
   useEffect(() => {
-    if (!selectedProduct) return;
+    let active = true;
 
-    void loadCostPreview(
-      selectedProduct.id,
-      selectedSizeId,
-      productionQty
-    );
+    const timer = window.setTimeout(() => {
+      if (!selectedProductId) {
+        setCostPreview(null);
+        setExpenses([]);
+        setCostError(null);
+        setIsCostLoading(false);
+        return;
+      }
 
-    void loadExpenses(
-      selectedProduct.id,
-      selectedSizeId,
-      productionQty
-    );
-  }, [selectedProduct?.id, selectedSizeId, productionQty]);
+      setIsCostLoading(true);
+      setCostError(null);
+      setCostPreview(null);
+      setExpenses([]);
+
+      const query = new URLSearchParams({
+        productionQty: String(productionQty),
+      });
+
+      if (selectedSizeId) {
+        query.set("productSizeId", selectedSizeId);
+      }
+
+      const costPromise = apiRequest<{ costPreview: CostPreview }>(
+        `/products/${selectedProductId}/cost-preview?${query.toString()}`,
+      );
+
+      const expensesPromise = apiRequest<{
+        expenses: RecipeExpense[];
+      }>(`/recipe-expenses/${selectedProductId}?${query.toString()}`);
+
+      Promise.allSettled([costPromise, expensesPromise]).then(
+        ([costResult, expensesResult]) => {
+          if (!active) return;
+
+          if (costResult.status === "fulfilled") {
+            setCostPreview(costResult.value.costPreview);
+          } else {
+            setCostPreview(null);
+            setCostError(getErrorMessage(costResult.reason));
+          }
+
+          if (expensesResult.status === "fulfilled") {
+            setExpenses(expensesResult.value.expenses);
+          } else {
+            setExpenses([]);
+            toast.error(
+              "Failed to load recipe expenses",
+              getErrorMessage(expensesResult.reason),
+            );
+          }
+
+          setIsCostLoading(false);
+        },
+      );
+    }, 0);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [selectedProductId, selectedSizeId, productionQty, toast]);
 
   async function handleSyncOfficialProducts() {
     setIsSyncing(true);
@@ -518,12 +627,12 @@ export function ProductsPage() {
           updated: number;
         };
       }>("/products/sync-official-site", {
-        method: "POST"
+        method: "POST",
       });
 
       toast.success(
         "Catalogue synchronized",
-        `${data.sync.received} products received. ${data.sync.created} created and ${data.sync.updated} updated.`
+        `${data.sync.received} products received. ${data.sync.created} created and ${data.sync.updated} updated.`,
       );
 
       await loadProducts(false, selectedProduct?.id);
@@ -553,7 +662,7 @@ export function ProductsPage() {
     setRecipeForm({
       ingredientId: item.ingredientId,
       imageUrl: item.imageUrl ?? "",
-      requiredBaseQty: String(item.requiredBaseQty)
+      requiredBaseQty: String(item.requiredBaseQty),
     });
 
     setIsRecipeModalOpen(true);
@@ -595,7 +704,7 @@ export function ProductsPage() {
         productSizeId: selectedSizeId || null,
         imageUrl: recipeForm.imageUrl.trim() || null,
         requiredBaseQty: quantity,
-        baseUnit: selectedIngredient.baseUnit
+        baseUnit: selectedIngredient.baseUnit,
       };
 
       if (editingRecipeItem) {
@@ -603,19 +712,16 @@ export function ProductsPage() {
           `/products/${selectedProduct.id}/recipe-items/${editingRecipeItem.id}`,
           {
             method: "PUT",
-            body: JSON.stringify(payload)
-          }
+            body: JSON.stringify(payload),
+          },
         );
 
         toast.success("Recipe ingredient updated");
       } else {
-        await apiRequest(
-          `/products/${selectedProduct.id}/recipe-items`,
-          {
-            method: "POST",
-            body: JSON.stringify(payload)
-          }
-        );
+        await apiRequest(`/products/${selectedProduct.id}/recipe-items`, {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
 
         toast.success("Recipe ingredient added");
       }
@@ -641,8 +747,8 @@ export function ProductsPage() {
       await apiRequest(
         `/products/${selectedProduct.id}/recipe-items/${deletingRecipeItem.id}`,
         {
-          method: "DELETE"
-        }
+          method: "DELETE",
+        },
       );
 
       toast.success("Recipe ingredient removed");
@@ -666,7 +772,7 @@ export function ProductsPage() {
 
     setExpenseForm({
       ...initialExpenseForm,
-      scope: selectedSizeId ? "SIZE" : "SHARED"
+      scope: selectedSizeId ? "SIZE" : "SHARED",
     });
 
     setIsExpenseModalOpen(true);
@@ -684,7 +790,7 @@ export function ProductsPage() {
       quantity: String(expense.quantity),
       rate: String(expense.rate),
       description: expense.description ?? "",
-      scope: expense.productSizeId ? "SIZE" : "SHARED"
+      scope: expense.productSizeId ? "SIZE" : "SHARED",
     });
 
     setIsExpenseModalOpen(true);
@@ -722,28 +828,26 @@ export function ProductsPage() {
       const payload = {
         productId: selectedProduct.id,
         productSizeId:
-          expenseForm.scope === "SHARED"
-            ? null
-            : selectedSizeId || null,
+          expenseForm.scope === "SHARED" ? null : selectedSizeId || null,
         name: expenseForm.name.trim(),
         category: expenseForm.category,
         calculationMethod: expenseForm.calculationMethod,
         quantity,
         rate,
-        description: expenseForm.description.trim() || null
+        description: expenseForm.description.trim() || null,
       };
 
       if (editingExpense) {
         await apiRequest(`/recipe-expenses/${editingExpense.id}`, {
           method: "PUT",
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
         });
 
         toast.success("Recipe expense updated");
       } else {
         await apiRequest("/recipe-expenses", {
           method: "POST",
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
         });
 
         toast.success("Recipe expense added");
@@ -755,7 +859,7 @@ export function ProductsPage() {
 
       await Promise.all([
         loadExpenses(selectedProduct.id, selectedSizeId, productionQty),
-        loadCostPreview(selectedProduct.id, selectedSizeId, productionQty)
+        loadCostPreview(selectedProduct.id, selectedSizeId, productionQty),
       ]);
     } catch (error) {
       toast.error("Expense save failed", getErrorMessage(error));
@@ -771,7 +875,7 @@ export function ProductsPage() {
 
     try {
       await apiRequest(`/recipe-expenses/${deletingExpense.id}`, {
-        method: "DELETE"
+        method: "DELETE",
       });
 
       toast.success("Recipe expense deactivated");
@@ -779,7 +883,7 @@ export function ProductsPage() {
 
       await Promise.all([
         loadExpenses(selectedProduct.id, selectedSizeId, productionQty),
-        loadCostPreview(selectedProduct.id, selectedSizeId, productionQty)
+        loadCostPreview(selectedProduct.id, selectedSizeId, productionQty),
       ]);
     } catch (error) {
       toast.error("Expense removal failed", getErrorMessage(error));
@@ -788,9 +892,7 @@ export function ProductsPage() {
     }
   }
 
-  const hasShortage = costPreview?.lines.some(
-    (line) => !line.isAvailable
-  );
+  const hasShortage = costPreview?.lines.some((line) => !line.isAvailable);
 
   return (
     <AppLayout
@@ -803,12 +905,8 @@ export function ProductsPage() {
             type="button"
             onClick={() => void loadProducts(true)}
             disabled={isLoading || isSyncing}
-            className="erp-button-secondary"
-          >
-            <RefreshCw
-              size={14}
-              className={isLoading ? "animate-spin" : ""}
-            />
+            className="erp-button-secondary">
+            <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
             Refresh
           </button>
 
@@ -816,17 +914,12 @@ export function ProductsPage() {
             type="button"
             onClick={() => void handleSyncOfficialProducts()}
             disabled={isSyncing || isLoading}
-            className="erp-button-primary"
-          >
-            <RefreshCw
-              size={14}
-              className={isSyncing ? "animate-spin" : ""}
-            />
+            className="erp-button-primary">
+            <RefreshCw size={14} className={isSyncing ? "animate-spin" : ""} />
             {isSyncing ? "Syncing..." : "Sync Website"}
           </button>
         </>
-      }
-    >
+      }>
       <div className="mb-4 rounded-[16px] border border-bauraBorder bg-white px-4 py-3">
         <div className="flex items-start gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-bauraGoldSoft text-bauraGoldDark">
@@ -854,7 +947,8 @@ export function ProductsPage() {
               <div>
                 <h2 className="erp-section-title">Official Products</h2>
                 <p className="erp-section-subtitle">
-                  {filteredProducts.length} shown · {officialProducts.length} synchronized
+                  {filteredProducts.length} shown · {officialProducts.length}{" "}
+                  synchronized
                 </p>
               </div>
 
@@ -883,8 +977,7 @@ export function ProductsPage() {
                     statusFilter === value
                       ? "bg-bauraPrimary text-white"
                       : "border border-bauraBorder bg-white text-bauraMuted hover:bg-bauraGoldSoft/40"
-                  }`}
-                >
+                  }`}>
                   {value}
                 </button>
               ))}
@@ -910,8 +1003,7 @@ export function ProductsPage() {
                         selected
                           ? "border-bauraGold bg-bauraGoldSoft/45"
                           : "border-bauraBorder bg-white hover:border-bauraGold/40"
-                      }`}
-                    >
+                      }`}>
                       <div className="flex items-start gap-3">
                         <ProductThumbnail product={product} />
 
@@ -932,8 +1024,7 @@ export function ProductsPage() {
                                 product.isActive
                                   ? "bg-bauraSuccessSoft text-bauraSuccess"
                                   : "bg-bauraDangerSoft text-bauraDanger"
-                              }`}
-                            >
+                              }`}>
                               {product.isActive ? "Active" : "Inactive"}
                             </span>
                           </div>
@@ -994,7 +1085,8 @@ export function ProductsPage() {
                     </p>
 
                     <p className="mt-1 text-[8px] text-bauraMuted2">
-                      Last sync: {formatSyncTime(selectedProduct.officialSiteSyncedAt)}
+                      Last sync:{" "}
+                      {formatSyncTime(selectedProduct.officialSiteSyncedAt)}
                     </p>
                   </div>
                 </div>
@@ -1004,8 +1096,7 @@ export function ProductsPage() {
                     selectedProduct.isActive
                       ? "bg-bauraSuccessSoft text-bauraSuccess"
                       : "bg-bauraDangerSoft text-bauraDanger"
-                  }`}
-                >
+                  }`}>
                   {selectedProduct.isActive
                     ? "Website Active"
                     : "Website Inactive"}
@@ -1029,8 +1120,7 @@ export function ProductsPage() {
                   <select
                     value={selectedSizeId}
                     onChange={(event) => setSelectedSizeId(event.target.value)}
-                    className="erp-input"
-                  >
+                    className="erp-input">
                     <option value="">Default Recipe</option>
                     {activeSizes.map((size) => (
                       <option key={size.id} value={size.id}>
@@ -1072,7 +1162,7 @@ export function ProductsPage() {
                   value={formatCurrency(
                     costPreview?.sellPrice ??
                       selectedSize?.price ??
-                      selectedProduct.sellPrice
+                      selectedProduct.sellPrice,
                   )}
                 />
 
@@ -1127,8 +1217,7 @@ export function ProductsPage() {
                     costPreview.canProduce
                       ? "border-green-100 bg-bauraSuccessSoft"
                       : "border-amber-200 bg-bauraWarningSoft"
-                  }`}
-                >
+                  }`}>
                   <div className="flex items-start gap-3">
                     {costPreview.canProduce ? (
                       <CheckCircle2
@@ -1152,8 +1241,9 @@ export function ProductsPage() {
                       </p>
 
                       <p className="mt-1 text-[9px] leading-5 text-bauraMuted">
-                        Estimates use available non-expired stock lots.
-                        Costs and profit are incomplete when ingredients are unavailable.
+                        Estimates use available non-expired stock lots. Costs
+                        and profit are incomplete when ingredients are
+                        unavailable.
                       </p>
                     </div>
                   </div>
@@ -1172,8 +1262,7 @@ export function ProductsPage() {
                   <button
                     type="button"
                     onClick={openCreateRecipeModal}
-                    className="erp-button-primary"
-                  >
+                    className="erp-button-primary">
                     <PackagePlus size={13} />
                     Add Ingredient
                   </button>
@@ -1195,21 +1284,21 @@ export function ProductsPage() {
                     </p>
 
                     <p className="mt-1 text-[9px] text-bauraMuted">
-                      Add the ingredient quantities needed for one finished unit.
+                      Add the ingredient quantities needed for one finished
+                      unit.
                     </p>
                   </div>
                 ) : (
                   <div className="grid gap-3">
                     {visibleRecipeItems.map((item) => {
                       const previewLine = costPreview?.lines.find(
-                        (line) => line.recipeItemId === item.id
+                        (line) => line.recipeItemId === item.id,
                       );
 
                       return (
                         <article
                           key={item.id}
-                          className="rounded-[15px] border border-bauraBorder bg-white p-4"
-                        >
+                          className="rounded-[15px] border border-bauraBorder bg-white p-4">
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div className="flex min-w-0 items-start gap-3">
                               <RecipeImage item={item} />
@@ -1223,7 +1312,7 @@ export function ProductsPage() {
                                   Per unit:{" "}
                                   {formatQty(
                                     item.requiredBaseQty,
-                                    item.baseUnit
+                                    item.baseUnit,
                                   )}
                                 </p>
 
@@ -1233,9 +1322,12 @@ export function ProductsPage() {
                                       Batch:{" "}
                                       {formatQty(
                                         previewLine.totalRequiredBaseQty,
-                                        item.baseUnit
+                                        item.baseUnit,
                                       )}{" "}
-                                      · {formatCurrency(previewLine.estimatedCost)}
+                                      ·{" "}
+                                      {formatCurrency(
+                                        previewLine.estimatedCost,
+                                      )}
                                     </p>
 
                                     {!previewLine.isAvailable && (
@@ -1243,7 +1335,7 @@ export function ProductsPage() {
                                         Shortage:{" "}
                                         {formatQty(
                                           previewLine.shortageBaseQty,
-                                          item.baseUnit
+                                          item.baseUnit,
                                         )}
                                       </p>
                                     )}
@@ -1259,8 +1351,7 @@ export function ProductsPage() {
                                     previewLine.isAvailable
                                       ? "bg-bauraSuccessSoft text-bauraSuccess"
                                       : "bg-bauraWarningSoft text-bauraWarning"
-                                  }`}
-                                >
+                                  }`}>
                                   {previewLine.isAvailable
                                     ? "Stock OK"
                                     : "Low Stock"}
@@ -1272,8 +1363,7 @@ export function ProductsPage() {
                                   <button
                                     type="button"
                                     onClick={() => openEditRecipeModal(item)}
-                                    className="erp-button-secondary h-8 px-3"
-                                  >
+                                    className="erp-button-secondary h-8 px-3">
                                     <Edit3 size={12} />
                                     Edit
                                   </button>
@@ -1281,8 +1371,7 @@ export function ProductsPage() {
                                   <button
                                     type="button"
                                     onClick={() => setDeletingRecipeItem(item)}
-                                    className="erp-button-danger h-8 px-3"
-                                  >
+                                    className="erp-button-danger h-8 px-3">
                                     <Trash2 size={12} />
                                   </button>
                                 </>
@@ -1309,8 +1398,7 @@ export function ProductsPage() {
                     <button
                       type="button"
                       onClick={openCreateExpenseModal}
-                      className="erp-button-secondary"
-                    >
+                      className="erp-button-secondary">
                       <Plus size={13} />
                       Add Expense
                     </button>
@@ -1324,8 +1412,7 @@ export function ProductsPage() {
                     expenses.map((expense) => (
                       <article
                         key={expense.id}
-                        className="rounded-[14px] border border-bauraBorder bg-white p-3"
-                      >
+                        className="rounded-[14px] border border-bauraBorder bg-white p-3">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex items-start gap-3">
                             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-bauraGoldSoft text-bauraGoldDark">
@@ -1365,16 +1452,14 @@ export function ProductsPage() {
                                 <button
                                   type="button"
                                   onClick={() => openEditExpenseModal(expense)}
-                                  className="erp-button-secondary h-8 px-3"
-                                >
+                                  className="erp-button-secondary h-8 px-3">
                                   <Edit3 size={12} />
                                 </button>
 
                                 <button
                                   type="button"
                                   onClick={() => setDeletingExpense(expense)}
-                                  className="erp-button-danger h-8 px-3"
-                                >
+                                  className="erp-button-danger h-8 px-3">
                                   <Trash2 size={12} />
                                 </button>
                               </>
@@ -1444,15 +1529,15 @@ export function ProductsPage() {
 
                   {!costPreview.canProduce && (
                     <p className="mt-4 text-[9px] font-semibold text-bauraDanger">
-                      Warning: This estimate is incomplete because the recipe
-                      or available ingredient stock is insufficient.
+                      Warning: This estimate is incomplete because the recipe or
+                      available ingredient stock is insufficient.
                     </p>
                   )}
 
                   <p className="mt-3 text-[9px] leading-5 text-bauraMuted">
                     These are planning estimates. Actual production expense
-                    snapshots and finished-goods valuation will be handled
-                    when the production module is updated.
+                    snapshots and finished-goods valuation will be handled when
+                    the production module is updated.
                   </p>
                 </div>
               )}
@@ -1464,7 +1549,9 @@ export function ProductsPage() {
       <Modal
         open={isRecipeModalOpen}
         onClose={closeRecipeModal}
-        title={editingRecipeItem ? "Edit Recipe Ingredient" : "Add Recipe Ingredient"}
+        title={
+          editingRecipeItem ? "Edit Recipe Ingredient" : "Add Recipe Ingredient"
+        }
         subtitle={
           selectedProduct
             ? `${selectedProduct.displayName} · ${
@@ -1472,8 +1559,7 @@ export function ProductsPage() {
               }`
             : ""
         }
-        widthClassName="max-w-3xl"
-      >
+        widthClassName="max-w-3xl">
         <form onSubmit={handleSaveRecipeItem} className="grid gap-5">
           <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
             <ImageUploadField
@@ -1482,7 +1568,7 @@ export function ProductsPage() {
               onChange={(imageUrl) =>
                 setRecipeForm((current) => ({
                   ...current,
-                  imageUrl
+                  imageUrl,
                 }))
               }
               folder="baura/recipes"
@@ -1497,12 +1583,11 @@ export function ProductsPage() {
                   onChange={(event) =>
                     setRecipeForm((current) => ({
                       ...current,
-                      ingredientId: event.target.value
+                      ingredientId: event.target.value,
                     }))
                   }
                   className="erp-input"
-                  required
-                >
+                  required>
                   <option value="">Select ingredient</option>
 
                   {ingredients.map((ingredient) => (
@@ -1524,7 +1609,7 @@ export function ProductsPage() {
                 onChange={(value) =>
                   setRecipeForm((current) => ({
                     ...current,
-                    requiredBaseQty: value
+                    requiredBaseQty: value,
                   }))
                 }
                 placeholder="250"
@@ -1558,8 +1643,7 @@ export function ProductsPage() {
         onClose={closeExpenseModal}
         title={editingExpense ? "Edit Recipe Expense" : "Add Recipe Expense"}
         subtitle="Configure an expense included in estimated production costing."
-        widthClassName="max-w-2xl"
-      >
+        widthClassName="max-w-2xl">
         <form onSubmit={handleSaveExpense} className="grid gap-4">
           <Input
             label="Expense Name"
@@ -1567,7 +1651,7 @@ export function ProductsPage() {
             onChange={(value) =>
               setExpenseForm((current) => ({
                 ...current,
-                name: value
+                name: value,
               }))
             }
             placeholder="Electricity"
@@ -1582,11 +1666,10 @@ export function ProductsPage() {
                 onChange={(event) =>
                   setExpenseForm((current) => ({
                     ...current,
-                    category: event.target.value as ExpenseCategory
+                    category: event.target.value as ExpenseCategory,
                   }))
                 }
-                className="erp-input"
-              >
+                className="erp-input">
                 {expenseCategories.map((category) => (
                   <option key={category} value={category}>
                     {formatCategory(category)}
@@ -1603,11 +1686,10 @@ export function ProductsPage() {
                 onChange={(event) =>
                   setExpenseForm((current) => ({
                     ...current,
-                    calculationMethod: event.target.value as CalculationMethod
+                    calculationMethod: event.target.value as CalculationMethod,
                   }))
                 }
-                className="erp-input"
-              >
+                className="erp-input">
                 {calculationMethods.map((method) => (
                   <option key={method.value} value={method.value}>
                     {method.label}
@@ -1625,11 +1707,10 @@ export function ProductsPage() {
               onChange={(event) =>
                 setExpenseForm((current) => ({
                   ...current,
-                  scope: event.target.value as "SHARED" | "SIZE"
+                  scope: event.target.value as "SHARED" | "SIZE",
                 }))
               }
-              className="erp-input"
-            >
+              className="erp-input">
               <option value="SHARED">All Product Sizes</option>
 
               {selectedSizeId && (
@@ -1648,7 +1729,7 @@ export function ProductsPage() {
               onChange={(value) =>
                 setExpenseForm((current) => ({
                   ...current,
-                  quantity: value
+                  quantity: value,
                 }))
               }
               placeholder="1"
@@ -1661,7 +1742,7 @@ export function ProductsPage() {
               onChange={(value) =>
                 setExpenseForm((current) => ({
                   ...current,
-                  rate: value
+                  rate: value,
                 }))
               }
               placeholder="250"
@@ -1669,9 +1750,9 @@ export function ProductsPage() {
           </div>
 
           <p className="rounded-xl border border-bauraBorder bg-bauraCanvas2 p-3 text-[9px] leading-5 text-bauraMuted">
-            Per Batch: rate charged once per batch. Per Unit: rate multiplied
-            by the number of finished products. Quantity × Rate: entered
-            quantity multiplied by rate once per batch.
+            Per Batch: rate charged once per batch. Per Unit: rate multiplied by
+            the number of finished products. Quantity × Rate: entered quantity
+            multiplied by rate once per batch.
           </p>
 
           <label>
@@ -1682,7 +1763,7 @@ export function ProductsPage() {
               onChange={(event) =>
                 setExpenseForm((current) => ({
                   ...current,
-                  description: event.target.value
+                  description: event.target.value,
                 }))
               }
               className="erp-input min-h-[90px] resize-y"
@@ -1694,9 +1775,7 @@ export function ProductsPage() {
           <ModalActions
             isLoading={isSavingExpense}
             onCancel={closeExpenseModal}
-            submitText={
-              editingExpense ? "Save Expense" : "Add Expense"
-            }
+            submitText={editingExpense ? "Save Expense" : "Add Expense"}
           />
         </form>
       </Modal>
@@ -1777,9 +1856,7 @@ function ProductHeroImage({ product }: { product: Product }) {
 
 function RecipeImage({ item }: { item: RecipeItem }) {
   const image =
-    item.displayImageUrl ||
-    item.imageUrl ||
-    item.ingredientImageUrl;
+    item.displayImageUrl || item.imageUrl || item.ingredientImageUrl;
 
   if (image) {
     return (
@@ -1801,13 +1878,7 @@ function RecipeImage({ item }: { item: RecipeItem }) {
   );
 }
 
-function MiniStat({
-  label,
-  value
-}: {
-  label: string;
-  value: string;
-}) {
+function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-[14px] border border-bauraBorder bg-bauraCanvas2 p-4">
       <p className="text-[8px] font-semibold uppercase tracking-[0.09em] text-bauraMuted">
@@ -1824,7 +1895,7 @@ function MiniStat({
 function CostRow({
   label,
   value,
-  strong = false
+  strong = false,
 }: {
   label: string;
   value: number;
@@ -1837,8 +1908,7 @@ function CostRow({
           strong
             ? "text-[11px] font-semibold text-bauraInk"
             : "text-[10px] text-bauraMuted"
-        }
-      >
+        }>
         {label}
       </span>
 
@@ -1847,8 +1917,7 @@ function CostRow({
           strong
             ? "text-[12px] font-semibold text-bauraInk"
             : "text-[10px] font-medium text-bauraInk"
-        }
-      >
+        }>
         {formatCurrency(value)}
       </span>
     </div>
@@ -1860,9 +1929,7 @@ function EmptyState({ text }: { text: string }) {
     <div className="flex min-h-[160px] flex-col items-center justify-center rounded-[15px] border border-dashed border-bauraBorder bg-bauraCanvas2 px-6 text-center">
       <ImageIcon size={21} className="text-bauraMuted2" />
 
-      <p className="mt-3 text-[10px] text-bauraMuted">
-        {text}
-      </p>
+      <p className="mt-3 text-[10px] text-bauraMuted">{text}</p>
     </div>
   );
 }
@@ -1873,7 +1940,7 @@ function Input({
   onChange,
   placeholder,
   type = "text",
-  required = true
+  required = true,
 }: {
   label: string;
   value: string;
@@ -1903,7 +1970,7 @@ function Input({
 function ModalActions({
   isLoading,
   onCancel,
-  submitText
+  submitText,
 }: {
   isLoading: boolean;
   onCancel: () => void;
@@ -1915,16 +1982,11 @@ function ModalActions({
         type="button"
         onClick={onCancel}
         disabled={isLoading}
-        className="erp-button-secondary"
-      >
+        className="erp-button-secondary">
         Cancel
       </button>
 
-      <button
-        type="submit"
-        disabled={isLoading}
-        className="erp-button-primary"
-      >
+      <button type="submit" disabled={isLoading} className="erp-button-primary">
         {isLoading ? "Saving..." : submitText}
       </button>
     </div>

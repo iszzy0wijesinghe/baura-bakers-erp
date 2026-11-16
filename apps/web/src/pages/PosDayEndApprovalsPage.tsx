@@ -24,7 +24,7 @@ import {
 
 import { AppLayout } from "../layouts/AppLayout";
 
-import { useAuth } from "../auth/AuthContext";
+import { useAuth } from "../auth/useAuth";
 
 import {
   approvePosDayEnd,
@@ -35,7 +35,7 @@ import {
   type PosSession,
 } from "../lib/posSessionApi";
 
-import { useToast } from "../ui/ToastProvider";
+import { useToast } from "../ui/useToast";
 
 type PendingDayEnd = PosDayEnd & {
   posSession?: PosSession | null;

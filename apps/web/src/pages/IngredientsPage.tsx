@@ -16,7 +16,7 @@ import { AppLayout } from "../layouts/AppLayout";
 import { apiRequest } from "../lib/api";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Modal } from "../ui/Modal";
-import { useToast } from "../ui/ToastProvider";
+import { useToast } from "../ui/useToast";
 
 type PackageUnit = "G" | "KG" | "ML" | "L" | "UNIT";
 

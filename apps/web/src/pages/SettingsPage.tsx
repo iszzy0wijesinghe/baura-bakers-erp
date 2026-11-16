@@ -1,3 +1,5 @@
+/** @format */
+
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import {
@@ -14,11 +16,11 @@ import {
   Settings,
   ShieldCheck,
   TimerReset,
-  XCircle
+  XCircle,
 } from "lucide-react";
 import { AppLayout } from "../layouts/AppLayout";
 import { apiRequest } from "../lib/api";
-import { useToast } from "../ui/ToastProvider";
+import { useToast } from "../ui/useToast";
 
 type BackupFrequency = "MANUAL" | "DAILY" | "WEEKLY" | "MONTHLY";
 type BackupTarget = "LOCAL" | "GOOGLE_DRIVE";
@@ -61,7 +63,7 @@ const initialBackupForm = {
   localBackupPath: "./backups",
   googleDriveEnabled: false,
   googleAccountEmail: "",
-  googleDriveFolderId: ""
+  googleDriveFolderId: "",
 };
 
 const frequencyOptions: Array<{
@@ -72,23 +74,23 @@ const frequencyOptions: Array<{
   {
     value: "MANUAL",
     label: "Manual",
-    description: "Run backups only when user clicks Run Backup."
+    description: "Run backups only when user clicks Run Backup.",
   },
   {
     value: "DAILY",
     label: "Daily",
-    description: "Prepare system for automatic daily backup."
+    description: "Prepare system for automatic daily backup.",
   },
   {
     value: "WEEKLY",
     label: "Weekly",
-    description: "Prepare system for automatic weekly backup."
+    description: "Prepare system for automatic weekly backup.",
   },
   {
     value: "MONTHLY",
     label: "Monthly",
-    description: "Prepare system for automatic monthly backup."
-  }
+    description: "Prepare system for automatic monthly backup.",
+  },
 ];
 
 function formatDateTime(value: string | null | undefined) {
@@ -99,7 +101,7 @@ function formatDateTime(value: string | null | undefined) {
     month: "short",
     day: "2-digit",
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
   });
 }
 
@@ -120,7 +122,9 @@ function formatFileSize(value: number | null | undefined) {
 }
 
 function formatFrequency(value: BackupFrequency) {
-  return frequencyOptions.find((option) => option.value === value)?.label || value;
+  return (
+    frequencyOptions.find((option) => option.value === value)?.label || value
+  );
 }
 
 function formatTarget(value: BackupTarget) {
@@ -131,7 +135,9 @@ function formatTarget(value: BackupTarget) {
 export function SettingsPage() {
   const toast = useToast();
 
-  const [backupSetting, setBackupSetting] = useState<BackupSetting | null>(null);
+  const [backupSetting, setBackupSetting] = useState<BackupSetting | null>(
+    null,
+  );
   const [backupForm, setBackupForm] = useState(initialBackupForm);
   const [history, setHistory] = useState<BackupHistoryItem[]>([]);
 
@@ -143,13 +149,20 @@ export function SettingsPage() {
   const [, setError] = useState("");
 
   const latestBackup = history[0];
-  const latestDriveBackup = history.find((item) => item.target === "GOOGLE_DRIVE");
-  const driveReady = Boolean(backupSetting?.isGoogleDriveConfigured && backupSetting?.isGoogleDriveConnected);
-  const unsavedDriveChanges = Boolean(backupSetting && (
-    backupForm.googleDriveEnabled !== backupSetting.googleDriveEnabled ||
-    backupForm.googleDriveFolderId.trim() !== (backupSetting.googleDriveFolderId || "") ||
-    backupForm.localBackupEnabled !== backupSetting.localBackupEnabled
-  ));
+  const latestDriveBackup = history.find(
+    (item) => item.target === "GOOGLE_DRIVE",
+  );
+  const driveReady = Boolean(
+    backupSetting?.isGoogleDriveConfigured &&
+    backupSetting?.isGoogleDriveConnected,
+  );
+  const unsavedDriveChanges = Boolean(
+    backupSetting &&
+    (backupForm.googleDriveEnabled !== backupSetting.googleDriveEnabled ||
+      backupForm.googleDriveFolderId.trim() !==
+        (backupSetting.googleDriveFolderId || "") ||
+      backupForm.localBackupEnabled !== backupSetting.localBackupEnabled),
+  );
 
   const historyStats = useMemo(() => {
     return {
@@ -160,8 +173,8 @@ export function SettingsPage() {
       drive: history.filter((item) => item.target === "GOOGLE_DRIVE").length,
       totalSize: history.reduce(
         (sum, item) => sum + Number(item.sizeBytes || 0),
-        0
-      )
+        0,
+      ),
     };
   }, [history]);
 
@@ -172,7 +185,9 @@ export function SettingsPage() {
     try {
       const [settingsData, historyData] = await Promise.all([
         apiRequest<{ backupSetting: BackupSetting }>("/settings/backup"),
-        apiRequest<{ history: BackupHistoryItem[] }>("/settings/backups/history")
+        apiRequest<{ history: BackupHistoryItem[] }>(
+          "/settings/backups/history",
+        ),
       ]);
 
       setBackupSetting(settingsData.backupSetting);
@@ -183,7 +198,8 @@ export function SettingsPage() {
         localBackupPath: settingsData.backupSetting.localBackupPath,
         googleDriveEnabled: settingsData.backupSetting.googleDriveEnabled,
         googleAccountEmail: settingsData.backupSetting.googleAccountEmail || "",
-        googleDriveFolderId: settingsData.backupSetting.googleDriveFolderId || ""
+        googleDriveFolderId:
+          settingsData.backupSetting.googleDriveFolderId || "",
       });
 
       setHistory(historyData.history);
@@ -202,8 +218,49 @@ export function SettingsPage() {
   }
 
   useEffect(() => {
-    loadSettings();
-  }, []);
+    let active = true;
+
+    Promise.all([
+      apiRequest<{ backupSetting: BackupSetting }>("/settings/backup"),
+      apiRequest<{ history: BackupHistoryItem[] }>("/settings/backups/history"),
+    ])
+      .then(([settingsData, historyData]) => {
+        if (!active) return;
+
+        const setting = settingsData.backupSetting;
+
+        setBackupSetting(setting);
+
+        setBackupForm({
+          frequency: setting.frequency,
+          localBackupEnabled: setting.localBackupEnabled,
+          localBackupPath: setting.localBackupPath,
+          googleDriveEnabled: setting.googleDriveEnabled,
+          googleAccountEmail: setting.googleAccountEmail || "",
+          googleDriveFolderId: setting.googleDriveFolderId || "",
+        });
+
+        setHistory(historyData.history);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+
+        const message =
+          error instanceof Error ? error.message : "Failed to load settings";
+
+        setError(message);
+        toast.error("Failed to load settings", message);
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [toast]);
 
   async function handleSaveBackupSettings(event: FormEvent) {
     event.preventDefault();
@@ -222,9 +279,9 @@ export function SettingsPage() {
             localBackupPath: backupForm.localBackupPath,
             googleDriveEnabled: backupForm.googleDriveEnabled,
             googleAccountEmail: backupForm.googleAccountEmail.trim() || null,
-            googleDriveFolderId: backupForm.googleDriveFolderId.trim() || null
-          })
-        }
+            googleDriveFolderId: backupForm.googleDriveFolderId.trim() || null,
+          }),
+        },
       );
 
       setBackupSetting(data.backupSetting);
@@ -248,13 +305,13 @@ export function SettingsPage() {
       if (!backupForm.googleDriveEnabled) {
         toast.info(
           "Enable Google Drive Backup",
-          "Turn on Google Drive Backup before connecting your Google account."
+          "Turn on Google Drive Backup before connecting your Google account.",
         );
         return;
       }
 
       const data = await apiRequest<{ authUrl: string }>(
-        "/settings/google-drive/auth-url"
+        "/settings/google-drive/auth-url",
       );
 
       window.location.href = data.authUrl;
@@ -274,14 +331,16 @@ export function SettingsPage() {
 
     try {
       await apiRequest("/settings/google-drive/disconnect", {
-        method: "POST"
+        method: "POST",
       });
 
       toast.success("Google Drive disconnected");
       await loadSettings();
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : "Failed to disconnect Google Drive";
+        err instanceof Error
+          ? err.message
+          : "Failed to disconnect Google Drive";
       setError(message);
       toast.error("Disconnect failed", message);
     } finally {
@@ -300,14 +359,15 @@ export function SettingsPage() {
         localBackup?: BackupHistoryItem | null;
         driveBackup?: BackupHistoryItem | null;
       }>("/settings/backups/run", {
-        method: "POST"
+        method: "POST",
       });
 
-      const completedBackup = data.driveBackup || data.localBackup || data.backup;
+      const completedBackup =
+        data.driveBackup || data.localBackup || data.backup;
 
       toast.success(
         "Backup completed",
-        completedBackup?.fileName || data.message
+        completedBackup?.fileName || data.message,
       );
 
       await loadSettings();
@@ -332,8 +392,7 @@ export function SettingsPage() {
         <>
           <button
             onClick={() => loadSettings(true)}
-            className="erp-button-secondary"
-          >
+            className="erp-button-secondary">
             <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
             Refresh
           </button>
@@ -341,27 +400,42 @@ export function SettingsPage() {
           <button
             onClick={handleRunBackupNow}
             disabled={isRunningBackup || isLoading || unsavedDriveChanges}
-            className="erp-button-primary disabled:cursor-not-allowed disabled:opacity-60"
-          >
+            className="erp-button-primary disabled:cursor-not-allowed disabled:opacity-60">
             <DatabaseBackup size={16} />
             {isRunningBackup ? "Running Backup..." : "Run Backup Now"}
           </button>
         </>
-      }
-    >
+      }>
       <div className="grid gap-5">
         <section className="relative overflow-hidden rounded-2xl bg-bauraBrown p-6 text-bauraCream shadow-[0_12px_35px_rgba(45,33,27,0.12)] md:p-8">
-          <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full border border-white/10" aria-hidden="true" />
+          <div
+            className="absolute -right-16 -top-20 h-64 w-64 rounded-full border border-white/10"
+            aria-hidden="true"
+          />
           <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-2xl">
-              <p className="text-xs font-bold uppercase tracking-[0.22em] text-bauraGold">Data protection center</p>
-              <h2 className="mt-2 text-2xl font-bold tracking-tight md:text-3xl">Keep your business data recoverable.</h2>
-              <p className="mt-3 text-sm leading-6 text-bauraCream/75">Protect the MySQL database locally and in Google Drive. A successful upload is not a substitute for a tested restore.</p>
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-bauraGold">
+                Data protection center
+              </p>
+              <h2 className="mt-2 text-2xl font-bold tracking-tight md:text-3xl">
+                Keep your business data recoverable.
+              </h2>
+              <p className="mt-3 text-sm leading-6 text-bauraCream/75">
+                Protect the MySQL database locally and in Google Drive. A
+                successful upload is not a substitute for a tested restore.
+              </p>
             </div>
             <div className="flex flex-wrap gap-2 text-xs font-bold">
-              <span className="rounded-full border border-white/20 bg-white/10 px-4 py-2">Local {backupSetting?.localBackupEnabled ? "enabled" : "disabled"}</span>
-              <span className={`rounded-full px-4 py-2 ${driveReady && backupSetting?.googleDriveEnabled ? "bg-emerald-500/20 text-emerald-100" : "bg-white/10 text-bauraCream/80"}`}>
-                Drive {driveReady && backupSetting?.googleDriveEnabled ? "ready" : "not ready"}
+              <span className="rounded-full border border-white/20 bg-white/10 px-4 py-2">
+                Local{" "}
+                {backupSetting?.localBackupEnabled ? "enabled" : "disabled"}
+              </span>
+              <span
+                className={`rounded-full px-4 py-2 ${driveReady && backupSetting?.googleDriveEnabled ? "bg-emerald-500/20 text-emerald-100" : "bg-white/10 text-bauraCream/80"}`}>
+                Drive{" "}
+                {driveReady && backupSetting?.googleDriveEnabled
+                  ? "ready"
+                  : "not ready"}
               </span>
             </div>
           </div>
@@ -369,15 +443,29 @@ export function SettingsPage() {
         <section className="rounded-2xl border border-bauraBorder bg-white p-5 md:p-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-bauraGold">Cloud backup verification</p>
-              <h3 className="mt-1 text-lg font-bold text-bauraBrown">Google Drive upload test</h3>
-              <p className="mt-1 max-w-2xl text-sm text-bauraMuted">Enable Drive, connect your account, save settings, then use Run Backup Now. Confirm the uploaded SQL file in Google Drive and its successful history record.</p>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-bauraGold">
+                Cloud backup verification
+              </p>
+              <h3 className="mt-1 text-lg font-bold text-bauraBrown">
+                Google Drive upload test
+              </h3>
+              <p className="mt-1 max-w-2xl text-sm text-bauraMuted">
+                Enable Drive, connect your account, save settings, then use Run
+                Backup Now. Confirm the uploaded SQL file in Google Drive and
+                its successful history record.
+              </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <span className={`rounded-full px-3 py-2 text-xs font-bold ${latestDriveBackup?.status === "SUCCESS" ? "bg-emerald-50 text-emerald-700" : latestDriveBackup?.status === "FAILED" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>
-                Last Drive test: {latestDriveBackup?.status?.toLowerCase() || "not run"}
+              <span
+                className={`rounded-full px-3 py-2 text-xs font-bold ${latestDriveBackup?.status === "SUCCESS" ? "bg-emerald-50 text-emerald-700" : latestDriveBackup?.status === "FAILED" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>
+                Last Drive test:{" "}
+                {latestDriveBackup?.status?.toLowerCase() || "not run"}
               </span>
-              {unsavedDriveChanges && <span className="rounded-full bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">Save changes before testing</span>}
+              {unsavedDriveChanges && (
+                <span className="rounded-full bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+                  Save changes before testing
+                </span>
+              )}
             </div>
           </div>
         </section>
@@ -389,8 +477,8 @@ export function SettingsPage() {
               isLoading
                 ? "Loading..."
                 : backupSetting
-                ? formatFrequency(backupSetting.frequency)
-                : "—"
+                  ? formatFrequency(backupSetting.frequency)
+                  : "—"
             }
             note="Configured backup schedule"
             icon={<TimerReset size={22} />}
@@ -402,8 +490,8 @@ export function SettingsPage() {
               isLoading
                 ? "Loading..."
                 : backupSetting?.lastBackupAt
-                ? formatDateTime(backupSetting.lastBackupAt)
-                : "Not yet"
+                  ? formatDateTime(backupSetting.lastBackupAt)
+                  : "Not yet"
             }
             note="Most recent successful backup time"
             icon={<ShieldCheck size={22} />}
@@ -435,8 +523,8 @@ export function SettingsPage() {
               </p>
               <h3 className="mt-1 text-xl font-bold">Backup Settings</h3>
               <p className="mt-1 text-sm text-bauraMuted">
-                Configure local and Google Drive backup options for the
-                MySQL database only.
+                Configure local and Google Drive backup options for the MySQL
+                database only.
               </p>
             </div>
 
@@ -451,11 +539,10 @@ export function SettingsPage() {
                   onChange={(event) =>
                     setBackupForm((prev) => ({
                       ...prev,
-                      frequency: event.target.value as BackupFrequency
+                      frequency: event.target.value as BackupFrequency,
                     }))
                   }
-                  className="erp-input font-semibold"
-                >
+                  className="erp-input font-semibold">
                   {frequencyOptions.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
@@ -466,7 +553,7 @@ export function SettingsPage() {
                 <p className="mt-2 text-xs text-bauraMuted">
                   {
                     frequencyOptions.find(
-                      (option) => option.value === backupForm.frequency
+                      (option) => option.value === backupForm.frequency,
                     )?.description
                   }
                 </p>
@@ -481,7 +568,7 @@ export function SettingsPage() {
                   onChange={(checked) =>
                     setBackupForm((prev) => ({
                       ...prev,
-                      localBackupEnabled: checked
+                      localBackupEnabled: checked,
                     }))
                   }
                 />
@@ -499,7 +586,7 @@ export function SettingsPage() {
                       onChange={(event) =>
                         setBackupForm((prev) => ({
                           ...prev,
-                          localBackupPath: event.target.value
+                          localBackupPath: event.target.value,
                         }))
                       }
                       placeholder="./backups"
@@ -517,10 +604,21 @@ export function SettingsPage() {
               <div className="rounded-xl border border-bauraBorder bg-white p-4">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-bauraBorder pb-4">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-bauraMuted">Cloud destination</p>
-                    <p className="mt-1 text-sm font-semibold">{driveReady ? "Google authorization active" : backupSetting?.isGoogleDriveConfigured ? "Google authorization required" : "Server credentials required"}</p>
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-bauraMuted">
+                      Cloud destination
+                    </p>
+                    <p className="mt-1 text-sm font-semibold">
+                      {driveReady
+                        ? "Google authorization active"
+                        : backupSetting?.isGoogleDriveConfigured
+                          ? "Google authorization required"
+                          : "Server credentials required"}
+                    </p>
                   </div>
-                  <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${driveReady ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{driveReady ? "Connected" : "Not connected"}</span>
+                  <span
+                    className={`rounded-full px-3 py-1.5 text-xs font-bold ${driveReady ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                    {driveReady ? "Connected" : "Not connected"}
+                  </span>
                 </div>
                 <ToggleRow
                   icon={<Cloud size={20} />}
@@ -530,7 +628,7 @@ export function SettingsPage() {
                   onChange={(checked) =>
                     setBackupForm((prev) => ({
                       ...prev,
-                      googleDriveEnabled: checked
+                      googleDriveEnabled: checked,
                     }))
                   }
                 />
@@ -543,7 +641,7 @@ export function SettingsPage() {
                     onChange={(value) =>
                       setBackupForm((prev) => ({
                         ...prev,
-                        googleAccountEmail: value
+                        googleAccountEmail: value,
                       }))
                     }
                     placeholder="example@gmail.com"
@@ -557,7 +655,7 @@ export function SettingsPage() {
                     onChange={(value) =>
                       setBackupForm((prev) => ({
                         ...prev,
-                        googleDriveFolderId: value
+                        googleDriveFolderId: value,
                       }))
                     }
                     placeholder="Drive folder id"
@@ -574,14 +672,13 @@ export function SettingsPage() {
                         isConnectingDrive ||
                         isSavingSettings
                       }
-                      className="flex items-center justify-center gap-2 rounded-lg bg-bauraBrown px-5 py-3 text-sm font-bold text-bauraCream disabled:cursor-not-allowed disabled:opacity-50"
-                    >
+                      className="flex items-center justify-center gap-2 rounded-lg bg-bauraBrown px-5 py-3 text-sm font-bold text-bauraCream disabled:cursor-not-allowed disabled:opacity-50">
                       <Cloud size={16} />
                       {isConnectingDrive
                         ? "Opening Google..."
                         : backupSetting?.isGoogleDriveConnected
-                        ? "Reconnect Google Drive"
-                        : "Connect Google Drive"}
+                          ? "Reconnect Google Drive"
+                          : "Connect Google Drive"}
                     </button>
 
                     {backupSetting?.isGoogleDriveConnected && (
@@ -589,15 +686,20 @@ export function SettingsPage() {
                         type="button"
                         onClick={handleDisconnectGoogleDrive}
                         disabled={isDisconnectingDrive}
-                        className="rounded-lg border border-red-100 bg-red-50 px-5 py-3 text-sm font-bold text-red-700 disabled:opacity-60"
-                      >
-                        {isDisconnectingDrive ? "Disconnecting..." : "Disconnect"}
+                        className="rounded-lg border border-red-100 bg-red-50 px-5 py-3 text-sm font-bold text-red-700 disabled:opacity-60">
+                        {isDisconnectingDrive
+                          ? "Disconnecting..."
+                          : "Disconnect"}
                       </button>
                     )}
                   </div>
 
                   {backupSetting?.isGoogleDriveConfigured === false && (
-                    <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">Google OAuth is not configured on the API server. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI before connecting.</p>
+                    <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
+                      Google OAuth is not configured on the API server. Set
+                      GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and
+                      GOOGLE_REDIRECT_URI before connecting.
+                    </p>
                   )}
                   {backupSetting?.isGoogleDriveConnected ? (
                     <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
@@ -607,7 +709,7 @@ export function SettingsPage() {
                         : ""}
                       {backupSetting.googleDriveConnectedAt
                         ? ` · Connected ${formatDateTime(
-                            backupSetting.googleDriveConnectedAt
+                            backupSetting.googleDriveConnectedAt,
                           )}`
                         : ""}
                       .
@@ -615,8 +717,8 @@ export function SettingsPage() {
                   ) : backupForm.googleDriveEnabled ? (
                     <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                       Connect Google Drive before running Drive backup. After
-                      clicking Connect, Google will open a browser page to select
-                      account and allow permission.
+                      clicking Connect, Google will open a browser page to
+                      select account and allow permission.
                     </div>
                   ) : (
                     <div className="rounded-lg border border-bauraBorder bg-white px-4 py-3 text-sm text-bauraMuted">
@@ -631,15 +733,13 @@ export function SettingsPage() {
                   type="button"
                   onClick={() => loadSettings()}
                   disabled={isSavingSettings}
-                  className="erp-button-secondary"
-                >
+                  className="erp-button-secondary">
                   Reset
                 </button>
 
                 <button
                   disabled={isSavingSettings}
-                  className="flex items-center justify-center gap-2 erp-button-primary"
-                >
+                  className="flex items-center justify-center gap-2 erp-button-primary">
                   <Save size={16} />
                   {isSavingSettings ? "Saving..." : "Save Settings"}
                 </button>
@@ -681,23 +781,23 @@ export function SettingsPage() {
                     backupSetting?.isGoogleDriveConnected
                       ? "Connected"
                       : backupForm.googleDriveEnabled
-                      ? "Prepared"
-                      : "Disabled"
+                        ? "Prepared"
+                        : "Disabled"
                   }
                   status={
                     backupSetting?.isGoogleDriveConnected
                       ? "SUCCESS"
                       : backupForm.googleDriveEnabled
-                      ? "RUNNING"
-                      : "FAILED"
+                        ? "RUNNING"
+                        : "FAILED"
                   }
                   note={
                     backupSetting?.isGoogleDriveConnected
                       ? backupSetting.googleAccountEmail ||
                         "Google account connected"
                       : backupForm.googleDriveEnabled
-                      ? "Waiting for OAuth connection"
-                      : "Drive backup is disabled"
+                        ? "Waiting for OAuth connection"
+                        : "Drive backup is disabled"
                   }
                 />
 
@@ -708,7 +808,7 @@ export function SettingsPage() {
                   note={
                     latestBackup
                       ? `${formatTarget(latestBackup.target)} · ${formatFileSize(
-                          latestBackup.sizeBytes
+                          latestBackup.sizeBytes,
                         )}`
                       : "Run your first backup"
                   }
@@ -727,10 +827,10 @@ export function SettingsPage() {
                 disabled={
                   isRunningBackup ||
                   isLoading ||
-                  (!backupForm.localBackupEnabled && !backupForm.googleDriveEnabled)
+                  (!backupForm.localBackupEnabled &&
+                    !backupForm.googleDriveEnabled)
                 }
-                className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-bauraBrown px-5 py-4 text-sm font-bold text-bauraCream shadow-[0_1px_2px_rgba(45,33,27,0.03)] disabled:cursor-not-allowed disabled:opacity-60"
-              >
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-bauraBrown px-5 py-4 text-sm font-bold text-bauraCream shadow-[0_1px_2px_rgba(45,33,27,0.03)] disabled:cursor-not-allowed disabled:opacity-60">
                 <DatabaseBackup size={17} />
                 {isRunningBackup ? "Creating Backup..." : "Run Backup Now"}
               </button>
@@ -774,15 +874,14 @@ export function SettingsPage() {
               </p>
               <h3 className="mt-1 text-xl font-bold">Backup History</h3>
               <p className="mt-1 text-sm text-bauraMuted">
-                View local and Google Drive backup attempts with status, size and
-                path.
+                View local and Google Drive backup attempts with status, size
+                and path.
               </p>
             </div>
 
             <button
               onClick={() => loadSettings(true)}
-              className="flex w-fit items-center gap-2 rounded-lg border border-bauraBorder bg-white px-4 py-2 text-sm font-semibold"
-            >
+              className="flex w-fit items-center gap-2 rounded-lg border border-bauraBorder bg-white px-4 py-2 text-sm font-semibold">
               <RefreshCw size={15} />
               Refresh History
             </button>
@@ -812,7 +911,7 @@ function SummaryCard({
   value,
   note,
   icon,
-  alert = false
+  alert = false,
 }: {
   title: string;
   value: string;
@@ -823,11 +922,8 @@ function SummaryCard({
   return (
     <div
       className={`rounded-xl border p-5 shadow-[0_1px_2px_rgba(45,33,27,0.03)] ${
-        alert
-          ? "border-amber-200 bg-amber-50"
-          : "border-bauraBorder bg-white"
-      }`}
-    >
+        alert ? "border-amber-200 bg-amber-50" : "border-bauraBorder bg-white"
+      }`}>
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-semibold text-bauraMuted">{title}</p>
 
@@ -836,8 +932,7 @@ function SummaryCard({
             alert
               ? "bg-amber-100 text-amber-700"
               : "bg-bauraBrown text-bauraGold"
-          }`}
-        >
+          }`}>
           {icon}
         </div>
       </div>
@@ -856,7 +951,7 @@ function ToggleRow({
   title,
   description,
   checked,
-  onChange
+  onChange,
 }: {
   icon: ReactNode;
   title: string;
@@ -884,8 +979,7 @@ function ToggleRow({
         onClick={() => onChange(!checked)}
         className={`relative h-8 w-14 shrink-0 rounded-full transition ${
           checked ? "bg-bauraBrown" : "bg-bauraBrown/20"
-        }`}
-      >
+        }`}>
         <span
           className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-[0_1px_2px_rgba(45,33,27,0.03)] transition ${
             checked ? "left-7" : "left-1"
@@ -902,7 +996,7 @@ function Input({
   onChange,
   placeholder,
   disabled = false,
-  required = true
+  required = true,
 }: {
   label: string;
   value: string;
@@ -930,7 +1024,7 @@ function StatusBox({
   title,
   value,
   status,
-  note
+  note,
 }: {
   title: string;
   value: string;
@@ -947,10 +1041,9 @@ function StatusBox({
         isSuccess
           ? "border-green-200 bg-green-50"
           : isFailed
-          ? "border-red-200 bg-red-50"
-          : "border-amber-200 bg-amber-50"
-      }`}
-    >
+            ? "border-red-200 bg-red-50"
+            : "border-amber-200 bg-amber-50"
+      }`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-bauraMuted">{title}</p>
@@ -962,10 +1055,9 @@ function StatusBox({
             isSuccess
               ? "bg-green-100 text-green-700"
               : isFailed
-              ? "bg-red-100 text-red-700"
-              : "bg-amber-100 text-amber-700"
-          }`}
-        >
+                ? "bg-red-100 text-red-700"
+                : "bg-amber-100 text-amber-700"
+          }`}>
           {isSuccess ? (
             <CheckCircle2 size={17} />
           ) : isFailed ? (
@@ -990,7 +1082,7 @@ function StatusBox({
 function InstructionStep({
   number,
   title,
-  text
+  text,
 }: {
   number: string;
   title: string;
@@ -1023,10 +1115,9 @@ function BackupHistoryCard({ item }: { item: BackupHistoryItem }) {
         isSuccess
           ? "border-green-200 bg-green-50"
           : isFailed
-          ? "border-red-200 bg-red-50"
-          : "border-amber-200 bg-amber-50"
-      }`}
-    >
+            ? "border-red-200 bg-red-50"
+            : "border-amber-200 bg-amber-50"
+      }`}>
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -1035,10 +1126,9 @@ function BackupHistoryCard({ item }: { item: BackupHistoryItem }) {
                 isSuccess
                   ? "bg-green-100 text-green-700"
                   : isFailed
-                  ? "bg-red-100 text-red-700"
-                  : "bg-amber-100 text-amber-700"
-              }`}
-            >
+                    ? "bg-red-100 text-red-700"
+                    : "bg-amber-100 text-amber-700"
+              }`}>
               {item.status}
             </span>
 
@@ -1091,10 +1181,9 @@ function BackupHistoryCard({ item }: { item: BackupHistoryItem }) {
               isSuccess
                 ? "bg-green-100 text-green-700"
                 : isFailed
-                ? "bg-red-100 text-red-700"
-                : "bg-amber-100 text-amber-700"
-            }`}
-          >
+                  ? "bg-red-100 text-red-700"
+                  : "bg-amber-100 text-amber-700"
+            }`}>
             {item.target === "GOOGLE_DRIVE" ? (
               <Cloud size={22} />
             ) : (

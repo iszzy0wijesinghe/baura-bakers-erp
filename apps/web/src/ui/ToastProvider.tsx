@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -20,6 +18,9 @@ import {
   X
 } from "lucide-react";
 
+import { ToastContext } from "./toast-context";
+import type { ToastContextValue } from "./toast-context";
+
 type ToastType =
   | "success"
   | "error"
@@ -34,32 +35,6 @@ type ToastItem = {
   exiting?: boolean;
 };
 
-type ToastContextValue = {
-  success: (
-    title: string,
-    message?: string
-  ) => void;
-
-  error: (
-    title: string,
-    message?: string
-  ) => void;
-
-  warning: (
-    title: string,
-    message?: string
-  ) => void;
-
-  info: (
-    title: string,
-    message?: string
-  ) => void;
-};
-
-const ToastContext =
-  createContext<
-    ToastContextValue | null
-  >(null);
 
 const TOAST_DURATION =
   4200;
@@ -417,19 +392,4 @@ function ToastChip({
       )}
     </div>
   );
-}
-
-export function useToast() {
-  const context =
-    useContext(
-      ToastContext
-    );
-
-  if (!context) {
-    throw new Error(
-      "useToast must be used inside ToastProvider"
-    );
-  }
-
-  return context;
 }

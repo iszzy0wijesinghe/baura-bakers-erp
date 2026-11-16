@@ -16,9 +16,9 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "../layouts/AppLayout";
-import { useAuth } from "../auth/AuthContext";
+import { useAuth } from "../auth/useAuth";
 import { apiRequest } from "../lib/api";
-import { useToast } from "../ui/ToastProvider";
+import { useToast } from "../ui/useToast";
 
 type DashboardSummary = {
   todaySales: number;
